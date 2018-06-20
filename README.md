@@ -1,3 +1,7 @@
+## Go Metadium
+
+Golang implementation of the Metadium project. For now, this is just a forking point. We will release the code as it gets ready for public review. Stay tuned.
+
 ## Go Ethereum
 
 Official golang implementation of the Ethereum protocol.
