@@ -532,6 +532,36 @@ var (
 		Usage: "Minimum POW accepted",
 		Value: whisper.DefaultMinimumPoW,
 	}
+	ConsensusMethodFlag = cli.StringFlag{
+		Name:  "consensusmethod",
+		Usage: "Metadium consensus method: poa | etcd",
+		Value: "poa",
+	}
+	MetadiumContractAddressFlag = cli.StringFlag{
+		Name:  "metadiumcontract",
+		Usage: "Metadium contract address",
+		Value: "0x0000000000000000000000000000000000000000",
+	}
+	FixedDifficultyFlag = cli.Uint64Flag{
+		Name:  "fixeddifficulty",
+		Usage: "Fixed difficulty to disable PoW",
+		Value: params.FixedDifficulty,
+	}
+	FixedGasLimitFlag = cli.Uint64Flag{
+		Name:  "fixedgaslimit",
+		Usage: "Fixed gas limit to control block size better",
+		Value: params.FixedGasLimit,
+	}
+	MaxIdleBlockInterval = cli.Uint64Flag{
+		Name:  "maxidleblockinterval",
+		Usage: "Interval to generate empty block",
+		Value: params.MaxIdleBlockInterval,
+	}
+	BlocksPerTurn = cli.Uint64Flag{
+		Name:  "blocksperturn",
+		Usage: "Number of blocks per turn for PoA",
+		Value: params.BlocksPerTurn,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1182,6 +1212,11 @@ func RegisterEthStatsService(stack *node.Node, url string) {
 func SetupNetwork(ctx *cli.Context) {
 	// TODO(fjl): move target gas limit into config
 	params.TargetGasLimit = ctx.GlobalUint64(TargetGasLimitFlag.Name)
+	params.ConsensusMethod = ctx.GlobalString(ConsensusMethodFlag.Name)
+	params.FixedDifficulty = ctx.GlobalUint64(FixedDifficultyFlag.Name)
+	params.FixedGasLimit = ctx.GlobalUint64(FixedGasLimitFlag.Name)
+	params.MaxIdleBlockInterval = ctx.GlobalUint64(MaxIdleBlockInterval.Name)
+	params.BlocksPerTurn = ctx.GlobalUint64(BlocksPerTurn.Name)
 }
 
 // MakeChainDatabase open an LevelDB using the flags passed to the client and will hard crash if it fails.

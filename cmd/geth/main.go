@@ -144,6 +144,15 @@ var (
 		utils.WhisperMaxMessageSizeFlag,
 		utils.WhisperMinPOWFlag,
 	}
+
+	metadiumFlags = []cli.Flag{
+		utils.ConsensusMethodFlag,
+		utils.MetadiumContractAddressFlag,
+		utils.FixedDifficultyFlag,
+		utils.FixedGasLimitFlag,
+		utils.MaxIdleBlockInterval,
+		utils.BlocksPerTurn,
+	}
 )
 
 func init() {
@@ -186,6 +195,7 @@ func init() {
 	app.Flags = append(app.Flags, consoleFlags...)
 	app.Flags = append(app.Flags, debug.Flags...)
 	app.Flags = append(app.Flags, whisperFlags...)
+	app.Flags = append(app.Flags, metadiumFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
 		runtime.GOMAXPROCS(runtime.NumCPU())

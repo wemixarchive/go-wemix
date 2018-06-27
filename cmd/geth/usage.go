@@ -216,6 +216,17 @@ var AppHelpFlagGroups = []flagGroup{
 		Flags: whisperFlags,
 	},
 	{
+		Name:  "METADIUM",
+		Flags: []cli.Flag{
+			utils.ConsensusMethodFlag,
+			utils.MetadiumContractAddressFlag,
+			utils.FixedDifficultyFlag,
+			utils.FixedGasLimitFlag,
+			utils.MaxIdleBlockInterval,
+			utils.BlocksPerTurn,
+		},
+	},
+	{
 		Name: "DEPRECATED",
 		Flags: []cli.Flag{
 			utils.FastSyncFlag,
