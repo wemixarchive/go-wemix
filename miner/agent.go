@@ -20,7 +20,9 @@ import (
 	"sync"
 
 	"sync/atomic"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -100,8 +102,11 @@ out:
 }
 
 func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
+	tblock := time.Unix(work.Block.Time().Int64(), 0)
+	tseal := time.Now()
+
 	if result, err := self.engine.Seal(self.chain, work.Block, stop); result != nil {
-		log.Info("Successfully sealed new block", "number", result.Number(), "hash", result.Hash())
+		log.Info("Successfully sealed new block", "number", result.Number(), "hash", result.Hash(), "block", common.PrettyDuration(time.Since(tblock)), "seal", common.PrettyDuration(time.Since(tseal)))
 		self.returnCh <- &Result{work, result}
 	} else {
 		if err != nil {
