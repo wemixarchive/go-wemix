@@ -471,11 +471,11 @@ func (self *worker) commitNewWork() {
 	}
 
 	var pending map[common.Address]types.Transactions
-	if !metaminer.IsMiner(int(num.Int64())) {
+	if !metaminer.IsPoW() && !metaminer.IsMiner(int(num.Int64())) {
 		log.Debug("Not a miner.")
 		self.push(work)
 		return
-	} else if self.eth.TxPool().PendingEmpty() && time.Now().Unix() - self.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
+	} else if !metaminer.IsPoW() && self.eth.TxPool().PendingEmpty() && time.Now().Unix() - self.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
 		log.Debug("No pending transactions.")
 		self.push(work)
 		return

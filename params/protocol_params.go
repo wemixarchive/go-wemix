@@ -87,9 +87,18 @@ var (
 	DurationLimit          = big.NewInt(13)     // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 )
 
+const (
+	ConsensusInvalid        int = iota
+	ConsensusPoW
+	ConsensusPoA
+	ConsensusETCD
+	ConsensusPBFT
+	ConsensusMax
+)
+
 // metadium parameters
 var (
-	ConsensusMethod         string = "poa"      // default consensus method is poa
+	ConsensusMethod         int    = ConsensusPoW   // consensus method
 	FixedDifficulty         uint64 = 0          // 0 means no fixed difficulty
 	FixedGasLimit           uint64 = 0          // 0 means no fixed gas limit
 	MaxIdleBlockInterval    uint64 = 600        // in seconds

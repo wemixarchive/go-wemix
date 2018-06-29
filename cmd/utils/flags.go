@@ -532,10 +532,10 @@ var (
 		Usage: "Minimum POW accepted",
 		Value: whisper.DefaultMinimumPoW,
 	}
-	ConsensusMethodFlag = cli.StringFlag{
+	ConsensusMethodFlag = cli.IntFlag{
 		Name:  "consensusmethod",
-		Usage: "Metadium consensus method: poa | etcd",
-		Value: "poa",
+		Usage: "Metadium consensus method (integer, 1=PoW, 2=PoA, 3=ETCD, 4=PBFT)",
+		Value: 0,
 	}
 	MetadiumContractAddressFlag = cli.StringFlag{
 		Name:  "metadiumcontract",
@@ -1212,11 +1212,18 @@ func RegisterEthStatsService(stack *node.Node, url string) {
 func SetupNetwork(ctx *cli.Context) {
 	// TODO(fjl): move target gas limit into config
 	params.TargetGasLimit = ctx.GlobalUint64(TargetGasLimitFlag.Name)
-	params.ConsensusMethod = ctx.GlobalString(ConsensusMethodFlag.Name)
+	params.ConsensusMethod = ctx.GlobalInt(ConsensusMethodFlag.Name)
 	params.FixedDifficulty = ctx.GlobalUint64(FixedDifficultyFlag.Name)
 	params.FixedGasLimit = ctx.GlobalUint64(FixedGasLimitFlag.Name)
 	params.MaxIdleBlockInterval = ctx.GlobalUint64(MaxIdleBlockInterval.Name)
 	params.BlocksPerTurn = ctx.GlobalUint64(BlocksPerTurn.Name)
+
+	if params.ConsensusMethod == params.ConsensusInvalid {
+		params.ConsensusMethod = params.ConsensusPoW
+	}
+	if params.ConsensusMethod <= params.ConsensusInvalid || params.ConsensusMethod >= params.ConsensusETCD {
+		Fatalf("Invalid Consensus Method: %d", ctx.GlobalString(ConsensusMethodFlag.Name))
+	}
 }
 
 // MakeChainDatabase open an LevelDB using the flags passed to the client and will hard crash if it fails.

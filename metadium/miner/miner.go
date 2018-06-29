@@ -3,7 +3,7 @@
 package miner
 
 import (
-
+	"github.com/ethereum/go-ethereum/params"
 )
 
 var (
@@ -16,11 +16,17 @@ var (
 )
 
 func TxNotify() {
-	TxNotifier <- true
+	if params.ConsensusMethod != params.ConsensusPoW {
+		TxNotifier <- true
+	}
 }
 
 func IsMiner(height int) bool {
-	return DoMineWithout
+	return IsPoW() || DoMineWithout
+}
+
+func IsPoW() bool {
+	return params.ConsensusMethod == params.ConsensusPoW
 }
 
 // EOF
