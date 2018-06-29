@@ -102,6 +102,11 @@ out:
 }
 
 func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
+	if work.Block == nil {
+		self.returnCh <- &Result{nil, nil}
+		return
+	}
+
 	tblock := time.Unix(work.Block.Time().Int64(), 0)
 	tseal := time.Now()
 
