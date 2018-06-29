@@ -419,14 +419,16 @@ func (self *worker) commitNewWork() {
 	parent := self.chain.CurrentBlock()
 
 	tstamp := tstart.Unix()
-	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
-		tstamp = parent.Time().Int64() + 1
-	}
-	// this will ensure we're not going off too far in the future
-	if now := time.Now().Unix(); tstamp > now+1 {
-		wait := time.Duration(tstamp-now) * time.Second
-		log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
-		time.Sleep(wait)
+	if metaminer.IsPoW() {
+		if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
+			tstamp = parent.Time().Int64() + 1
+		}
+		// this will ensure we're not going off too far in the future
+		if now := time.Now().Unix(); tstamp > now+1 {
+			wait := time.Duration(tstamp-now) * time.Second
+			log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
+			time.Sleep(wait)
+		}
 	}
 
 	num := parent.Number()
