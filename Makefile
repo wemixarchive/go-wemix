@@ -11,6 +11,11 @@
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
+gmet:
+	build/env.sh go run build/ci.go install ./cmd/gmet
+	@echo "Done building."
+	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
+
 geth:
 	build/env.sh go run build/ci.go install ./cmd/geth
 	@echo "Done building."
