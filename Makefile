@@ -11,10 +11,16 @@
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
+metadium: gmet logrot
+	cp -p metadium/scripts/gmet.sh build/bin/
+
 gmet:
 	build/env.sh go run build/ci.go install ./cmd/gmet
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
+
+logrot:
+	build/env.sh go run build/ci.go install ./cmd/logrot
 
 geth:
 	build/env.sh go run build/ci.go install ./cmd/geth
