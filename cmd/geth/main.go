@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
+	metadium "github.com/ethereum/go-ethereum/metadium"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -147,7 +148,7 @@ var (
 
 	metadiumFlags = []cli.Flag{
 		utils.ConsensusMethodFlag,
-		utils.MetadiumContractAddressFlag,
+		utils.MetadiumAbiFlag,
 		utils.FixedDifficultyFlag,
 		utils.FixedGasLimitFlag,
 		utils.MaxIdleBlockInterval,
@@ -257,6 +258,9 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 
 	// Start up the node itself
 	utils.StartNode(stack)
+
+	// Start metadium admin
+	metadium.StartAdmin(stack, ctx.GlobalString(utils.MetadiumAbiFlag.Name))
 
 	// Unlock any account specifically requested
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)

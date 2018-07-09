@@ -219,7 +219,7 @@ var AppHelpFlagGroups = []flagGroup{
 		Name:  "METADIUM",
 		Flags: []cli.Flag{
 			utils.ConsensusMethodFlag,
-			utils.MetadiumContractAddressFlag,
+			utils.MetadiumAbiFlag,
 			utils.FixedDifficultyFlag,
 			utils.FixedGasLimitFlag,
 			utils.MaxIdleBlockInterval,

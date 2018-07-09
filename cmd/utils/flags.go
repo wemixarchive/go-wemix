@@ -537,10 +537,10 @@ var (
 		Usage: "Metadium consensus method (integer, 1=PoW, 2=PoA, 3=ETCD, 4=PBFT)",
 		Value: 0,
 	}
-	MetadiumContractAddressFlag = cli.StringFlag{
-		Name:  "metadiumcontract",
-		Usage: "Metadium contract address",
-		Value: "0x0000000000000000000000000000000000000000",
+	MetadiumAbiFlag = cli.StringFlag{
+		Name:  "metadiumabi",
+		Usage: "Metadium abi file name",
+		Value: "",
 	}
 	FixedDifficultyFlag = cli.Uint64Flag{
 		Name:  "fixeddifficulty",

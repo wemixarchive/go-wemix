@@ -9,10 +9,7 @@ import (
 var (
 	// notification channel when a new transaction arrives
 	TxNotifier = make(chan bool, 1)
-
-	// allow mining without PoA
-	//DoMineWithout = false
-	DoMineWithout = true
+	IsMinerFunc func(int) bool
 )
 
 func TxNotify() {
@@ -22,7 +19,11 @@ func TxNotify() {
 }
 
 func IsMiner(height int) bool {
-	return IsPoW() || DoMineWithout
+	if IsMinerFunc == nil {
+		return false
+	} else {
+		return IsMinerFunc(height)
+	}
 }
 
 func IsPoW() bool {

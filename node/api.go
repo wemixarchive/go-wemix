@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -261,9 +262,22 @@ func (api *PublicAdminAPI) NodeInfo() (*p2p.NodeInfo, error) {
 	return server.NodeInfo(), nil
 }
 
+// PeerInfo retrieves all the information we know about the peer node
+func (api *PublicAdminAPI) PeerInfo(id discover.NodeID) (*p2p.PeerInfo, error) {
+    server := api.node.Server()
+    if server == nil {
+        return nil, ErrNodeStopped
+    }
+    return server.PeerInfo(id), nil
+}
+
 // Datadir retrieves the current data directory the node is using.
 func (api *PublicAdminAPI) Datadir() string {
 	return api.node.DataDir()
+}
+
+func (api *PublicAdminAPI) MetadiumInfo() interface{} {
+	return metaapi.Info()
 }
 
 // PublicDebugAPI is the collection of debugging related API methods exposed over
