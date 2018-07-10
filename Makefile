@@ -12,7 +12,9 @@ GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
 metadium: gmet logrot
-	cp -p metadium/scripts/gmet.sh build/bin/
+	cp -p metadium/scripts/gmet.sh metadium/scripts/genesis-config-data \
+		metadium/scripts/genesis-template.json			    \
+		metadium/contracts/MetadiumAdmin.sol build/bin/
 
 gmet:
 	build/env.sh go run build/ci.go install ./cmd/gmet
