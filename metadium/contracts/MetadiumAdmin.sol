@@ -96,14 +96,35 @@ contract Admin {
     bytes nodeBallotHead;
     bytes nodeBallotTail;
 
-    constructor() public {
-        establish(1000000, 10);
-    }
-
     event MemberJoined(address addr);
     event MemberDismissed(address addr);
     event NodeJoined(bytes name, bytes id, bytes ip, uint port);
     event NodeDismissed(bytes name, bytes id, bytes ip, uint port);
+
+    constructor() public {
+        tokens = 1000000;	// To Be Substituted
+        blocksPer = 10;		// To Be Substituted
+
+        address[1] memory _members = [ msg.sender ]; // To Be Substituted
+        int[1] memory _stakes = [ int(1000000) ]; // To Be Substituted
+        Node[1] memory _nodes = [ Node(true, "dummy1", "53806c29df593f8699de59b2205db61cba2e61473f29710d63469e1eb04ac35bb60ef796e70a29248ebdcbaabaea1f902fbdea1b514846c8d4374b93d387e349", "172.18.0.1", 10009, 0, 0, "", "") ]; // To Be Substituted
+
+        uint i;
+        for (i = 0; i < _members.length; i++) {
+            address a = _members[i];
+            members[a].addr = a;
+            members[a].tokens = _stakes[i];
+            memberLinkAppend(false, a);
+            memberCount++;
+        }
+
+        for (i = 0; i < _nodes.length; i++) {
+            Node memory n = _nodes[i];
+            nodes[n.id] = n;
+            nodeLinkAppend(false, n.id);
+            nodeCount++;
+        }
+    }
 
     function atoi(bytes bs) internal pure returns (bool, int) {
         int v = 0;
@@ -371,22 +392,6 @@ contract Admin {
         if (amount <= 0)
             success = false;
         return;
-    }
-
-    function establish(int _tokens, int _blocksPer) public returns (bool rc, string reason) {
-        if (memberCount > 0) {
-            reason = "Already Established";
-            return;
-        }
-
-        tokens = _tokens;
-        blocksPer = _blocksPer;
-
-        memberCount = 1;
-        members[msg.sender].addr = msg.sender;
-        members[msg.sender].tokens = tokens;
-        memberLinkAppend(false, msg.sender);
-        rc = true;
     }
 
     // string tokens is delimited by '/', e.g. "<addr1>/100/<addr2>/200"

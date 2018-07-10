@@ -188,6 +188,7 @@ func init() {
 		licenseCommand,
 		// See config.go
 		dumpConfigCommand,
+		metadiumCommand,
 	}
 	sort.Sort(cli.CommandsByName(app.Commands))
 
