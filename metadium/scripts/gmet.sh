@@ -29,7 +29,7 @@ function get_data_dir ()
 }
 
 # void init(String node, String genesis_json, int port, String account_file)
-function init ()
+function init_old ()
 {
     NODE="$1"
     GENESIS="$2"
@@ -57,6 +57,42 @@ function init ()
     if [ -f "$ACCOUNT_FILE" ]; then
 	cp "$ACCOUNT_FILE" $d/keystore/
     fi
+}
+
+# void init(String node, String config_json, int port)
+function init ()
+{
+    NODE="$1"
+    CONFIG="$2"
+    PORT=$3
+
+    if [ ! -f "$CONFIG" ]; then
+	echo "Cannot find config file: $2"
+	return 1
+    fi
+
+    d=$(get_data_dir "${NODE}")
+    if [ -x "$d/bin/gmet" ]; then
+	GMET="$d/bin/gmet"
+    else
+	echo "Cannot find gmet"
+	return 1
+    fi
+
+    if [ ! -f "${d}/conf/genesis-template.json" -o ! -f "${d}/conf/MetadiumAdmin-template.sol" ]; then
+	echo "Cannot find template files."
+	return 1
+    fi
+
+    [ -d "$d/logs" ] || mkdir -p "$d/logs"
+
+    ${GMET} metadium genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
+    [ $? = 0 ] || return $?
+    ${GMET} metadium admin-contract --data "$CONFIG" --admin "$d/conf/MetadiumAdmin-template.sol" --out "$d/MetadiumAdmin.sol"
+    [ $? = 0 ] || return $?
+
+    echo "PORT=${PORT}" > $d/.rc
+    ${GMET} --datadir ${PWD} init $d/genesis.json
 }
 
 function wipe ()
@@ -181,7 +217,7 @@ function do_nodes ()
 
 function usage ()
 {
-    echo "Usage: `basename $0` [init <node> <genesis.json> <port> [<account-file>] |
+    echo "Usage: `basename $0` [init <node> <config.json> <port> |
 	clean [<node>] | wipe [<node>] | console [<node>] |
 	[re]start [<node>] | stop [<node>] | [re]start-nodes | stop-nodes]
 

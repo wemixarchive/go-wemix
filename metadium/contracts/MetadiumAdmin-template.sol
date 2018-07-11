@@ -107,7 +107,7 @@ contract Admin {
 
         address[1] memory _members = [ msg.sender ]; // To Be Substituted
         int[1] memory _stakes = [ int(1000000) ]; // To Be Substituted
-        Node[1] memory _nodes = [ Node(true, "dummy1", "53806c29df593f8699de59b2205db61cba2e61473f29710d63469e1eb04ac35bb60ef796e70a29248ebdcbaabaea1f902fbdea1b514846c8d4374b93d387e349", "172.18.0.1", 10009, 0, 0, "", "") ]; // To Be Substituted
+        Node[] memory _nodes; // To Be Substituted
 
         uint i;
         for (i = 0; i < _members.length; i++) {
@@ -124,6 +124,7 @@ contract Admin {
             nodeLinkAppend(false, n.id);
             nodeCount++;
         }
+        modifiedBlock = block.number;
     }
 
     function atoi(bytes bs) internal pure returns (bool, int) {
