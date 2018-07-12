@@ -4,7 +4,7 @@ Golang implementation of the Metadium project. For now, this is just a forking p
 
 ## Building
 
-`geth` has been renamed to `gmet. Building it is the same as go-ethereum.
+`geth` has been renamed to `gmet`. Building it is the same as go-ethereum.
 
     make gmet
 
