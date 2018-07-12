@@ -2,6 +2,18 @@
 
 [ "${SOL_GAS}" = "" ] && SOL_GAS="0x10000000"
 
+SOLC=
+solc --version > /dev/null 2>&1
+if [ $? = 0 ]; then
+    SOLC=solc
+else
+    docker --version > /dev/null 2>&1 && SOLC="docker run -v $(pwd):/tmp --workdir /tmp --rm ethereum/solc:stable"
+fi
+
+if [ "$SOLC" = "" ]; then
+    echo "Cannot find solc or docker."
+    exit 1
+fi
 
 function usage ()
 {
@@ -21,7 +33,7 @@ Environment Variables:
 # int compile(string solFile, string jsFile)
 function compile ()
 {
-    docker run -v $(pwd):/tmp --workdir /tmp --rm ethereum/solc:stable --optimize --abi --bin $1 | awk -v gas="$SOL_GAS" -v libs="$SOL_LIBS" '
+    ${SOLC} --optimize --abi --bin $1 | awk -v gas="$SOL_GAS" -v libs="$SOL_LIBS" '
 function flush() {
   if (length(code_name) > 0) {
     printf "\
