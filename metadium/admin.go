@@ -44,6 +44,9 @@ type metaNode struct {
 	NotAfter  int    `json:"notAfter"`
 	Prev      string `json:"prev"`
 	Next      string `json:"next"`
+
+	Status string `json:"status"`
+	Miner  bool   `json:"miner"`
 }
 
 type metaStake struct {
@@ -489,6 +492,53 @@ func (ma *metaAdmin) isPeerUp(id string) bool {
 	return err == nil && nodeInfo != nil
 }
 
+func (ma *metaAdmin) iigetNodes(height int) (bool, []*metaNode) {
+	var nodes []*metaNode
+	ma.lock.Lock()
+	for _, i := range ma.nodes {
+		n := new(metaNode)
+		*n = *i
+		nodes = append(nodes, n)
+	}
+	ma.lock.Unlock()
+	if len(nodes) == 0 {
+		return false, nodes
+	}
+
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Id < nodes[j].Id
+	})
+
+	for _, n := range nodes {
+		if n.Id == ma.self.Id || ma.isPeerUp(n.Id) {
+			n.Status = "up"
+		} else {
+			n.Status = "down"
+		}
+	}
+
+	var miner *metaNode
+	ix := height / admin.blocksPer % len(nodes)
+	i := ix
+	for j := 0; j < len(nodes); j++ {
+		n := nodes[i]
+		if n.Status == "up" && (n.NotBefore == 0 || height >= n.NotBefore) &&
+			(n.NotAfter == 0 || height <= n.NotAfter) {
+			miner = n
+			miner.Miner = true
+			break
+		}
+		i = (i + 1) % len(nodes)
+	}
+
+	amMiner := false
+	if miner != nil && miner.Id == ma.self.Id {
+		amMiner = true
+	}
+
+	return amMiner, nodes
+}
+
 func IsMiner(height int) bool {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return true
@@ -509,46 +559,36 @@ func IsMiner(height int) bool {
 			admin.update()
 		}
 
-		nodes := admin.igetNodes()
-		var vnodes []*metaNode
-		for _, i := range nodes {
-			if (i.NotBefore != 0 && height < i.NotBefore) ||
-				(i.NotAfter != 0 && height > i.NotAfter) {
-			} else {
-				vnodes = append(vnodes, i)
-			}
-		}
-
-		if len(vnodes) == 0 {
-			return true
-		}
-
-		sort.Slice(vnodes, func(i, j int) bool {
-			return vnodes[i].Id < vnodes[j].Id
-		})
-
-		ix := height / admin.blocksPer % len(vnodes)
-		i := ix
-		for n := 0; n < len(vnodes); n++ {
-			if vnodes[i].Id == admin.self.Id {
-				if i == ix {
-					log.Debug("Am the miner")
-				} else {
-					log.Debug(fmt.Sprintf("Am the miner as %s (or others) are not up.", vnodes[ix].Name))
-				}
-				return true
-			} else if admin.isPeerUp(vnodes[i].Id) {
-				log.Debug(fmt.Sprintf("%s is the miner", vnodes[i].Name))
-				return false
-			}
-			i = (i + 1) % len(vnodes)
-		}
-
-		log.Error("No miners found")
-		return false
+		amMiner, _ := admin.iigetNodes(height)
+		return amMiner
 	} else {
 		return false
 	}
+}
+
+func (ma *metaAdmin) miners() string {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	block, err := ma.cli.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return ""
+	}
+	height := int(block.Number.Int64())
+
+	var bb bytes.Buffer
+	_, nodes := ma.iigetNodes(height)
+	for _, n := range nodes {
+		if bb.Len() != 0 {
+			bb.Write([]byte(" "))
+		}
+		bb.Write([]byte(fmt.Sprintf("%s/%s", n.Name, n.Status)))
+		if n.Miner {
+			bb.Write([]byte("/*"))
+		}
+	}
+
+	return string(bb.Bytes())
 }
 
 func Info() interface{} {
@@ -571,6 +611,7 @@ func Info() interface{} {
 			"blocksPer":     admin.blocksPer,
 			"self":          self,
 			"nodes":         nodes,
+			"miners":        admin.miners(),
 		}
 		return info
 	}
