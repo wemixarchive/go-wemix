@@ -73,7 +73,7 @@ e.g.
 
 Now it's time to compile and load governance contract
 
-    bin/solc.sh MetadiumAdmin.sol MetadiumAdmin.js
+    bin/solc.sh -p 1 MetadiumAdmin.sol MetadiumAdmin.js
 
 Start the metadium node
 
