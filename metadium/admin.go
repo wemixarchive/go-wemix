@@ -12,6 +12,7 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -49,9 +50,11 @@ type metaNode struct {
 	Miner  bool   `json:"miner"`
 }
 
-type metaStake struct {
-	account common.Address `json:"account"`
-	stake   int            `json:"stake"`
+type metaMember struct {
+	Addr  common.Address `json:"address"`
+	Stake int            `json:"stake"`
+	Prev  common.Address `json:"prev"`
+	Next  common.Address `json:"next"`
 }
 
 type metaAdmin struct {
@@ -157,19 +160,8 @@ func (ma *metaAdmin) getAdminContractAddress() common.Address {
 }
 
 func (ma *metaAdmin) getInt(ctx context.Context, to *common.Address, block *big.Int, name string) (int, error) {
-	input, err := ma.abi.Pack(name)
-	if err != nil {
-		return 0, err
-	}
-
-	msg := ethereum.CallMsg{From: ma.from, To: to, Data: input}
-	output, err := ma.cli.CallContract(ctx, msg, block)
-	if err != nil {
-		return 0, err
-	}
-
 	var v *big.Int
-	err = ma.abi.Unpack(&v, name, output)
+	err := ma.callContract(ctx, to, name, nil, &v, block)
 	if err != nil {
 		return 0, err
 	} else {
@@ -189,28 +181,20 @@ func (ma *metaAdmin) igetNodes() []*metaNode {
 }
 
 func (ma *metaAdmin) getNode(ctx context.Context, id string, block *big.Int) (*metaNode, error) {
-	var method string
-	var input []byte
-	var err error
+	var (
+		present       bool
+		jsonOut       string
+		input, output []interface{}
+		err           error
+	)
 
+	output = []interface{}{&present, &jsonOut}
 	if len(id) == 0 {
-		method = "firstNode"
-		input, err = ma.abi.Pack(method)
+		err = ma.callContract(ctx, &ma.to, "firstNode", input, &output, block)
 	} else {
-		method = "getNode"
-		input, err = ma.abi.Pack(method, []byte(id))
+		input = []interface{}{[]byte(id)}
+		err = ma.callContract(ctx, &ma.to, "getNode", input, &output, block)
 	}
-
-	msg := ethereum.CallMsg{From: ma.from, To: &ma.to, Data: input}
-	output, err := ma.cli.CallContract(ctx, msg, block)
-	if err != nil {
-		return nil, err
-	}
-
-	var present bool
-	var jsonOut string
-	o := []interface{}{&present, &jsonOut}
-	err = ma.abi.Unpack(&o, method, output)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +207,111 @@ func (ma *metaAdmin) getNode(ctx context.Context, id string, block *big.Int) (*m
 	n := new(metaNode)
 	err = json.Unmarshal([]byte(jsonOut), n)
 	return n, err
+}
+
+func isArray(x interface{}) bool {
+	if x == nil {
+		return false
+	}
+	y := reflect.TypeOf(x)
+	switch y.Kind() {
+	case reflect.Slice:
+		return true
+	case reflect.Array:
+		return true
+	default:
+		return false
+	}
+}
+
+/* input:
+ *   no arguments -> nil
+ *   one argument -> arg
+ *   array        -> []interface{ arg1, arg2 }
+ * output:
+ *   one argument -> &arg
+ *   array        -> &[]interface{ &arg1, &arg2 }
+ */
+func (ma *metaAdmin) callContract(ctx context.Context, to *common.Address, name string, input, output interface{}, block *big.Int) error {
+	if output == nil {
+		return fmt.Errorf("Output is nil")
+	}
+
+	var in, out []byte
+	var err error
+
+	if !isArray(input) {
+		if input == nil {
+			in, err = ma.abi.Pack(name)
+		} else {
+			in, err = ma.abi.Pack(name, input)
+		}
+	} else {
+		if len(input.([]interface{})) == 0 {
+			in, err = ma.abi.Pack(name)
+		} else {
+			in, err = ma.abi.Pack(name, input.([]interface{})...)
+		}
+	}
+
+	msg := ethereum.CallMsg{From: ma.from, To: to, Data: in}
+	out, err = ma.cli.CallContract(ctx, msg, block)
+	if err != nil {
+		return err
+	}
+
+	if !isArray(output) {
+		if output == nil {
+			return fmt.Errorf("Output is nil")
+		} else {
+			err = ma.abi.Unpack(output, name, out)
+		}
+	} else {
+		if len(output.([]interface{})) == 0 {
+			return fmt.Errorf("Output is empty array")
+		} else {
+			err = ma.abi.Unpack(output.([]interface{}), name, out)
+		}
+	}
+	return err
+}
+
+func (ma *metaAdmin) getMembers(ctx context.Context, block *big.Int) ([]*metaMember, error) {
+	var (
+		members          []*metaMember
+		present          bool
+		addr, prev, next common.Address
+		stake            *big.Int
+		input, output    []interface{}
+		err              error
+	)
+
+	output = []interface{}{&present, &addr, &stake, &prev, &next}
+	err = ma.callContract(ctx, &ma.to, "firstMember", input, &output, block)
+	if err != nil {
+		return nil, err
+	}
+	for present {
+		members = append(members, &metaMember{
+			Addr:  addr,
+			Stake: int(stake.Int64()),
+			Prev:  prev,
+			Next:  next,
+		})
+
+		if next == nilAddress {
+			break
+		} else {
+			input = []interface{}{next}
+			output = []interface{}{&present, &addr, &stake, &prev, &next}
+			err = ma.callContract(ctx, &ma.to, "getMember", input, &output, block)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return members, nil
 }
 
 func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer int, nodes, addedNodes, updatedNodes, deletedNodes []*metaNode, err error) {
