@@ -124,25 +124,6 @@ To start or stop multiple nodes
     bin/gmeth.sh start-nodes
     bin/gmeth.sh stop-nodes
 
-### Adding Members
-
-    bin/geth.sh console
-    ...
-    > personal.unlockAccount(<my-address>, <password>, 3600)
-    > loadScript('MetadiumAdmin.js')
-    > Admin_load(admin.metadiumInfo.to)
-    > Admin.nominateMember(<new-member-address>, <token-collection>, <due>, {from:<my-address>, gas:1000000})
-    > Admin.acceptMember(<new-member-address>, {from:<my-address>, gas:1000000})
-
-### Adding Nodes
-    bin/geth.sh console
-    ...
-    > personal.unlockAccount(<my-address>, <password>, 3600)
-    > loadScript('MetadiumAdmin.js')
-    > Admin_load(admin.metadiumInfo.to)
-    > Admin.nominateNode(<name>, <new-node-id>, <ip-address>, <port>, 0, 0, <due>, {from:<my-address>, gas:1000000})
-    > Admin.acceptNode(<new-node-id>, {from:<my-address>, gas:1000000})
-
 ## Go Ethereum
 
 Official golang implementation of the Ethereum protocol.
