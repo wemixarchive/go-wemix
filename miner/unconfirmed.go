@@ -19,6 +19,7 @@ package miner
 import (
 	"container/ring"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -79,7 +80,8 @@ func (set *unconfirmedBlocks) Insert(index uint64, hash common.Hash) {
 		set.blocks.Move(-1).Link(item)
 	}
 	// Display a log for the user to notify of a new mined block unconfirmed
-	log.Info("🔨 mined potential block", "number", index, "hash", hash)
+	header := set.chain.GetHeaderByNumber(index)
+	log.Info("🔨 mined potential block", "number", index, "hash", hash, "elapsed", common.PrettyDuration(time.Since(time.Unix(header.Time.Int64(), 0))))
 }
 
 // Shift drops all unconfirmed blocks from the set which exceed the unconfirmed sets depth

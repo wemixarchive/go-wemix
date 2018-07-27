@@ -11,6 +11,23 @@
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
+metadium: gmet logrot
+	@[ -d build/conf ] || mkdir -p build/conf
+	@cp -p metadium/scripts/gmet.sh build/bin/
+	@cp -p metadium/scripts/config.json.example			  \
+		metadium/scripts/genesis-template.json			  \
+		metadium/contracts/MetadiumAdmin-template.sol build/conf/
+	@(cd build; tar cfz metadium.tar.gz bin conf)
+	@echo "Done building build/metadium.tar.gz"
+
+gmet:
+	build/env.sh go run build/ci.go install ./cmd/gmet
+	@echo "Done building."
+	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
+
+logrot:
+	build/env.sh go run build/ci.go install ./cmd/logrot
+
 geth:
 	build/env.sh go run build/ci.go install ./cmd/geth
 	@echo "Done building."
@@ -41,7 +58,7 @@ lint: ## Run linters.
 	build/env.sh go run build/ci.go lint
 
 clean:
-	rm -fr build/_workspace/pkg/ $(GOBIN)/*
+	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf
 
 # The devtools target installs tools required for 'go generate'.
 # You need to put $GOBIN (or $GOPATH/bin) in your PATH to use 'go generate'.

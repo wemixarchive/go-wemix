@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"gopkg.in/fatih/set.v0"
 )
@@ -306,6 +307,28 @@ func (self *worker) wait() {
 			block := result.Block
 			work := result.Work
 
+			// Metadium: to avoid empty blocks
+			if work == nil {
+				if len(self.recv) > 0 {
+					continue
+				}
+
+				log.Debug("No work to do, sleeping for 2 seconds.")
+				to := make(chan bool, 1)
+				go func() {
+					time.Sleep(2 * time.Second)
+					to <- true
+				}()
+				select {
+				case <- metaminer.TxNotifier:
+					// a new transaction arrived
+				case <- to:
+					// timed out
+				}
+				self.commitNewWork()
+				continue
+			}
+
 			// Update the block hash in all logs since it is now available and not when the
 			// receipt/log of individual transactions were created.
 			for _, r := range work.receipts {
@@ -396,14 +419,16 @@ func (self *worker) commitNewWork() {
 	parent := self.chain.CurrentBlock()
 
 	tstamp := tstart.Unix()
-	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
-		tstamp = parent.Time().Int64() + 1
-	}
-	// this will ensure we're not going off too far in the future
-	if now := time.Now().Unix(); tstamp > now+1 {
-		wait := time.Duration(tstamp-now) * time.Second
-		log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
-		time.Sleep(wait)
+	if metaminer.IsPoW() {
+		if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
+			tstamp = parent.Time().Int64() + 1
+		}
+		// this will ensure we're not going off too far in the future
+		if now := time.Now().Unix(); tstamp > now+1 {
+			wait := time.Duration(tstamp-now) * time.Second
+			log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
+			time.Sleep(wait)
+		}
 	}
 
 	num := parent.Number()
@@ -446,11 +471,24 @@ func (self *worker) commitNewWork() {
 	if self.config.DAOForkSupport && self.config.DAOForkBlock != nil && self.config.DAOForkBlock.Cmp(header.Number) == 0 {
 		misc.ApplyDAOHardFork(work.state)
 	}
-	pending, err := self.eth.TxPool().Pending()
-	if err != nil {
-		log.Error("Failed to fetch pending transactions", "err", err)
+
+	var pending map[common.Address]types.Transactions
+	if !metaminer.IsPoW() && !metaminer.IsMiner(int(num.Int64())) {
+		log.Debug("Not a miner.")
+		self.push(work)
 		return
+	} else if !metaminer.IsPoW() && self.eth.TxPool().PendingEmpty() && time.Now().Unix() - self.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
+		log.Debug("No pending transactions.")
+		self.push(work)
+		return
+	} else {
+		pending, err = self.eth.TxPool().Pending()
+		if err != nil {
+			log.Error("Failed to fetch pending transactions", "err", err)
+			return
+		}
 	}
+
 	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
 
@@ -606,7 +644,7 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 func (env *Work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, coinbase common.Address, gp *core.GasPool) (error, []*types.Log) {
 	snap := env.state.Snapshot()
 
-	receipt, _, err := core.ApplyTransaction(env.config, bc, &coinbase, gp, env.state, env.header, tx, &env.header.GasUsed, vm.Config{})
+	receipt, _, err := core.ApplyTransaction(env.config, bc, &coinbase, gp, env.state, env.header, tx, &env.header.GasUsed, &env.header.Fees, vm.Config{})
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		return err, nil

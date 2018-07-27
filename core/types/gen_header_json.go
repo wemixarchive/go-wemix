@@ -26,8 +26,10 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Number      *hexutil.Big   `json:"number"           gencodec:"required"`
 		GasLimit    hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
 		GasUsed     hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
+		Fees        hexutil.Uint64 `json:"fees"             gencodec:"required"`
 		Time        *hexutil.Big   `json:"timestamp"        gencodec:"required"`
 		Extra       hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		Rewards	    []byte         `json:"rewards"          gencodec:"required"`
 		MixDigest   common.Hash    `json:"mixHash"          gencodec:"required"`
 		Nonce       BlockNonce     `json:"nonce"            gencodec:"required"`
 		Hash        common.Hash    `json:"hash"`
@@ -44,8 +46,10 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.Number = (*hexutil.Big)(h.Number)
 	enc.GasLimit = hexutil.Uint64(h.GasLimit)
 	enc.GasUsed = hexutil.Uint64(h.GasUsed)
+	enc.Fees = hexutil.Uint64(h.Fees)
 	enc.Time = (*hexutil.Big)(h.Time)
 	enc.Extra = h.Extra
+	enc.Rewards = h.Rewards
 	enc.MixDigest = h.MixDigest
 	enc.Nonce = h.Nonce
 	enc.Hash = h.Hash()
@@ -65,8 +69,10 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		Number      *hexutil.Big    `json:"number"           gencodec:"required"`
 		GasLimit    *hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
 		GasUsed     *hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
+		Fees        *hexutil.Uint64 `json:"fees"             gencodec:"required"`
 		Time        *hexutil.Big    `json:"timestamp"        gencodec:"required"`
 		Extra       *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		Rewards     *hexutil.Bytes  `json:"rewards"          gencodec:"required"`
 		MixDigest   *common.Hash    `json:"mixHash"          gencodec:"required"`
 		Nonce       *BlockNonce     `json:"nonce"            gencodec:"required"`
 	}
@@ -118,6 +124,10 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'gasUsed' for Header")
 	}
 	h.GasUsed = uint64(*dec.GasUsed)
+	if dec.Fees == nil {
+		return errors.New("missing required field 'fees' for Header")
+	}
+	h.Fees = uint64(*dec.Fees)
 	if dec.Time == nil {
 		return errors.New("missing required field 'timestamp' for Header")
 	}
@@ -126,6 +136,10 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'extraData' for Header")
 	}
 	h.Extra = *dec.Extra
+	if dec.Rewards == nil {
+		return errors.New("missing required field 'rewards' for Header")
+	}
+	h.Rewards = *dec.Rewards
 	if dec.MixDigest == nil {
 		return errors.New("missing required field 'mixHash' for Header")
 	}

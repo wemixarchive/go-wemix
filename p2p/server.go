@@ -967,3 +967,21 @@ func (srv *Server) PeersInfo() []*PeerInfo {
 	}
 	return infos
 }
+
+// PeerInfo returns a collection of metadata known about the given node
+func (srv *Server) PeerInfo(id discover.NodeID) *PeerInfo {
+    var peer *Peer
+    select {
+    case srv.peerOp <- func(peers map[discover.NodeID]*Peer) {
+        peer, _ = peers[id]
+    }:
+        <- srv.peerOpDone
+    case <- srv.quit:
+    }
+
+    if peer == nil {
+        return nil
+    } else {
+        return peer.Info()
+    }
+}

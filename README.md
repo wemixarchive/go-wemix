@@ -2,6 +2,128 @@
 
 Golang implementation of the Metadium project. For now, this is just a forking point. We will release the code as it gets ready for public review. Stay tuned.
 
+## Building
+
+`geth` has been renamed to `gmet`. Building it is the same as go-ethereum.
+
+    make gmet
+
+For the convenience of installation, other targets have been added to the default target.
+
+    make
+
+will build `logrot` (log rotator) and `metadium.tar.gz` in `build` directory, in addtion. `metadium.tar.gz` has the following files.
+
+    bin/gmet
+    bin/gmet.sh
+    bin/logrot
+    conf/MetadiumAdmin-template.sol
+    conf/genesis-template.json
+    conf/config.json.example
+
+## Setting Up a Network
+
+One can use `gmet.sh` script to make setup process a little easier. `gmet.sh` assumes metadium data directory to be `/opt/<node-name>`
+
+### Initial Network
+
+First create data directory in `/opt/`, say `/opt/meta1`. Then, unpack metadium.tar.gz in the directory.
+
+    mkdir /opt/meta1
+    cd /opt/meta1
+    tar xvfz <dir>/metadium.tar.gz
+
+As initial members / accounts and nodes are determined (at least one member / account and node are required), create configuration file using `conf/config.json.example`, say `config.json`. The first account is going to be the governance contract creator, and only the first node is allowed to generate blocks before governance contract is established.
+
+#### Account and Node IDs
+
+One can reuse existing accounts and nodes. Account files are in `keystore` directory, and `geth/nodekey` is node key / id file. Or one can use `gmet` to create accounts and node keys, and copy them to data directory.
+
+To create a new account file, run the following.
+
+    bin/gmeth metadium new-account --out <account-file-name>
+
+To create a new node key,
+
+    bin/gmeth metadium new-nodekey --out <node-key-file-name>
+
+To get node id, which is the public key of a `nodekey`.
+
+    bin/gmeth metadium nodeid <node-key-file-name>
+
+#### First Node & Governance Contract Initialization
+
+If you are to use existing or pre-created node key, copy the file to `geth` directory.
+
+    mkdir geth
+    cp <node-key-file> geth/nodekey
+
+The same for accounts
+    mkdir keystore
+    chmod 0600 keystore
+    cp <account-files> keystore/
+
+Running the following command generates `genesis.json` and `MetadiumAdmin.sol`, and initialize metadium blockchain.
+
+    bin/gmeth.sh init config.json <port>
+
+e.g.
+
+    bin/gmeth.sh init config.json 10009
+
+Now it's time to compile and load governance contract
+
+    bin/solc.sh -p 1 MetadiumAdmin.sol MetadiumAdmin.js
+
+Start the metadium node
+
+    bin/gmeth.sh start
+
+Open metadium console and create governance contract
+
+    bin/gmeth.sh console
+    ...
+    > loadScript('MetadiumAdmin.js')
+    > personal.unlockAccount(<address>, <password>, <duration-in-second>)
+    > Admin_new()
+
+#### Other Initial Nodes
+
+Copy config.json and MetadiumAdmin.js, then follow the same procedures except governance contract creation.
+
+    mkdir /opt/meta2
+    cd /opt/meta2
+    mkdir geth
+    cp <node-key-file> geth/nodekey
+    mkdir keystore
+    chmod 0600 keystore
+    cp <account-files> keystore/
+    tar xvfz <dir>/metadium.tar.gz
+    # copy config.json and MetadiumAdmin.js from the first node
+    bin/gmeth.sh init config.json <port>
+    bin/gmeth.sh start
+
+Once these node are setup, the first node will automatically connect and chain synchronization will follow.
+
+### Metadium Info
+
+    bin/gmeth.sh console
+    ...
+    > admin.metadiumInfo
+
+### Starting & Stopping Nodes
+
+To start or stop a single node
+
+    bin/gmet.sh start
+    bin/gmet.sh stop
+
+To start or stop multiple nodes
+
+    export NODES="<host1> <dir1> <host2> <dir2>"
+    bin/gmeth.sh start-nodes
+    bin/gmeth.sh stop-nodes
+
 ## Go Ethereum
 
 Official golang implementation of the Ethereum protocol.

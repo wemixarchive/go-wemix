@@ -69,6 +69,12 @@
 			"revisionTime": "2015-01-22T07:26:53Z"
 		},
 		{
+			"checksumSHA1": "YDUgxyJLTEZ8vq3x7lyMExVMOfY=",
+			"path": "github.com/charlanxcc/logrot",
+			"revision": "f1727914ccbfb022e1d19ab2abecaf12b40f8a60",
+			"revisionTime": "2018-03-23T23:07:12Z"
+		},
+		{
 			"checksumSHA1": "dvabztWVQX8f6oMLRyv4dLH+TGY=",
 			"path": "github.com/davecgh/go-spew/spew",
 			"revision": "346938d642f2ec3594ed81d874461961cd0faa76",

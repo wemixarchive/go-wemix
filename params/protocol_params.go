@@ -61,7 +61,8 @@ const (
 	MemoryGas        uint64 = 3     // Times the address of the (highest referenced byte in memory + 1). NOTE: referencing happens on read, write and in instructions such as RETURN and CALL.
 	TxDataNonZeroGas uint64 = 68    // Per byte of data attached to a transaction that is not equal to zero. NOTE: Not payable on data of calls between transactions.
 
-	MaxCodeSize = 24576 // Maximum bytecode to permit for a contract
+	MaxCodeSize = 253952    // Maximum bytecode to permit for a contract
+	MaxTransactionSize = 262144     // Maximum transaction size
 
 	// Precompiled contract gas prices
 
@@ -84,4 +85,22 @@ var (
 	GenesisDifficulty      = big.NewInt(131072) // Difficulty of the Genesis block.
 	MinimumDifficulty      = big.NewInt(131072) // The minimum that the difficulty may ever be.
 	DurationLimit          = big.NewInt(13)     // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
+)
+
+const (
+	ConsensusInvalid        int = iota
+	ConsensusPoW
+	ConsensusPoA
+	ConsensusETCD
+	ConsensusPBFT
+	ConsensusMax
+)
+
+// metadium parameters
+var (
+	ConsensusMethod         int    = ConsensusPoW   // consensus method
+	FixedDifficulty         uint64 = 0          // 0 means no fixed difficulty
+	FixedGasLimit           uint64 = 0          // 0 means no fixed gas limit
+	MaxIdleBlockInterval    uint64 = 600        // in seconds
+	BlocksPerTurn           uint64 = 10
 )

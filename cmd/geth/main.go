@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
+	metadium "github.com/ethereum/go-ethereum/metadium"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -153,6 +154,15 @@ var (
 		utils.MetricsInfluxDBPasswordFlag,
 		utils.MetricsInfluxDBHostTagFlag,
 	}
+
+	metadiumFlags = []cli.Flag{
+		utils.ConsensusMethodFlag,
+		utils.MetadiumAbiFlag,
+		utils.FixedDifficultyFlag,
+		utils.FixedGasLimitFlag,
+		utils.MaxIdleBlockInterval,
+		utils.BlocksPerTurn,
+	}
 )
 
 func init() {
@@ -187,6 +197,7 @@ func init() {
 		licenseCommand,
 		// See config.go
 		dumpConfigCommand,
+		metadiumCommand,
 	}
 	sort.Sort(cli.CommandsByName(app.Commands))
 
@@ -196,6 +207,7 @@ func init() {
 	app.Flags = append(app.Flags, debug.Flags...)
 	app.Flags = append(app.Flags, whisperFlags...)
 	app.Flags = append(app.Flags, metricsFlags...)
+	app.Flags = append(app.Flags, metadiumFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
 		runtime.GOMAXPROCS(runtime.NumCPU())
@@ -260,6 +272,9 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 
 	// Start up the node itself
 	utils.StartNode(stack)
+
+	// Start metadium admin
+	metadium.StartAdmin(stack, ctx.GlobalString(utils.MetadiumAbiFlag.Name))
 
 	// Unlock any account specifically requested
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
