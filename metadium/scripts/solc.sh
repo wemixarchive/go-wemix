@@ -17,9 +17,10 @@ fi
 
 function usage ()
 {
-    echo "$(basename $0) [-g gas] [-l <name>:<addr>]+ <sol-file> <js-file>
+    echo "$(basename $0) [-g gas] [-p gas-price] [-l <name>:<addr>]+ <sol-file> <js-file>
 
 -g <gas>:         gas amount to spend.
+-p <gas-price>:   gas price
 -l <name>:<addr>: library name and address pair separated by ':'.
     Multiple -l options can be used to specify multiple libraries.
 
@@ -33,8 +34,12 @@ Environment Variables:
 # int compile(string solFile, string jsFile)
 function compile ()
 {
-    ${SOLC} --optimize --abi --bin $1 | awk -v gas="$SOL_GAS" -v libs="$SOL_LIBS" '
+    ${SOLC} --optimize --abi --bin $1 | awk -v gas="$SOL_GAS" -v gas_price="$SOL_GASPRICE" -v libs="$SOL_LIBS" '
 function flush() {
+  if (length(gas_price) != 0) {
+      gas_price_2 = ",\
+    gasPrice: \"" gas_price "\"";
+  }
   if (length(code_name) > 0) {
     printf "\
 function %s_new() {\
@@ -42,7 +47,7 @@ function %s_new() {\
   {\
     from: web3.eth.accounts[0],\
     data: %s_data,\
-    gas: \"%s\"\
+    gas: \"%s\"%s\
   }, function (e, contract) {\
     console.log(e, contract);\
     if (typeof contract.address !== \"undefined\") {\
@@ -55,7 +60,7 @@ function %s_load(addr) {\
    %s = %s_contract.at(addr);\
 }\
 \
-", code_name, code_name, code_name, code_name, gas, code_name, code_name, code_name;
+", code_name, code_name, code_name, code_name, gas, gas_price_2, code_name, code_name, code_name;
   }
 }
 
@@ -98,7 +103,7 @@ END {
 ' > $2;
 }
 
-args=`getopt g:l: $*`
+args=`getopt g:l:p: $*`
 if [ $? != 0 ]; then
     usage;
     exit 1;
@@ -110,6 +115,10 @@ for i; do
     case "$i" in
     -g)
 	SOL_GAS=$2
+	shift;
+	shift;;
+    -p)
+	SOL_GASPRICE=$2
 	shift;
 	shift;;
     -l)
