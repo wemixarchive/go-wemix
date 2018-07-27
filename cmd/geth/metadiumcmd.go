@@ -269,17 +269,12 @@ func genGenesis(ctx *cli.Context) error {
 	genesis["coinbase"] = config.Members[0].Addr
 	genesis["extraData"] = config.Nodes[0].Id
 	alloc := map[string]map[string]string{}
-	stakes := map[string]map[string]string{}
 	for _, m := range config.Members {
 		alloc[m.Addr] = map[string]string{
 			"balance": strings.ToLower(hexutil.EncodeUint64(uint64(m.Balance))),
 		}
-		stakes[m.Addr] = map[string]string{
-			"stake": strings.ToLower(hexutil.EncodeUint64(uint64(m.Stake))),
-		}
 	}
 	genesis["alloc"] = alloc
-	genesis["stakes"] = stakes
 
 	x, err := json.MarshalIndent(genesis, "", "  ")
 	if err != nil {
