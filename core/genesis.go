@@ -59,6 +59,7 @@ type Genesis struct {
 	// in actual genesis blocks.
 	Number     uint64      `json:"number"`
 	GasUsed    uint64      `json:"gasUsed"`
+	Fees       uint64      `json:"fees"`
 	ParentHash common.Hash `json:"parentHash"`
 }
 
