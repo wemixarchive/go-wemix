@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"os"
 	"reflect"
@@ -408,6 +409,8 @@ func StartAdmin(stack *node.Node, abiFile string) {
 	}
 
 	metaminer.IsMinerFunc = IsMiner
+	metaminer.CalculateRewardsFunc = calculateRewards
+	metaminer.VerifyRewardsFunc = verifyRewards
 	metaapi.Info = Info
 
 	rpcCli, err := stack.Attach()
@@ -547,6 +550,102 @@ func (ma *metaAdmin) run() {
 		case <-to:
 		}
 	}
+}
+
+type reward struct {
+	Addr   common.Address `json:"addr"`
+	Reward uint64         `json:"reward"`
+}
+
+// to get around 64 bit boundary. big.Float didn't help here.
+func distributeRewards(six int, members []*metaMember, rewards []reward, amount int64) {
+	n := len(members)
+	var u int64
+	for i := 0; i < n; i++ {
+		rewards[i].Addr = members[i].Addr
+		u += int64(members[i].Stake)
+	}
+
+	var h, l uint64 = uint64(amount) >> 32, uint64(amount) & uint64(0x0FFFFFFFF)
+	var hd, ld float64 = float64(h) / float64(u), float64(l) / float64(u) // slopes
+	var hv, lv, vi float64 = 0, 0, 0
+	var s, vj uint64
+
+	for i := 0; i < n; i++ {
+		s = uint64(members[six].Stake)
+		vi = hv + hd*float64(s)
+		vj = uint64(math.Floor(vi+.5)-math.Floor(hv+.5)) << 32
+		hv = vi
+		vi = lv + ld*float64(s)
+		vj += uint64(math.Floor(vi+.5) - math.Floor(lv+.5))
+		lv = vi
+		rewards[six].Reward = vj
+
+		six = (six + 1) % n
+	}
+}
+
+func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (rewards []byte, err error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	members, err := ma.getMembers(ctx, big.NewInt(num.Int64()-1))
+	if err != nil {
+		return
+	}
+	if len(members) == 0 {
+		err = fmt.Errorf("Not initialized")
+		return
+	}
+
+	n := len(members)
+	rr := make([]reward, n)
+	distributeRewards(int(new(big.Int).Set(num).Mod(num, big.NewInt(int64(len(members)))).Int64()),
+		members, rr, new(big.Int).Add(blockReward, fees).Int64())
+
+	if addBalance != nil {
+		bi := new(big.Int)
+		for _, i := range rr {
+			addBalance(i.Addr, bi.SetUint64(i.Reward))
+		}
+	}
+
+	rewards, err = json.Marshal(rr)
+	return
+}
+
+func (ma *metaAdmin) verifyRewards(r1, r2 []byte) error {
+	var err error
+	var a, b []reward
+
+	if err = json.Unmarshal(r1, &a); err != nil {
+		return err
+	}
+	if err = json.Unmarshal(r2, &b); err != nil {
+		return err
+	}
+
+	err = fmt.Errorf("Incorrect Rewards")
+	if len(a) != len(b) {
+		return err
+	}
+	for i := 0; i < len(a); i++ {
+		if !bytes.Equal(a[i].Addr.Bytes(), b[i].Addr.Bytes()) ||
+			a[i].Reward != b[i].Reward {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+	return admin.calculateRewards(num, blockReward, fees, addBalance)
+}
+
+func verifyRewards(num *big.Int, rewards string) error {
+	return nil
+	//return admin.verifyRewards(num, rewards)
 }
 
 func (ma *metaAdmin) getNodeInfo() (*p2p.NodeInfo, error) {

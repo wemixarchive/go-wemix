@@ -542,18 +542,28 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	if config.IsByzantium(header.Number) {
 		blockReward = ByzantiumBlockReward
 	}
-	// Accumulate the rewards for the miner and any included uncles
-	reward := new(big.Int).Set(blockReward)
-	r := new(big.Int)
-	for _, uncle := range uncles {
-		r.Add(uncle.Number, big8)
-		r.Sub(r, header.Number)
-		r.Mul(r, blockReward)
-		r.Div(r, big8)
-		state.AddBalance(uncle.Coinbase, r)
 
-		r.Div(blockReward, big32)
-		reward.Add(reward, r)
+	if metaminer.IsPoW() {
+		// Accumulate the rewards for the miner and any included uncles
+		reward := new(big.Int).Set(blockReward)
+		r := new(big.Int)
+		for _, uncle := range uncles {
+			r.Add(uncle.Number, big8)
+			r.Sub(r, header.Number)
+			r.Mul(r, blockReward)
+			r.Div(r, big8)
+			state.AddBalance(uncle.Coinbase, r)
+
+			r.Div(blockReward, big32)
+			reward.Add(reward, r)
+		}
+		state.AddBalance(header.Coinbase, reward)
+	} else {
+		rewards, _ := metaminer.CalculateRewards(header.Number, blockReward,
+			big.NewInt(int64(header.Fees)),
+			func(addr common.Address, amt *big.Int) {
+				state.AddBalance(addr, amt)
+			})
+		header.Rewards = rewards
 	}
-	state.AddBalance(header.Coinbase, reward)
 }
