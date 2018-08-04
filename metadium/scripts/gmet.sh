@@ -183,10 +183,10 @@ function start ()
     METADIUM_OPTS="--consensusmethod ${CONSENSUS_METHOD} --fixedgaslimit ${FIXED_GAS_LIMIT} --maxidleblockinterval ${MAX_IDLE_BLOCK_INTERVAL} --blocksperturn ${BLOCKS_PER_TURN} --metadiumabi ${METADIUM_ABI}"
 
     cd $d
-    $GMET --datadir ${PWD} ${CHAIN_ID_OPT} ${MINE_OPT} --nodiscover	\
-	--metrics ${PORT_OPT} ${RPC_PORT_OPT} ${TXPOOL_OPTS}            \
-	${TARGET_GAS_LIMIT_OPT}	${METADIUM_OPTS} ${RCJS} 2>&1		\
-        | ${LOGROT} ${d}/logs/log 10M 5 &
+    $GMET --datadir ${PWD} --ethash.dagdir ${PWD}/.ethash --nodiscover    \
+        ${CHAIN_ID_OPT} ${MINE_OPT} --metrics ${PORT_OPT} ${RPC_PORT_OPT} \
+        ${TXPOOL_OPTS} ${TARGET_GAS_LIMIT_OPT}	${METADIUM_OPTS}          \
+        ${RCJS} 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
 }
 
 function start_all ()
