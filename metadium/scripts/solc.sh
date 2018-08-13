@@ -17,12 +17,19 @@ fi
 
 function usage ()
 {
-    echo "$(basename $0) [-g gas] [-p gas-price] [-l <name>:<addr>]+ <sol-file> <js-file>
+    echo "$(basename $0) [-f <format>] [-g gas] [-p gas-price] [-l <name>:<addr>]+
+	<sol-file> [<js-file> | <json-file>]
 
+-f <format>:      oupput format: \"js\" || \"json\", default is \"js\".
 -g <gas>:         gas amount to spend.
 -p <gas-price>:   gas price
 -l <name>:<addr>: library name and address pair separated by ':'.
     Multiple -l options can be used to specify multiple libraries.
+
+Output Formats:
+  \"js\":   creates 'remix'-generated .js style file that can be loaded to
+    geth/gmet console.
+  \"json\": creates 'truffle'-generated .json style file.
 
 Environment Variables:
   SOL_GAS for gas amount, equivalent to -g option.
@@ -34,8 +41,8 @@ Environment Variables:
 # int compile(string solFile, string jsFile)
 function compile ()
 {
-    ${SOLC} --optimize --abi --bin $1 | awk -v gas="$SOL_GAS" -v gas_price="$SOL_GASPRICE" -v libs="$SOL_LIBS" '
-function flush() {
+    ${SOLC} --optimize --abi --bin $1 | awk -v gas="$SOL_GAS" -v gas_price="$SOL_GASPRICE" -v libs="$SOL_LIBS" -v outfmt=$outfmt '
+function flush2js() {
   if (length(gas_price) != 0) {
       gas_price_2 = ",\
     gasPrice: \"" gas_price "\"";
@@ -43,7 +50,7 @@ function flush() {
   if (length(code_name) > 0) {
     printf "\
 function %s_new() {\
-  %s = %s_contract.new(\
+  return %s_contract.new(\
   {\
     from: web3.eth.accounts[0],\
     data: %s_data,\
@@ -57,11 +64,28 @@ function %s_new() {\
 }\
 \
 function %s_load(addr) {\
-   %s = %s_contract.at(addr);\
+   return %s_contract.at(addr);\
 }\
-\
-", code_name, code_name, code_name, code_name, gas, gas_price_2, code_name, code_name, code_name;
+", code_name, code_name, code_name, gas, gas_price_2, code_name, code_name;
   }
+}
+
+function flush2json() {
+  if (length(code_name) > 0) {
+    printf "{\
+  \"contractName\": \"%s\",\
+  \"abi\": %s,\
+  \"bytecode\": \"0x%s\"\
+}\
+", code_name, abi, code;
+  }
+}
+
+function flush() {
+  if (outfmt == "js")
+    flush2js();
+  else
+    flush2json();
 }
 
 END {
@@ -82,7 +106,9 @@ END {
 # abi
 /^\[/ {
   if (length(code_name) > 0) {
-    print "var " code_name "_contract = web3.eth.contract(" $0 ");";
+    abi = $0
+    if (outfmt == "js")
+      print "var " code_name "_contract = web3.eth.contract(" abi ");";
   }
 }
 
@@ -97,22 +123,27 @@ END {
       sub("^0x", "", nv[2]);
       gsub("_+[^_]*" nv[1] "_+", nv[2], code);
     }
-    print "var " code_name "_data = \"0x" code "\";";
+    if (outfmt == "js")
+      print "var " code_name "_data = \"0x" code "\";";
   }
 }
 ' > $2;
 }
 
-args=`getopt g:l:p: $*`
+args=`getopt f:g:l:p: $*`
 if [ $? != 0 ]; then
     usage;
     exit 1;
 fi
 set -- $args
 
-#SOL_LIBS
+outfmt=js
 for i; do
     case "$i" in
+    -f)
+	outfmt=$2
+	shift;
+	shift;;
     -g)
 	SOL_GAS=$2
 	shift;
@@ -129,7 +160,7 @@ for i; do
     esac
 done
 
-if [ $# != 3 ]; then
+if [ $# != 3 -o "$outfmt" != "js" -a "$outfmt" != "json" ]; then
     usage
     exit 1
 fi
