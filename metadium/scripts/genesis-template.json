@@ -16,6 +16,7 @@
     "config": {
         "chainId": 101,
         "homesteadBlock": 0,
+        "byzantiumBlock": 0,
         "eip155Block": 0,
         "eip158Block": 0
     }
