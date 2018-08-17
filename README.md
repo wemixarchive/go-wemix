@@ -60,7 +60,7 @@ If you are to use existing or pre-created node key, copy the file to `geth` dire
 
 The same for accounts
     mkdir keystore
-    chmod 0600 keystore
+    chmod 0700 keystore
     cp <account-files> keystore/
 
 Running the following command generates `genesis.json` and `MetadiumAdmin.sol`, and initialize metadium blockchain.
@@ -96,11 +96,11 @@ Copy config.json and MetadiumAdmin.js, then follow the same procedures except go
     mkdir geth
     cp <node-key-file> geth/nodekey
     mkdir keystore
-    chmod 0600 keystore
+    chmod 0700 keystore
     cp <account-files> keystore/
     tar xvfz <dir>/metadium.tar.gz
     # copy config.json and MetadiumAdmin.js from the first node
-    bin/gmet.sh init <node-name> config.json <port>
+    bin/gmet.sh init meta2 config.json <port>
     bin/gmet.sh start
 
 Once these node are setup, the first node will automatically connect and chain synchronization will follow.
