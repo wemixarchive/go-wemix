@@ -5,6 +5,7 @@
 CHAIN_ID=101
 CONSENSUS_METHOD=2
 FIXED_GAS_LIMIT=0x40000000
+GAS_PRICE=1000000000
 MAX_IDLE_BLOCK_INTERVAL=600
 BLOCKS_PER_TURN=10
 MINER_THREADS=1
@@ -186,7 +187,8 @@ function start ()
     $GMET --datadir ${PWD} --ethash.dagdir ${PWD}/.ethash --nodiscover    \
         ${CHAIN_ID_OPT} ${MINE_OPT} --metrics ${PORT_OPT} ${RPC_PORT_OPT} \
         ${TXPOOL_OPTS} ${TARGET_GAS_LIMIT_OPT}	${METADIUM_OPTS}          \
-        ${RCJS} 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
+        --gasprice ${GAS_PRICE} ${RCJS} 2>&1 \
+	| ${LOGROT} ${d}/logs/log 10M 5 &
 }
 
 function start_all ()
