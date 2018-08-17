@@ -16,6 +16,7 @@ will build `logrot` (log rotator) and `metadium.tar.gz` in `build` directory, in
 
     bin/gmet
     bin/gmet.sh
+    bin/solc.sh
     bin/logrot
     conf/MetadiumAdmin-template.sol
     conf/genesis-template.json
