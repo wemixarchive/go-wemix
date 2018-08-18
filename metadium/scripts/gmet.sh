@@ -94,7 +94,7 @@ function init ()
 
     echo "PORT=${PORT}" > $d/.rc
     ${GMET} --datadir $d init $d/genesis.json
-    echo "Generating dags for epoch 0 & 1..."
+    echo "Generating dags for epoch 0 to 4..."
     ${GMET} makedag 0     $d/.ethash &
     ${GMET} makedag 30000 $d/.ethash &
     ${GMET} makedag 60000 $d/.ethash &
