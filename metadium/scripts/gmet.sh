@@ -93,7 +93,13 @@ function init ()
     [ $? = 0 ] || return $?
 
     echo "PORT=${PORT}" > $d/.rc
-    ${GMET} --datadir ${PWD} init $d/genesis.json
+    ${GMET} --datadir $d init $d/genesis.json
+    echo "Generating dags for epoch 0 & 1..."
+    ${GMET} makedag 0     $d/.ethash &
+    ${GMET} makedag 30000 $d/.ethash &
+    ${GMET} makedag 60000 $d/.ethash &
+    ${GMET} makedag 90000 $d/.ethash &
+    wait
 }
 
 function wipe ()
