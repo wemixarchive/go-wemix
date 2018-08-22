@@ -94,11 +94,8 @@ function init ()
 
     echo "PORT=${PORT}" > $d/.rc
     ${GMET} --datadir $d init $d/genesis.json
-    echo "Generating dags for epoch 0 to 4..."
+    echo "Generating dags for epoch 0..."
     ${GMET} makedag 0     $d/.ethash &
-    ${GMET} makedag 30000 $d/.ethash &
-    ${GMET} makedag 60000 $d/.ethash &
-    ${GMET} makedag 90000 $d/.ethash &
     wait
 }
 
@@ -190,11 +187,22 @@ function start ()
     METADIUM_OPTS="--consensusmethod ${CONSENSUS_METHOD} --fixedgaslimit ${FIXED_GAS_LIMIT} --maxidleblockinterval ${MAX_IDLE_BLOCK_INTERVAL} --blocksperturn ${BLOCKS_PER_TURN} --metadiumabi ${METADIUM_ABI}"
 
     cd $d
-    $GMET --datadir ${PWD} --ethash.dagdir ${PWD}/.ethash --nodiscover    \
-        ${CHAIN_ID_OPT} ${MINE_OPT} --metrics ${PORT_OPT} ${RPC_PORT_OPT} \
-        ${TXPOOL_OPTS} ${TARGET_GAS_LIMIT_OPT}	${METADIUM_OPTS}          \
-        --gasprice ${GAS_PRICE} ${RCJS} 2>&1 \
-	| ${LOGROT} ${d}/logs/log 10M 5 &
+    if [ ! "$2" = "inner" ]; then
+	$GMET --datadir ${PWD} --ethash.dagdir ${PWD}/.ethash		\
+	      --nodiscover ${CHAIN_ID_OPT} ${MINE_OPT} --metrics	\
+	      ${PORT_OPT} ${RPC_PORT_OPT} ${TXPOOL_OPTS}		\
+	      ${TARGET_GAS_LIMIT_OPT} ${METADIUM_OPTS}			\
+	      --gasprice ${GAS_PRICE} ${RCJS} 2>&1			\
+	    | ${LOGROT} ${d}/logs/log 10M 5 &
+    else
+	exec > >(${LOGROT} ${d}/logs/log 10M 5)
+	exec 2>&1
+	exec $GMET --datadir ${PWD} --ethash.dagdir ${PWD}/.ethash	\
+	      --nodiscover ${CHAIN_ID_OPT} ${MINE_OPT} --metrics	\
+	      ${PORT_OPT} ${RPC_PORT_OPT} ${TXPOOL_OPTS}		\
+	      ${TARGET_GAS_LIMIT_OPT} ${METADIUM_OPTS}			\
+	      --gasprice ${GAS_PRICE} ${RCJS}
+    fi
 }
 
 function start_all ()
@@ -284,6 +292,14 @@ case "$1" in
         start $2
     else
         start_all
+    fi
+    ;;
+
+"start-inner")
+    if [ "$2" = "" ]; then
+	usage;
+    else
+        start $2 inner
     fi
     ;;
 
