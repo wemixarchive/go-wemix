@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/elastic/gosigar"
@@ -364,6 +365,35 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		}
 		if err := ethereum.StartMining(threads); err != nil {
 			utils.Fatalf("Failed to start mining: %v", err)
+		}
+	}
+	// try to limit max rss memory size to 60 % of total memory
+	var mem gosigar.Mem
+	if err := mem.Get(); err == nil {
+		// 60% of total memory in KB
+		maxMem := int64(mem.Total * 6 / 10 / 1024)
+		go limitMaxRss(maxMem)
+	}
+}
+
+// try to limit max rss memory size to 60 % of total memory
+func limitMaxRss(max int64) {
+	interval := 10 * time.Second
+	timer := time.NewTimer(interval)
+	for {
+		select {
+		case <-timer.C:
+			rusage := syscall.Rusage{}
+			err := syscall.Getrusage(syscall.RUSAGE_SELF, &rusage)
+			if err != nil {
+				log.Error("Getrusage() failed:", "reason", err)
+			} else {
+				if (rusage.Maxrss > max) {
+					log.Info("Calling FreeOSMemory()", "Max", max, "Rusage.Maxrss", rusage.Maxrss)
+					godebug.FreeOSMemory()
+				}
+			}
+			timer.Reset(interval)
 		}
 	}
 }
