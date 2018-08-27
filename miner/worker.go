@@ -904,11 +904,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 	var pending map[common.Address]types.Transactions
 	if !metaminer.IsPoW() && !metaminer.IsMiner(int(num.Int64())) {
 		log.Debug("Not a miner.")
-		fmt.Println("XXX: not a miner! !noempty ==", !noempty)
 		return
 	} else if !metaminer.IsPoW() && w.eth.TxPool().PendingEmpty() && time.Now().Unix() - w.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
 		log.Debug("No pending transactions.")
-		fmt.Println("XXX: no pending! !noempty ==", !noempty)
 		return
 	} else {
 		var err error
