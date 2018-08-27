@@ -294,9 +294,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	timer := time.NewTimer(0)
 	<-timer.C // discard the initial tick
 
-	// Metadium: timer to generate empty block after maxIdleBlockDuration
-	metaTimer := time.NewTimer(60 * time.Second)
-
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
 		if interrupt != nil {
@@ -355,16 +352,15 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
 				if atomic.LoadInt32(&w.newTxs) == 0 {
+					// Metadium: to generate an empty block after maxBlockInterval
+					if !metaminer.IsPoW() && w.eth.TxPool().PendingEmpty() {
+						commit(false, commitInterruptNone)
+					}
 					timer.Reset(recommit)
 					continue
 				}
 				commit(true, commitInterruptResubmit)
 			}
-
-		case <-metaTimer.C:
-			// Metadium: timer to generate empty block after maxIdleBlockDuration
-			commit(false, commitInterruptNone)
-			metaTimer.Reset(60 * time.Second)
 
 		case interval := <-w.resubmitIntervalCh:
 			// Adjust resubmit interval explicitly by user.
@@ -462,6 +458,8 @@ func (w *worker) mainLoop() {
 			} else {
 				// If we're mining, but nothing is being processed, wake on new transactions
 				if w.config.Clique != nil && w.config.Clique.Period == 0 {
+					w.commitNewWork(nil, false)
+				} else if !metaminer.IsPoW() && w.eth.TxPool().PendingOne() && atomic.LoadInt32(&w.newTxs) == 0 {
 					w.commitNewWork(nil, false)
 				}
 			}
@@ -917,7 +915,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 		}
 	}
 
-	if !noempty {
+	// Metadium: this ends up in a loop creating empty blocks.
+	if metaminer.IsPoW() && !noempty {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
 		w.commit(uncles, nil, false, tstart)

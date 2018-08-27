@@ -543,7 +543,28 @@ func (pool *TxPool) Pending() (map[common.Address]types.Transactions, error) {
 func (pool *TxPool) PendingEmpty() bool {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	return len(pool.pending) == 0
+
+	for _, list := range pool.pending {
+		if list.Len() > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Checks if txpool.pending has exactly one entry
+func (pool *TxPool) PendingOne() bool {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	n := 0
+	for _, list := range pool.pending {
+		n += list.Len()
+		if n > 1 {
+			return false
+		}
+	}
+	return n == 1
 }
 
 // Locals retrieves the accounts currently considered local by the pool.
