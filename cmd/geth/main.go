@@ -371,7 +371,12 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	var mem gosigar.Mem
 	if err := mem.Get(); err == nil {
 		// 60% of total memory in KB
-		maxMem := int64(mem.Total * 6 / 10 / 1024)
+		maxMem := int64(mem.Total * 6 / 10)
+		// In Mac OS X Getrusage().Maxrss is bytes, everywhere else it's KB.
+		if runtime.GOOS != "darwin" {
+			// not in Mac OS X, to KB
+			maxMem /= 1024
+		}
 		go limitMaxRss(maxMem)
 	}
 }
