@@ -85,6 +85,9 @@ function init ()
 	return 1
     fi
 
+    echo "wiping out data..."
+    wipe $NODE
+
     [ -d "$d/logs" ] || mkdir -p "$d/logs"
 
     ${GMET} metadium genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
