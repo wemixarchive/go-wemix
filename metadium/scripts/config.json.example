@@ -2,12 +2,12 @@
   "members": [
     {
       "addr": "0x1be19928ed1dada205aec56ab85e0e2ab5670ad5",
-      "balance": 1000000000000000,
+      "balance": 100000000000000000,
       "stake": 1000000
     },
     {
       "addr": "0xb4388353fd0f3b3a017e09f2b857052ff219e663",
-      "balance": 2000000000000000,
+      "balance": 200000000000000000,
       "stake": 2000000
     }
   ],
