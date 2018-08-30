@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -79,6 +80,13 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	lastHead := gpo.lastHead
 	lastPrice := gpo.lastPrice
 	gpo.cacheLock.RUnlock()
+
+	// Metadium TODO: in metadium, gas price is set by governance contract.
+	if !metaminer.IsPoW() {
+		if lastPrice != nil {
+			return lastPrice, nil
+		}
+	}
 
 	head, _ := gpo.backend.HeaderByNumber(ctx, rpc.LatestBlockNumber)
 	headHash := head.Hash()
