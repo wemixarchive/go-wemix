@@ -193,10 +193,6 @@ func (p *peer) MarkTransaction(hash common.Hash) {
 	p.knownTxs.Add(hash)
 }
 
-func (p *peer) clearKnownTxs() {
-	p.knownTxs.Clear()
-}
-
 // SendTransactions sends transactions to the peer and includes the hashes
 // in its transaction hash set for future reference.
 func (p *peer) SendTransactions(txs types.Transactions) error {
@@ -216,6 +212,13 @@ func (p *peer) AsyncSendTransactions(txs []*types.Transaction) {
 		}
 	default:
 		p.Log().Debug("Dropping transaction propagation", "count", len(txs))
+	}
+}
+
+func (p *peer) resendPendingTxs(txs map[common.Address]types.Transactions) {
+	p.knownTxs.Clear()
+	for _, ts := range txs {
+		p.AsyncSendTransactions(ts)
 	}
 }
 
