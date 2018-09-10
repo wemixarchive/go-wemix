@@ -16,6 +16,7 @@ var (
 	IsMinerFunc          func(int) bool
 	CalculateRewardsFunc func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
 	VerifyRewardsFunc    func(*big.Int, string) error
+	RequirePendingTxsFunc  func() bool
 )
 
 func TxNotify() {
@@ -49,6 +50,14 @@ func VerifyRewards(num *big.Int, rewards string) error {
 		return fmt.Errorf("Not initialized")
 	} else {
 		return VerifyRewardsFunc(num, rewards)
+	}
+}
+
+func RequirePendingTxs() bool {
+	if RequirePendingTxsFunc == nil {
+		return false
+	} else {
+		return RequirePendingTxsFunc()
 	}
 }
 

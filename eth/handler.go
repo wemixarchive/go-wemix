@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/params"
@@ -215,6 +216,9 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// start sync handlers
 	go pm.syncer()
 	go pm.txsyncLoop()
+
+	// start metadium untransported pending transaction syncer
+	go pm.syncPendingTxs()
 }
 
 func (pm *ProtocolManager) Stop() {
@@ -225,6 +229,7 @@ func (pm *ProtocolManager) Stop() {
 
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
+	pm.noMorePeers <- struct{}{}
 	pm.noMorePeers <- struct{}{}
 
 	// Quit fetcher, txsyncLoop.
@@ -682,6 +687,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.txpool.AddRemotes(txs)
 
+	// Metadium: leader wants to get left-over transactions if any
+	case p.version >= meta1 && msg.Code == GetPendingTxsMsg:
+		if !pm.txpool.PendingEmpty() {
+			fmt.Println("XXX: got GetPendingTxsMsg, must have lost tx")
+			p.clearKnownTxs()
+		}
+		return nil
+
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
@@ -783,5 +796,32 @@ func (pm *ProtocolManager) NodeInfo() *NodeInfo {
 		Genesis:    pm.blockchain.Genesis().Hash(),
 		Config:     pm.blockchain.Config(),
 		Head:       currentBlock.Hash(),
+	}
+}
+
+// Metadium left-over transaction pull
+func (pm *ProtocolManager) syncPendingTxs() {
+	// Metadium: left over transaction collection timer
+	metaInterval := 5 * time.Second
+	metaTimer := time.NewTimer(metaInterval)
+
+	for {
+		select {
+		case <-metaTimer.C:
+			go func() {
+				if metaminer.RequirePendingTxs() {
+					peers := pm.peers.Peers()
+					for _, p := range peers {
+						err := p.RequestPendingTxs()
+						if err != nil {
+							log.Error("Failed to send GetPendingTxs message", "reason", err)
+						}
+					}
+				}
+			}()
+			metaTimer.Reset(metaInterval)
+		case <-pm.noMorePeers:
+			return
+		}
 	}
 }
