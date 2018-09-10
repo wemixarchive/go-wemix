@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
@@ -411,6 +412,7 @@ func StartAdmin(stack *node.Node, abiFile string) {
 	metaminer.IsMinerFunc = IsMiner
 	metaminer.CalculateRewardsFunc = calculateRewards
 	metaminer.VerifyRewardsFunc = verifyRewards
+	metaminer.RequirePendingTxsFunc = requirePendingTxs
 	metaapi.Info = Info
 
 	rpcCli, err := stack.Attach()
@@ -765,7 +767,7 @@ func (ma *metaAdmin) miners() string {
 	height := int(block.Number.Int64())
 
 	var bb bytes.Buffer
-	_, nodes := ma.iigetNodes(height)
+	_, nodes := ma.iigetNodes(height + 1)
 	for _, n := range nodes {
 		if bb.Len() != 0 {
 			bb.Write([]byte(" "))
@@ -803,6 +805,56 @@ func Info() interface{} {
 		}
 		return info
 	}
+}
+
+func (ma *metaAdmin) getTxPoolStatus() (pending, queued uint, err error) {
+	var data map[string]hexutil.Uint
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err = ma.rpcCli.CallContext(ctx, &data, "txpool_status")
+	cancel()
+
+	if err != nil {
+		return
+	}
+	p, b1 := data["pending"]
+	q, b2 := data["queued"]
+	if !b1 || !b2 {
+		err = fmt.Errorf("Invalid Data")
+	} else {
+		pending = uint(p)
+		queued = uint(q)
+	}
+
+	return
+}
+
+func requirePendingTxs() bool {
+	if admin == nil {
+		return false
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	block, err := admin.cli.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return false
+	}
+	height := int(block.Number.Int64())
+
+	if !IsMiner(height + 1) {
+		return false
+	}
+
+	p, _, e := admin.getTxPoolStatus()
+	if e != nil {
+		return false
+	} else if p > 0 {
+		return false
+	}
+
+	return true
 }
 
 /* EOF */
