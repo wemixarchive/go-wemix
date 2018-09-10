@@ -688,10 +688,15 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.txpool.AddRemotes(txs)
 
 	// Metadium: leader wants to get left-over transactions if any
-	case p.version >= meta1 && msg.Code == GetPendingTxsMsg:
+	case p.version >= eth63 && msg.Code == GetPendingTxsMsg:
 		if !pm.txpool.PendingEmpty() {
 			fmt.Println("XXX: got GetPendingTxsMsg, must have lost tx")
-			p.clearKnownTxs()
+			txs, err := pm.txpool.Pending()
+			if err != nil {
+				return err
+			} else {
+				p.resendPendingTxs(txs)
+			}
 		}
 		return nil
 
