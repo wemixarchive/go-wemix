@@ -188,6 +188,12 @@ func (pm *ProtocolManager) removePeer(id string) {
 	if peer == nil {
 		return
 	}
+
+	if metaminer.IsPartner(id) {
+		log.Debug("Keeping Metadium partner peer", "peer", id)
+		return
+	}
+
 	log.Debug("Removing Ethereum peer", "peer", id)
 
 	// Unregister the peer from the downloader and Ethereum peer set
