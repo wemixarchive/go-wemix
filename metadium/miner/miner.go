@@ -14,6 +14,7 @@ var (
 	// notification channel when a new transaction arrives
 	TxNotifier           = make(chan bool, 1)
 	IsMinerFunc          func(int) bool
+	IsPartnerFunc        func(string) bool
 	CalculateRewardsFunc func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
 	VerifyRewardsFunc    func(*big.Int, string) error
 	RequirePendingTxsFunc  func() bool
@@ -30,6 +31,14 @@ func IsMiner(height int) bool {
 		return false
 	} else {
 		return IsMinerFunc(height)
+	}
+}
+
+func IsPartner(id string) bool {
+	if IsPartnerFunc == nil {
+		return false
+	} else {
+		return IsPartnerFunc(id)
 	}
 }
 

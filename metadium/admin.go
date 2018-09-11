@@ -410,6 +410,7 @@ func StartAdmin(stack *node.Node, abiFile string) {
 	}
 
 	metaminer.IsMinerFunc = IsMiner
+	metaminer.IsPartnerFunc = IsPartner
 	metaminer.CalculateRewardsFunc = calculateRewards
 	metaminer.VerifyRewardsFunc = verifyRewards
 	metaminer.RequirePendingTxsFunc = requirePendingTxs
@@ -754,6 +755,24 @@ func IsMiner(height int) bool {
 	} else {
 		return false
 	}
+}
+
+func IsPartner(id string) bool {
+	if admin == nil {
+		return false
+	}
+
+	admin.lock.Lock()
+	defer admin.lock.Unlock()
+
+	n, ok := admin.nodes[id]
+	if !ok {
+		return false
+	}
+
+	// TODO: need to check NotBefore and NotAfter
+
+	return n.Partner
 }
 
 func (ma *metaAdmin) miners() string {
