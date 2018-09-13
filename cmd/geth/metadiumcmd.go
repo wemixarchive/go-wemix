@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -17,7 +18,10 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/metadium/metclient"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"gopkg.in/urfave/cli.v1"
 )
@@ -109,6 +113,21 @@ Data consists of "<account> <balance> <tokens>" or "<node id>".
 The first account becomes the coinbase of the genesis block, and the creator of the admin contract.
 The first node becomes the boot miner who's allowed to generate blocks before admin contract gets created.`,
 			},
+			{
+				Name:   "deploy-contract",
+				Usage:  "Deploy a contract",
+				Action: utils.MigrateFlags(deployContract),
+				Flags: []cli.Flag{
+					utils.PasswordFileFlag,
+					urlFlag,
+					gasFlag,
+					gasPriceFlag,
+				},
+				Description: `
+    geth metadium deploy-contract [--password data <file> --url <url> --gas <gas> --gasprice <gas-price>] <account-file> <contract-name> <contract-file.[js|json]>
+
+Deploy a contract from a contract file in .js or .json format.`,
+			},
 		},
 	}
 
@@ -127,6 +146,18 @@ The first node becomes the boot miner who's allowed to generate blocks before ad
 	outFlag = cli.StringFlag{
 		Name:  "out",
 		Usage: "out file",
+	}
+	gasFlag = cli.IntFlag{
+		Name:  "gas",
+		Usage: "gas amount",
+	}
+	gasPriceFlag = cli.IntFlag{
+		Name:  "gasprice",
+		Usage: "gas price",
+	}
+	urlFlag = cli.StringFlag{
+		Name:  "url",
+		Usage: "url of gmet node",
 	}
 )
 
@@ -386,6 +417,65 @@ func genAdminContract(ctx *cli.Context) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func deployContract(ctx *cli.Context) error {
+	var err error
+
+	passwd := ctx.String(utils.PasswordFileFlag.Name)
+	url := ctx.String(urlFlag.Name)
+	gas := ctx.Int(gasFlag.Name)
+	gasPrice := ctx.Int(gasPriceFlag.Name)
+
+	if len(url) == 0 || len(ctx.Args()) != 3 {
+		return fmt.Errorf("Invalid Arguments")
+	}
+
+	accountFile, contractName, contractFile := ctx.Args()[0], ctx.Args()[1], ctx.Args()[2]
+
+	var acct *keystore.Key
+	acct, err = metclient.LoadAccount(passwd, accountFile)
+	if err != nil {
+		return err
+	}
+
+	var contractData *metclient.ContractData
+	contractData, err = metclient.LoadContract(contractFile, contractName)
+	if err != nil {
+		return err
+	}
+
+	ctxx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var cli *ethclient.Client
+	cli, err = ethclient.Dial(url)
+	if err != nil {
+		return err
+	}
+
+	var hash common.Hash
+	hash, err = metclient.Deploy(ctxx, cli, acct, contractData, nil, gas,
+		gasPrice)
+	if err != nil {
+		return err
+	}
+
+	var receipt *types.Receipt
+	receipt, err = metclient.GetContractReceipt(ctxx, cli, hash, 500, 60)
+	if err != nil {
+		return err
+	} else {
+		if receipt.Status == 1 {
+			fmt.Printf("Contract mined! ")
+		} else {
+			fmt.Printf("Contract failed with %d! ", receipt.Status)
+		}
+		fmt.Printf("address: %s transactionHash: %s\n",
+			receipt.ContractAddress.String(), hash.String())
 	}
 
 	return nil
