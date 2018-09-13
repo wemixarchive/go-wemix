@@ -3,24 +3,19 @@
 package metadium
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"math/big"
-	"os"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -29,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	metaapi "github.com/ethereum/go-ethereum/metadium/api"
+	"github.com/ethereum/go-ethereum/metadium/metclient"
 	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -85,37 +81,6 @@ var (
 	nilAddress = common.Address{}
 	admin      *metaAdmin
 )
-
-// var <name>_contract = web3.eth.contract([{<abi>}]);
-func loadAbis(r io.Reader) (map[string]abi.ABI, error) {
-	abis := map[string]abi.ABI{}
-
-	re := regexp.MustCompile(`^var ([^_]+)_contract[^(]+\(([^)]+)\);$`)
-	b := bufio.NewReaderSize(r, 1024*1024)
-	for {
-		line, _, err := b.ReadLine()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-
-		submatches := re.FindSubmatch(line)
-		if submatches == nil || len(submatches) != 3 {
-			continue
-		}
-
-		def, err := abi.JSON(bytes.NewReader(submatches[2]))
-		if err != nil {
-			// ignore error
-			continue
-		}
-
-		abis[string(submatches[1])] = def
-	}
-
-	return abis, nil
-}
 
 func (n *metaNode) eq(m *metaNode) bool {
 	if n.Partner == m.Partner && n.Name == m.Name && n.Id == m.Id &&
@@ -235,47 +200,13 @@ func isArray(x interface{}) bool {
  *   array        -> &[]interface{ &arg1, &arg2 }
  */
 func (ma *metaAdmin) callContract(ctx context.Context, to *common.Address, name string, input, output interface{}, block *big.Int) error {
-	if output == nil {
-		return fmt.Errorf("Output is nil")
+	contract := &metclient.RemoteContract{
+		Cli: ma.cli,
+		To:  to,
+		Abi: ma.abi,
 	}
 
-	var in, out []byte
-	var err error
-
-	if !isArray(input) {
-		if input == nil {
-			in, err = ma.abi.Pack(name)
-		} else {
-			in, err = ma.abi.Pack(name, input)
-		}
-	} else {
-		if len(input.([]interface{})) == 0 {
-			in, err = ma.abi.Pack(name)
-		} else {
-			in, err = ma.abi.Pack(name, input.([]interface{})...)
-		}
-	}
-
-	msg := ethereum.CallMsg{From: ma.from, To: to, Data: in}
-	out, err = ma.cli.CallContract(ctx, msg, block)
-	if err != nil {
-		return err
-	}
-
-	if !isArray(output) {
-		if output == nil {
-			return fmt.Errorf("Output is nil")
-		} else {
-			err = ma.abi.Unpack(output, name, out)
-		}
-	} else {
-		if len(output.([]interface{})) == 0 {
-			return fmt.Errorf("Output is empty array")
-		} else {
-			err = ma.abi.Unpack(output.([]interface{}), name, out)
-		}
-	}
-	return err
+	return metclient.CallContract(ctx, contract, name, input, output, block)
 }
 
 func (ma *metaAdmin) getMembers(ctx context.Context, block *big.Int) ([]*metaMember, error) {
@@ -421,17 +352,9 @@ func StartAdmin(stack *node.Node, abiFile string) {
 		utils.Fatalf("Failed to attach to self: %v", err)
 	}
 
-	f, err := os.Open(abiFile)
-	if err != nil {
-		utils.Fatalf("Failed to open %s: %v\n", abiFile, err)
-	}
-
-	abis, err := loadAbis(f)
+	contract, err := metclient.LoadContract(abiFile, "Admin")
 	if err != nil {
 		utils.Fatalf("Loading ABI failed: %v", err)
-	}
-	if _, ok := abis["Admin"]; !ok {
-		utils.Fatalf("Cannot find governance abi")
 	}
 
 	admin = &metaAdmin{
@@ -441,7 +364,7 @@ func StartAdmin(stack *node.Node, abiFile string) {
 		Updates: make(chan bool, 10),
 		rpcCli:  rpcCli,
 		cli:     ethclient.NewClient(rpcCli),
-		abi:     abis["Admin"],
+		abi:     contract.Abi,
 	}
 
 	admin.bootNodeId, admin.bootAccount, err = admin.getGenesisInfo()
