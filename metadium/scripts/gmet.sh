@@ -85,6 +85,9 @@ function init ()
 	return 1
     fi
 
+    echo "wiping out data..."
+    wipe $NODE
+
     [ -d "$d/logs" ] || mkdir -p "$d/logs"
 
     ${GMET} metadium genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
@@ -180,7 +183,7 @@ function start ()
         RCJS="--preload $d/rc.js"
     fi
 
-    TXPOOL_OPTS="--txpool.accountslots 100000 --txpool.globalslots 100000"
+    TXPOOL_OPTS="--txpool.accountslots 100000 --txpool.globalslots 100000 --txpool.accountqueue 100000 --txpool.globalqueue 100000"
     [ "${TARGET_GAS_LIMIT}" != "" ] && \
 	TARGET_GAS_LIMIT_OPT="--targetgaslimit ${TARGET_GAS_LIMIT}"
 

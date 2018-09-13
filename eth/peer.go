@@ -215,6 +215,13 @@ func (p *peer) AsyncSendTransactions(txs []*types.Transaction) {
 	}
 }
 
+func (p *peer) resendPendingTxs(txs map[common.Address]types.Transactions) {
+	p.knownTxs.Clear()
+	for _, ts := range txs {
+		p.AsyncSendTransactions(ts)
+	}
+}
+
 // SendNewBlockHashes announces the availability of a number of blocks through
 // a hash notification.
 func (p *peer) SendNewBlockHashes(hashes []common.Hash, numbers []uint64) error {
@@ -325,6 +332,11 @@ func (p *peer) RequestNodeData(hashes []common.Hash) error {
 func (p *peer) RequestReceipts(hashes []common.Hash) error {
 	p.Log().Debug("Fetching batch of receipts", "count", len(hashes))
 	return p2p.Send(p.rw, GetReceiptsMsg, hashes)
+}
+
+func (p *peer) RequestPendingTxs() error {
+	p.Log().Debug("Fetching any extra left-over transactions")
+	return p2p.Send(p.rw, GetPendingTxsMsg, common.Big1)
 }
 
 // Handshake executes the eth protocol handshake, negotiating version number,
@@ -519,4 +531,15 @@ func (ps *peerSet) Close() {
 		p.Disconnect(p2p.DiscQuitting)
 	}
 	ps.closed = true
+}
+
+func (ps *peerSet) Peers() []*peer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*peer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		list = append(list, p)
+	}
+	return list
 }

@@ -14,8 +14,10 @@ var (
 	// notification channel when a new transaction arrives
 	TxNotifier           = make(chan bool, 1)
 	IsMinerFunc          func(int) bool
+	IsPartnerFunc        func(string) bool
 	CalculateRewardsFunc func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
 	VerifyRewardsFunc    func(*big.Int, string) error
+	RequirePendingTxsFunc  func() bool
 )
 
 func TxNotify() {
@@ -29,6 +31,14 @@ func IsMiner(height int) bool {
 		return false
 	} else {
 		return IsMinerFunc(height)
+	}
+}
+
+func IsPartner(id string) bool {
+	if IsPartnerFunc == nil {
+		return false
+	} else {
+		return IsPartnerFunc(id)
 	}
 }
 
@@ -49,6 +59,14 @@ func VerifyRewards(num *big.Int, rewards string) error {
 		return fmt.Errorf("Not initialized")
 	} else {
 		return VerifyRewardsFunc(num, rewards)
+	}
+}
+
+func RequirePendingTxs() bool {
+	if RequirePendingTxsFunc == nil {
+		return false
+	} else {
+		return RequirePendingTxsFunc()
 	}
 }
 
