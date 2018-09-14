@@ -58,14 +58,16 @@ func GetOpportunisticTxParams(ctx context.Context, cli *ethclient.Client, addr c
 		gasPrice = big.NewInt(gp.Int64())
 	}
 
-	var _nonce uint64
-	_nonce, err = cli.PendingNonceAt(ctx, addr)
-	//_nonce, err = cli.NonceAt(ctx, addr, nil)
-	if err != nil {
-		return
+	var _n1, _n2 uint64
+	_n1, err = cli.PendingNonceAt(ctx, addr)
+	if err != nil { return }
+	_n2, err = cli.NonceAt(ctx, addr, nil)
+	if err != nil { return }
+	if _n1 < _n2 {
+		_n1 = _n2
 	}
 
-	_nonces[addr] = big.NewInt(int64(_nonce))
+	_nonces[addr] = big.NewInt(int64(_n1))
 	nonce = big.NewInt(_nonces[addr].Int64())
 	if incNonce {
 		_nonces[addr].Add(_nonces[addr], common.Big1)
