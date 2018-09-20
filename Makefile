@@ -11,6 +11,18 @@
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
+ifndef USE_ROCKSDB
+  ifeq ($(shell uname), Linux)
+	USE_ROCKSDB = 1
+  else
+	USE_ROCKSDB = 0
+  endif
+endif
+
+ifeq ($(USE_ROCKSDB), 1)
+ROCKSDB_ENV="DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb CGO_CFLAGS=-I$${DIR}/include CGO_LDFLAGS=\"-L$${DIR} -lrocksdb -lstdc++ -lm -lz\""
+endif
+
 metadium: gmet logrot
 	@[ -d build/conf ] || mkdir -p build/conf
 	@cp -p metadium/scripts/gmet.sh metadium/scripts/solc.sh build/bin/
@@ -20,11 +32,13 @@ metadium: gmet logrot
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
 
+#	DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb \
+#	    CGO_CFLAGS="-I$${DIR}/include"				\
+#	    CGO_LDFLAGS="-L$${DIR} -lrocksdb -lstdc++ -lm -lz"		\
+#	    build/env.sh go run build/ci.go install ./cmd/gmet
+
 gmet: rocksdb
-	DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb \
-	    CGO_CFLAGS="-I$${DIR}/include"				\
-	    CGO_LDFLAGS="-L$${DIR} -lrocksdb -lstdc++ -lm -lz"		\
-	    build/env.sh go run build/ci.go install ./cmd/gmet
+	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install ./cmd/gmet
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
 
@@ -63,7 +77,7 @@ lint: ## Run linters.
 clean:
 	./build/clean_go_build_cache.sh
 	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf
-	ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb;		\
+	@ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb;		\
 	if [ -d $${ROCKSDB_DIR} ]; then			\
 		cd $${ROCKSDB_DIR};		  	\
 		make clean;				\
@@ -174,6 +188,9 @@ geth-windows-amd64:
 	@echo "Windows amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
+ifneq ($(USE_ROCKSDB), 1)
+rocksdb:
+else
 rocksdb:
 	@build/env.sh test 1;
 	@export GOPATH=$(shell pwd)/build/_workspace;			\
@@ -189,3 +206,4 @@ rocksdb:
 	fi
 	@cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
 		make static_lib;
+endif
