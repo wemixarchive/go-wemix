@@ -175,15 +175,17 @@ geth-windows-amd64:
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
 rocksdb:
-	GOPATH=$(shell pwd)/build/_workspace;				\
+	@build/env.sh test 1;
+	@export GOPATH=$(shell pwd)/build/_workspace;			\
+	[ -d build/_workspace/bin ] || mkdir -p build/_workspace/bin;	\
 	if [ ! -x build/_workspace/bin/govendor ]; then			\
 		echo "Installing govendor...";				\
 		go get -v -u github.com/kardianos/govendor;		\
 	fi;								\
 	if [ ! -f vendor/github.com/facebook/rocksdb/README.md ]; then	\
 		echo "Syncing rocksdb...";				\
-		cd $${GOPATH}/;						\
+		cd $${GOPATH}/src/github.com/ethereum/go-ethereum/vendor; \
 		$${GOPATH}/bin/govendor sync -v;			\
 	fi
-	cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
+	@cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
 		make static_lib;
