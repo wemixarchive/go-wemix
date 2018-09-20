@@ -20,8 +20,11 @@ metadium: gmet logrot
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
 
-gmet:
-	build/env.sh go run build/ci.go install ./cmd/gmet
+gmet: rocksdb
+	DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb \
+	    CGO_CFLAGS="-I$${DIR}/include"				\
+	    CGO_LDFLAGS="-L$${DIR} -lrocksdb -lstdc++ -lm -lz"		\
+	    build/env.sh go run build/ci.go install ./cmd/gmet
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
 
@@ -60,6 +63,11 @@ lint: ## Run linters.
 clean:
 	./build/clean_go_build_cache.sh
 	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf
+	ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb;		\
+	if [ -d $${ROCKSDB_DIR} ]; then			\
+		cd $${ROCKSDB_DIR};		  	\
+		make clean;				\
+	fi
 
 # The devtools target installs tools required for 'go generate'.
 # You need to put $GOBIN (or $GOPATH/bin) in your PATH to use 'go generate'.
@@ -165,3 +173,17 @@ geth-windows-amd64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=windows/amd64 -v ./cmd/geth
 	@echo "Windows amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
+
+rocksdb:
+	GOPATH=$(shell pwd)/build/_workspace;				\
+	if [ ! -x build/_workspace/bin/govendor ]; then			\
+		echo "Installing govendor...";				\
+		go get -v -u github.com/kardianos/govendor;		\
+	fi;								\
+	if [ ! -f vendor/github.com/facebook/rocksdb/README.md ]; then	\
+		echo "Syncing rocksdb...";				\
+		cd $${GOPATH}/;						\
+		$${GOPATH}/bin/govendor sync -v;			\
+	fi
+	cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
+		make static_lib;

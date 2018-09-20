@@ -111,6 +111,15 @@
 			"revisionTime": "2018-01-22T22:25:45Z"
 		},
 		{
+			"checksumSHA1": "h9pGn0ZpvZHsv14ZbT/idz9U0pc=",
+			"path": "github.com/facebook/rocksdb",
+			"revision": "7e1f37eb4fc711dbf3ecc9610178931f00754de8",
+			"revisionTime": "2018-09-13T17:25:20Z",
+			"tree": true,
+			"version": "=v5.15.10",
+			"versionExact": "v5.15.10"
+		},
+		{
 			"checksumSHA1": "7oFpbmDfGobwKsFLIf6wMUvVoKw=",
 			"path": "github.com/fatih/color",
 			"revision": "5ec5d9d3c2cf82e9688b34e9bc27a94d616a7193",
