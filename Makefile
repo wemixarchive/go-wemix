@@ -11,16 +11,20 @@
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
+# USE_ROCKSDB
+# - undefined | "NO": Do not use
+# - "YES": build a static lib from vendor directory, and use that one
+# - "EXISTING": use existing rocksdb shared lib.
 ifndef USE_ROCKSDB
-  ifeq ($(shell uname), Linux)
-	USE_ROCKSDB = 1
-  else
-	USE_ROCKSDB = 0
+  USE_ROCKSDB = NO
+else
+  ifneq ($(shell uname), Linux)
+	USE_ROCKSDB = NO
   endif
 endif
 
-ifeq ($(USE_ROCKSDB), 1)
-ROCKSDB_ENV="DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb CGO_CFLAGS=-I$${DIR}/include CGO_LDFLAGS=\"-L$${DIR} -lrocksdb -lstdc++ -lm -lz\""
+ifneq ($(USE_ROCKSDB), NO)
+ROCKSDB_ENV=DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb CGO_CFLAGS=-I$${DIR}/include CGO_LDFLAGS="-L$${DIR} -lrocksdb -lstdc++ -lm -lz"
 endif
 
 metadium: gmet logrot
@@ -31,11 +35,6 @@ metadium: gmet logrot
 		metadium/contracts/MetadiumAdmin-template.sol build/conf/
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
-
-#	DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb \
-#	    CGO_CFLAGS="-I$${DIR}/include"				\
-#	    CGO_LDFLAGS="-L$${DIR} -lrocksdb -lstdc++ -lm -lz"		\
-#	    build/env.sh go run build/ci.go install ./cmd/gmet
 
 gmet: rocksdb
 	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install ./cmd/gmet
@@ -188,7 +187,7 @@ geth-windows-amd64:
 	@echo "Windows amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
-ifneq ($(USE_ROCKSDB), 1)
+ifneq ($(USE_ROCKSDB), YES)
 rocksdb:
 else
 rocksdb:
