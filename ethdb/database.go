@@ -57,6 +57,15 @@ type LDBDatabase struct {
 	log log.Logger // Contextual logger tracking the database path
 }
 
+// TODO: returns either leveldb or rocksdb based on configuration
+func NewDatabase(file string, cache int, handles int) (Database, error) {
+	if false /*params.UseRocksDb*/ {
+		return NewRDBDatabase(file, cache, handles)
+	} else {
+		return NewLDBDatabase(file, cache, handles)
+	}
+}
+
 // NewLDBDatabase returns a LevelDB wrapped object.
 func NewLDBDatabase(file string, cache int, handles int) (*LDBDatabase, error) {
 	logger := log.New("database", file)
