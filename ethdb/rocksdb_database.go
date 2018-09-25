@@ -10,6 +10,7 @@ import "C"
 import (
 	"errors"
 	"runtime"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -66,6 +67,10 @@ func (db *RDBDatabase) Path() string {
 }
 
 func (db *RDBDatabase) Put(key []byte, value []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_w_count, 1)
+		atomic.AddUint64(&_w_bytes, uint64(len(key) + len(value)))
+	}
 	var cerr *C.char
 	ck, cv := b2c(key), b2c(value)
 	C.rocksdb_put(db.db, db.wopts, ck, C.size_t(len(key)), cv, C.size_t(len(value)),
@@ -77,6 +82,9 @@ func (db *RDBDatabase) Put(key []byte, value []byte) error {
 }
 
 func (db *RDBDatabase) Has(key []byte) (bool, error) {
+	if _stats_enabled {
+		atomic.AddUint64(&_l_count, 1)
+	}
 	var cerr *C.char
 	var cvl C.size_t
 	ck := b2c(key)
@@ -92,21 +100,36 @@ func (db *RDBDatabase) Has(key []byte) (bool, error) {
 }
 
 func (db *RDBDatabase) Get(key []byte) ([]byte, error) {
+	if _stats_enabled {
+		atomic.AddUint64(&_r_count, 1)
+	}
 	var cerr *C.char
 	var cvl C.size_t
 	ck := b2c(key)
 	cv := C.rocksdb_get(db.db, db.ropts, ck, C.size_t(len(key)), &cvl, &cerr)
 	if cerr != nil {
+		if _stats_enabled {
+			atomic.AddUint64(&_r_bytes, uint64(len(key)))
+		}
 		return nil, cerror(cerr)
 	}
 	if cv == nil {
+		if _stats_enabled {
+			atomic.AddUint64(&_r_bytes, uint64(len(key)))
+		}
 		return nil, nil
+	}
+	if _stats_enabled {
+		atomic.AddUint64(&_r_bytes, uint64(len(key)) + uint64(C.int(cvl)))
 	}
 	defer C.free(unsafe.Pointer(cv))
 	return C.GoBytes(unsafe.Pointer(cv), C.int(cvl)), nil
 }
 
 func (db *RDBDatabase) Delete(key []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_d_count, 1)
+	}
 	var cerr *C.char
 	ck := b2c(key)
 	C.rocksdb_delete(db.db, db.wopts, ck, C.size_t(len(key)), &cerr)
@@ -157,6 +180,10 @@ type rdbBatch struct {
 }
 
 func (b *rdbBatch) Put(key, value []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_w_count, 1)
+		atomic.AddUint64(&_w_bytes, uint64(len(key) + len(value)))
+	}
 	ck, cv := b2c(key), b2c(value)
 	C.rocksdb_writebatch_put(b.b, ck, C.size_t(len(key)), cv, C.size_t(len(value)))
 	b.size += len(value)
@@ -164,6 +191,9 @@ func (b *rdbBatch) Put(key, value []byte) error {
 }
 
 func (b *rdbBatch) Delete(key []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_d_count, 1)
+	}
 	C.rocksdb_writebatch_delete(b.b, b2c(key), C.size_t(len(key)))
 	b.size += 1
 	return nil

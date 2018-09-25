@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -38,6 +39,13 @@ const (
 )
 
 var OpenFileLimit = 64
+
+// Metadium: db stats
+// (reads, read bytes, writes, written bytes, lookups, deletes)
+var (
+	_stats_enabled = false
+	_r_count, _r_bytes, _w_count, _w_bytes, _l_count, _d_count uint64
+)
 
 type LDBDatabase struct {
 	fn string      // filename for reporting
@@ -107,16 +115,27 @@ func (db *LDBDatabase) Path() string {
 
 // Put puts the given key / value to the queue
 func (db *LDBDatabase) Put(key []byte, value []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_w_count, 1)
+		atomic.AddUint64(&_w_bytes, uint64(len(key) + len(value)))
+	}
 	return db.db.Put(key, value, nil)
 }
 
 func (db *LDBDatabase) Has(key []byte) (bool, error) {
+	if _stats_enabled {
+		atomic.AddUint64(&_l_count, 1)
+	}
 	return db.db.Has(key, nil)
 }
 
 // Get returns the given key if it's present.
 func (db *LDBDatabase) Get(key []byte) ([]byte, error) {
 	dat, err := db.db.Get(key, nil)
+	if _stats_enabled {
+		atomic.AddUint64(&_r_count, 1)
+		atomic.AddUint64(&_r_bytes, uint64(len(key) + len(dat)))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +144,9 @@ func (db *LDBDatabase) Get(key []byte) ([]byte, error) {
 
 // Delete deletes the key from the queue and database
 func (db *LDBDatabase) Delete(key []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_d_count, 1)
+	}
 	return db.db.Delete(key, nil)
 }
 
@@ -369,12 +391,19 @@ type ldbBatch struct {
 }
 
 func (b *ldbBatch) Put(key, value []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_w_count, 1)
+		atomic.AddUint64(&_w_bytes, uint64(len(key) + len(value)))
+	}
 	b.b.Put(key, value)
 	b.size += len(value)
 	return nil
 }
 
 func (b *ldbBatch) Delete(key []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_d_count, 1)
+	}
 	b.b.Delete(key)
 	b.size += 1
 	return nil
@@ -408,18 +437,33 @@ func NewTable(db Database, prefix string) Database {
 }
 
 func (dt *table) Put(key []byte, value []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_w_count, 1)
+		atomic.AddUint64(&_w_bytes, uint64(len(key) + len(value)))
+	}
 	return dt.db.Put(append([]byte(dt.prefix), key...), value)
 }
 
 func (dt *table) Has(key []byte) (bool, error) {
+	if _stats_enabled {
+		atomic.AddUint64(&_l_count, 1)
+	}
 	return dt.db.Has(append([]byte(dt.prefix), key...))
 }
 
 func (dt *table) Get(key []byte) ([]byte, error) {
-	return dt.db.Get(append([]byte(dt.prefix), key...))
+	dat, err := dt.db.Get(append([]byte(dt.prefix), key...))
+	if _stats_enabled {
+		atomic.AddUint64(&_r_count, 1)
+		atomic.AddUint64(&_r_bytes, uint64(len(key) + len(dat)))
+	}
+	return dat, err
 }
 
 func (dt *table) Delete(key []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_d_count, 1)
+	}
 	return dt.db.Delete(append([]byte(dt.prefix), key...))
 }
 
@@ -442,10 +486,17 @@ func (dt *table) NewBatch() Batch {
 }
 
 func (tb *tableBatch) Put(key, value []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_w_count, 1)
+		atomic.AddUint64(&_w_bytes, uint64(len(key) + len(value)))
+	}
 	return tb.batch.Put(append([]byte(tb.prefix), key...), value)
 }
 
 func (tb *tableBatch) Delete(key []byte) error {
+	if _stats_enabled {
+		atomic.AddUint64(&_d_count, 1)
+	}
 	return tb.batch.Delete(append([]byte(tb.prefix), key...))
 }
 
@@ -459,4 +510,12 @@ func (tb *tableBatch) ValueSize() int {
 
 func (tb *tableBatch) Reset() {
 	tb.batch.Reset()
+}
+
+func EnableStats(b bool) {
+	_stats_enabled = b
+}
+
+func Stats() (r_count, r_bytes, w_count, w_bytes, l_count, d_count uint64) {
+	return _r_count, _r_bytes, _w_count, _w_bytes, _l_count, _d_count
 }
