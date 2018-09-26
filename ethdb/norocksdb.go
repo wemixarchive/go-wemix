@@ -1,5 +1,5 @@
 // rocksdb_database.go
-// +build !linux
+// +build !rocksdb
 
 package ethdb
 

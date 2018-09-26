@@ -209,6 +209,7 @@ func doInstall(cmdline []string) {
 	var (
 		arch = flag.String("arch", "", "Architecture to cross build for")
 		cc   = flag.String("cc", "", "C compiler to cross build with")
+		tags = flag.String("tags", "", "Build tags")
 	)
 	flag.CommandLine.Parse(cmdline)
 	env := build.Env()
@@ -236,6 +237,9 @@ func doInstall(cmdline []string) {
 
 	if *arch == "" || *arch == runtime.GOARCH {
 		goinstall := goTool("install", buildFlags(env)...)
+		if len(*tags) > 0 {
+			goinstall.Args = append(goinstall.Args, []string{"-tags", *tags}...)
+		}
 		goinstall.Args = append(goinstall.Args, "-v")
 		goinstall.Args = append(goinstall.Args, packages...)
 		build.MustRun(goinstall)
@@ -250,6 +254,9 @@ func doInstall(cmdline []string) {
 	}
 	// Seems we are cross compiling, work around forbidden GOBIN
 	goinstall := goToolArch(*arch, *cc, "install", buildFlags(env)...)
+	if len(*tags) > 0 {
+		goinstall.Args = append(goinstall.Args, []string{"-tags", *tags}...)
+	}
 	goinstall.Args = append(goinstall.Args, "-v")
 	goinstall.Args = append(goinstall.Args, []string{"-buildmode", "archive"}...)
 	goinstall.Args = append(goinstall.Args, packages...)

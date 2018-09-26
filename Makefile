@@ -25,6 +25,7 @@ endif
 
 ifneq ($(USE_ROCKSDB), NO)
 ROCKSDB_ENV=DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb CGO_CFLAGS=-I$${DIR}/include CGO_LDFLAGS="-L$${DIR} -lrocksdb -lstdc++ -lm -lz"
+ROCKSDB_TAG=-tags rocksdb
 endif
 
 metadium: gmet logrot
@@ -37,7 +38,7 @@ metadium: gmet logrot
 	@echo "Done building build/metadium.tar.gz"
 
 gmet: rocksdb
-	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install ./cmd/gmet
+	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
 
