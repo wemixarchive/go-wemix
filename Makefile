@@ -210,7 +210,9 @@ endif
 
 metadium/admin_abi.go: metadium/contracts/MetadiumAdmin-template.sol build/bin/solc
 	@PATH=${PATH}:build/bin metadium/scripts/solc.sh -f abi $< /tmp/junk.$$$$; \
-	echo 'package metadium\n\nvar AdminAbi =`'`cat /tmp/junk.$$$$`'`' > $@;
+	echo 'package metadium' > $@;				\
+	echo 'var AdminAbi = `'`cat /tmp/junk.$$$$`'`' >> $@;	\
+	rm -f /tmp/junk.$$$$;
 
 ifneq ($(shell uname), Linux)
 
