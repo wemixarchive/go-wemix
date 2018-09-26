@@ -48,35 +48,45 @@ function flush2js() {
     gasPrice: \"" gas_price "\"";
   }
   if (length(code_name) > 0) {
-    printf "\
-function %s_new() {\
-  return %s_contract.new(\
-  {\
-    from: web3.eth.accounts[0],\
-    data: %s_data,\
-    gas: \"%s\"%s\
-  }, function (e, contract) {\
-    console.log(e, contract);\
-    if (typeof contract.address !== \"undefined\") {\
-      console.log(\"Contract mined! address: \" + contract.address + \" transactionHash: \" + contract.transactionHash);\
-    }\
-  });\
-}\
-\
-function %s_load(addr) {\
-   return %s_contract.at(addr);\
-}\
+    printf "\n\
+function %s_new() {\n\
+  return %s_contract.new(\n\
+  {\n\
+    from: web3.eth.accounts[0],\n\
+    data: %s_data,\n\
+    gas: \"%s\"%s\n\
+  }, function (e, contract) {\n\
+    console.log(e, contract);\n\
+    if (typeof contract.address !== \"undefined\") {\n\
+      console.log(\"Contract mined! address: \" + contract.address + \" transactionHash: \" + contract.transactionHash);\n\
+    }\n\
+  });\n\
+}\n\
+\n\
+function %s_load(addr) {\n\
+   return %s_contract.at(addr);\n\
+}\n\
 ", code_name, code_name, code_name, gas, gas_price_2, code_name, code_name;
   }
 }
 
 function flush2json() {
   if (length(code_name) > 0) {
-    printf "{\
-  \"contractName\": \"%s\",\
-  \"abi\": %s,\
-  \"bytecode\": \"0x%s\"\
-}\
+    printf "{\n\
+  \"contractName\": \"%s\",\n\
+  \"abi\": %s,\n\
+  \"bytecode\": \"0x%s\"\n\
+}\n\
+", code_name, abi, code;
+  }
+}
+
+function flush2abi() {
+  if (length(code_name) > 0) {
+    printf "{\n\
+  \"contractName\": \"%s\",\n\
+  \"abi\": %s\n\
+}\n\
 ", code_name, abi, code;
   }
 }
@@ -84,8 +94,10 @@ function flush2json() {
 function flush() {
   if (outfmt == "js")
     flush2js();
-  else
+  else if (outfmt == "json")
     flush2json();
+  else
+    flush2abi();
 }
 
 END {
@@ -160,7 +172,7 @@ for i; do
     esac
 done
 
-if [ $# != 3 -o "$outfmt" != "js" -a "$outfmt" != "json" ]; then
+if [ $# != 3 -o "$outfmt" != "js" -a "$outfmt" != "json" -a "$outfmt" != "abi" ]; then
     usage
     exit 1
 fi

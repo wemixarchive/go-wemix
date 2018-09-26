@@ -333,7 +333,7 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer i
 	return
 }
 
-func StartAdmin(stack *node.Node, abiFile string) {
+func StartAdmin(stack *node.Node) {
 	if !(params.ConsensusMethod == params.ConsensusPoA ||
 		params.ConsensusMethod == params.ConsensusETCD ||
 		params.ConsensusMethod == params.ConsensusPBFT) {
@@ -352,7 +352,7 @@ func StartAdmin(stack *node.Node, abiFile string) {
 		utils.Fatalf("Failed to attach to self: %v", err)
 	}
 
-	contract, err := metclient.LoadContract(abiFile, "Admin")
+	contract, err := metclient.LoadJsonContract(strings.NewReader(AdminAbi))
 	if err != nil {
 		utils.Fatalf("Loading ABI failed: %v", err)
 	}
@@ -447,6 +447,45 @@ func (ma *metaAdmin) update() {
 	}
 }
 
+func (ma *metaAdmin) checkMining() {
+	on := false
+	if ma.nodeInfo != nil && ma.nodeInfo.ID == admin.bootNodeId {
+		on = true
+	} else if ma.self != nil && ma.self.Partner {
+		on = true
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mining *bool
+	err := ma.rpcCli.CallContext(ctx, &mining, "eth_mining")
+	if err != nil {
+		log.Error("Checking mining status", "failure", err)
+		return
+	}
+
+	if on == *mining {
+		return
+	} else if on {
+		err := ma.rpcCli.CallContext(ctx, &mining, "miner_start", 1)
+		if err != nil {
+			log.Error("Starting miner", "failed", err)
+			return
+		} else {
+			log.Info("Started miner")
+		}
+	} else {
+		err := ma.rpcCli.CallContext(ctx, &mining, "miner_stop", 1)
+		if err != nil {
+			log.Error("Stopping miner", "failed", err)
+			return
+		} else {
+			log.Info("Stopped miner")
+		}
+	}
+}
+
 func (ma *metaAdmin) run() {
 	for {
 		if ma.nodeInfo == nil {
@@ -465,6 +504,8 @@ func (ma *metaAdmin) run() {
 		if ma.to != nilAddress && ma.nodeInfo != nil {
 			ma.update()
 		}
+
+		ma.checkMining()
 
 		to := make(chan bool, 1)
 		go func() {

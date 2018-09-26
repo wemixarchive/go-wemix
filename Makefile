@@ -37,7 +37,7 @@ metadium: gmet logrot
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
 
-gmet: rocksdb
+gmet: rocksdb metadium/admin_abi.go
 	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
@@ -206,4 +206,30 @@ rocksdb:
 	fi
 	@cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
 		make static_lib;
+endif
+
+metadium/admin_abi.go: metadium/contracts/MetadiumAdmin-template.sol build/bin/solc
+	@PATH=${PATH}:build/bin metadium/scripts/solc.sh -f abi $< /tmp/junk.$$$$; \
+	echo 'package metadium\n\nvar AdminAbi =`'`cat /tmp/junk.$$$$`'`' > $@;
+
+ifneq ($(shell uname), Linux)
+
+build/bin/solc:
+	@test 1
+
+else
+
+SOLC_URL=https://github.com/ethereum/solidity/releases/download/v0.4.24/solc-static-linux
+build/bin/solc:
+	@[ -d build/bin ] || mkdir -p build/bin;		\
+	if [ ! -x build/bin/solc ]; then			\
+		if which curl > /dev/null 2>&1; then		\
+			curl -Ls -o build/bin/solc $(SOLC_URL);	\
+			chmod +x build/bin/solc;		\
+		elif which wget > /dev/null 2>&1; then		\
+			wget -nv -o build/bin/solc $(SOLC_URL);	\
+			chmod +x build/bin/solc;		\
+		fi						\
+	fi
+
 endif

@@ -129,12 +129,12 @@ var (
 	}
 	NetworkIdFlag = cli.Uint64Flag{
 		Name:  "networkid",
-		Usage: "Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby)",
+		Usage: "Network identifier (integer, 1=Frontier, 2=Morden (disused), 3=Ropsten, 4=Rinkeby, 101=Metadium, 102=MetadiumTestnet)",
 		Value: eth.DefaultConfig.NetworkId,
 	}
 	TestnetFlag = cli.BoolFlag{
 		Name:  "testnet",
-		Usage: "Ropsten network: pre-configured proof-of-work test network",
+		Usage: "Metadium test network: pre-configured metadium test network",
 	}
 	RinkebyFlag = cli.BoolFlag{
 		Name:  "rinkeby",
@@ -483,7 +483,7 @@ var (
 	ListenPortFlag = cli.IntFlag{
 		Name:  "port",
 		Usage: "Network listening port",
-		Value: 30303,
+		Value: 8589,
 	}
 	BootnodesFlag = cli.StringFlag{
 		Name:  "bootnodes",
@@ -602,12 +602,7 @@ var (
 	ConsensusMethodFlag = cli.IntFlag{
 		Name:  "consensusmethod",
 		Usage: "Metadium consensus method (integer, 1=PoW, 2=PoA, 3=ETCD, 4=PBFT)",
-		Value: 0,
-	}
-	MetadiumAbiFlag = cli.StringFlag{
-		Name:  "metadiumabi",
-		Usage: "Metadium abi file name",
-		Value: "",
+		Value: 2,
 	}
 	FixedDifficultyFlag = cli.Uint64Flag{
 		Name:  "fixeddifficulty",
@@ -684,7 +679,7 @@ func setNodeUserIdent(ctx *cli.Context, cfg *node.Config) {
 // setBootstrapNodes creates a list of bootstrap nodes from the command line
 // flags, reverting to pre-configured ones if none have been specified.
 func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
-	urls := params.MainnetBootnodes
+	urls := params.MetadiumMainnetBootnodes
 	switch {
 	case ctx.GlobalIsSet(BootnodesFlag.Name) || ctx.GlobalIsSet(BootnodesV4Flag.Name):
 		if ctx.GlobalIsSet(BootnodesV4Flag.Name) {

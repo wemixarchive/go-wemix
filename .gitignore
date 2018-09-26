@@ -49,3 +49,6 @@ profile.cov
 **/yarn-error.log
 
 vendor/*
+
+# Metadium
+/metadium/admin_abi.go

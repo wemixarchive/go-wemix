@@ -171,7 +171,9 @@ contract Admin {
             return;
         BytesBuffer memory bb = BytesBuffer(0, new bytes(1024));
         present = true;
-        append(bb, '{"name":"');
+        append(bb, '{"partner":');
+        append(bb, bytes(n.partner ? 'true' : 'false'));
+        append(bb, ',"name":"');
         append(bb, n.name);
         append(bb, '","id":"');
         append(bb, n.id);
