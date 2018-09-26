@@ -112,7 +112,7 @@ function wipe ()
 
     cd $d
     /bin/rm -rf geth/LOCK geth/chaindata geth/ethash geth/lightchaindata \
-	geth/transactions.rlp geth.ipc logs/* default.etcd
+	geth/transactions.rlp geth/nodes geth.ipc logs/* default.etcd
 }
 
 function wipe_all ()
@@ -169,10 +169,10 @@ function start ()
 	source "$d/.rc"
     fi
 
-    MINE_OPT="--mine --minerthreads 1";
+    MINE_OPT="--mine --miner.threads 1";
     if [ "${PORT}" != "" ]; then
-	PORT_OPT="--port ${PORT}";
-	RPC_PORT_OPT="--rpc --rpcaddr 0.0.0.0 --rpcport $(($PORT + 1))"
+	PORT_OPT="--port $(($PORT + 1))";
+	RPC_PORT_OPT="--rpc --rpcaddr 0.0.0.0 --rpcport $PORT"
     else
 	PORT_OPT=
 	RPC_PORT_OPT=
@@ -236,7 +236,7 @@ function do_nodes ()
 
 function usage ()
 {
-    echo "Usage: `basename $0` [init <node> <config.json> <port> |
+    echo "Usage: `basename $0` [init <node> <config.json> [<port>] |
 	clean [<node>] | wipe [<node>] | console [<node>] |
 	[re]start [<node>] | stop [<node>] | [re]start-nodes | stop-nodes]
 
