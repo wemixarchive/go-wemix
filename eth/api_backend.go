@@ -61,7 +61,9 @@ func (b *EthAPIBackend) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNum
 	// Pending block is only known by the miner
 	if blockNr == rpc.PendingBlockNumber {
 		block := b.eth.miner.PendingBlock()
-		return block.Header(), nil
+		if block != nil {
+			return block.Header(), nil
+		}
 	}
 	// Otherwise resolve and return the block
 	if blockNr == rpc.LatestBlockNumber {
@@ -91,7 +93,9 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, blockNr rpc.
 	// Pending state is only known by the miner
 	if blockNr == rpc.PendingBlockNumber {
 		block, state := b.eth.miner.Pending()
-		return state, block.Header(), nil
+		if block != nil {
+			return state, block.Header(), nil
+		}
 	}
 	// Otherwise resolve the block number and return its state
 	header, err := b.HeaderByNumber(ctx, blockNr)
