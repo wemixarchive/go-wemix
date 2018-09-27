@@ -1309,6 +1309,7 @@ func SetupNetwork(ctx *cli.Context) {
 	if params.ConsensusMethod <= params.ConsensusInvalid || params.ConsensusMethod >= params.ConsensusETCD {
 		Fatalf("Invalid Consensus Method: %d", ctx.GlobalString(ConsensusMethodFlag.Name))
 	}
+	params.MetadiumGenesisFile = filepath.Join(ctx.GlobalString(DataDirFlag.Name), "genesis.json")
 }
 
 func SetupMetrics(ctx *cli.Context) {
