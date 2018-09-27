@@ -624,6 +624,11 @@ var (
 		Usage: "Number of blocks per turn for PoA",
 		Value: params.BlocksPerTurn,
 	}
+	NonceLimit = cli.Uint64Flag{
+		Name:  "noncelimit",
+		Usage: "Nonce limit for non-governing accounts",
+		Value: params.NonceLimit,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1302,6 +1307,7 @@ func SetupNetwork(ctx *cli.Context) {
 	params.FixedGasLimit = ctx.GlobalUint64(FixedGasLimitFlag.Name)
 	params.MaxIdleBlockInterval = ctx.GlobalUint64(MaxIdleBlockInterval.Name)
 	params.BlocksPerTurn = ctx.GlobalUint64(BlocksPerTurn.Name)
+	params.NonceLimit = ctx.GlobalUint64(NonceLimit.Name)
 
 	if params.ConsensusMethod == params.ConsensusInvalid {
 		params.ConsensusMethod = params.ConsensusPoW
