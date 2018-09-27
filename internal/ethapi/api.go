@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 	"strings"
 	"time"
@@ -197,6 +198,16 @@ func (s *PublicAccountAPI) Accounts() []common.Address {
 		}
 	}
 	return addresses
+}
+
+// return genesis.json if available
+func (s *PublicAccountAPI) Genesis() (string, error) {
+	genesis, err := ioutil.ReadFile(params.MetadiumGenesisFile)
+	if err != nil {
+		return "", err
+	} else {
+		return string(genesis), nil
+	}
 }
 
 // PrivateAccountAPI provides an API to access accounts managed by this node.
