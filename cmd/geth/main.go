@@ -169,6 +169,7 @@ var (
 		utils.FixedGasLimitFlag,
 		utils.MaxIdleBlockInterval,
 		utils.BlocksPerTurn,
+		utils.NonceLimit,
 	}
 )
 

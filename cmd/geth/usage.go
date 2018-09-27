@@ -238,6 +238,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.FixedGasLimitFlag,
 			utils.MaxIdleBlockInterval,
 			utils.BlocksPerTurn,
+			utils.NonceLimit,
 		},
 	},
 	{

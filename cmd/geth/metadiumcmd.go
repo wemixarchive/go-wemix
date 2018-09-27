@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -234,9 +235,9 @@ func nodeKey2Id(ctx *cli.Context) error {
 
 type genesisConfig struct {
 	Members []*struct {
-		Addr    string `json:"addr"`
-		Balance int64  `json:"balance"`
-		Stake   int64  `json:"stake"`
+		Addr    string   `json:"addr"`
+		Balance *big.Int `json:"balance"`
+		Stake   int64    `json:"stake"`
 	} `json:"members"`
 	Nodes []*struct {
 		Name string `json:"name"`
@@ -316,7 +317,7 @@ func genGenesis(ctx *cli.Context) error {
 	alloc := map[string]map[string]string{}
 	for _, m := range config.Members {
 		alloc[m.Addr] = map[string]string{
-			"balance": strings.ToLower(hexutil.EncodeUint64(uint64(m.Balance))),
+			"balance": hexutil.EncodeBig(m.Balance),
 		}
 	}
 	genesis["alloc"] = alloc
