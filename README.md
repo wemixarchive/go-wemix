@@ -70,7 +70,7 @@ Running the following command generates `genesis.json` and `MetadiumAdmin.sol`, 
 
 e.g.
 
-    bin/gmet.sh init meta1 config.json 10009
+    bin/gmet.sh init meta1 config.json 8588
 
 Now it's time to compile and load governance contract
 
@@ -124,6 +124,16 @@ To start or stop multiple nodes
     export NODES="<host1> <dir1> <host2> <dir2>"
     bin/gmet.sh start-nodes
     bin/gmet.sh stop-nodes
+
+### Starting Non-mining Nodes
+
+First download genesis.json from existing nodes to a data directory.
+
+    bin/gmet metadium download-genesis --url http://<ip> --out genesis.json
+
+After getting enodes of mining nodes, run gmet as follows.
+
+    bin/gmet --datadir <data-directory> --bootnodes <enodes> --rpc --rpcaddr 0.0.0.0
 
 ### The original go-ethereum README follows...
 
