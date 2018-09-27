@@ -41,6 +41,7 @@ import (
 var (
 	FrontierBlockReward    *big.Int = big.NewInt(5e+18) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
+	MetadiumBlockReward    *big.Int = big.NewInt(0)
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
 )
@@ -614,6 +615,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		}
 		state.AddBalance(header.Coinbase, reward)
 	} else {
+		blockReward = MetadiumBlockReward
 		rewards, _ := metaminer.CalculateRewards(header.Number, blockReward,
 			big.NewInt(int64(header.Fees)),
 			func(addr common.Address, amt *big.Int) {

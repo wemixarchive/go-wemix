@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path"
 	"runtime"
 	godebug "runtime/debug"
 	"sort"
@@ -164,11 +165,11 @@ var (
 
 	metadiumFlags = []cli.Flag{
 		utils.ConsensusMethodFlag,
-		utils.MetadiumAbiFlag,
 		utils.FixedDifficultyFlag,
 		utils.FixedGasLimitFlag,
 		utils.MaxIdleBlockInterval,
 		utils.BlocksPerTurn,
+		utils.NonceLimit,
 	}
 )
 
@@ -218,6 +219,10 @@ func init() {
 
 	app.Before = func(ctx *cli.Context) error {
 		runtime.GOMAXPROCS(runtime.NumCPU())
+
+		if ctx.GlobalIsSet(utils.DataDirFlag.Name) && !ctx.GlobalIsSet(utils.EthashDatasetDirFlag.Name) {
+			ctx.GlobalSet(utils.EthashDatasetDirFlag.Name, path.Join(ctx.GlobalString(utils.DataDirFlag.Name), ".ethash"))
+		}
 
 		logdir := ""
 		if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
@@ -289,7 +294,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	utils.StartNode(stack)
 
 	// Start metadium admin
-	metadium.StartAdmin(stack, ctx.GlobalString(utils.MetadiumAbiFlag.Name))
+	metadium.StartAdmin(stack)
 
 	// Unlock any account specifically requested
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)

@@ -99,9 +99,11 @@ const (
 
 // metadium parameters
 var (
-	ConsensusMethod         int    = ConsensusPoW   // consensus method
-	FixedDifficulty         uint64 = 0          // 0 means no fixed difficulty
-	FixedGasLimit           uint64 = 0          // 0 means no fixed gas limit
+	ConsensusMethod         int    = ConsensusPoA   // consensus method
+	FixedDifficulty         uint64 = 1          // 0 means no fixed difficulty
+	FixedGasLimit           uint64 = 0x10000000     // 0 means no fixed gas limit
 	MaxIdleBlockInterval    uint64 = 600        // in seconds
-	BlocksPerTurn           uint64 = 10
+	BlocksPerTurn           uint64 = 100
+
+	NonceLimit				uint64 = 100000		// nonce limit for non-governing accounts
 )

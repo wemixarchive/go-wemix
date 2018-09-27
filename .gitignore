@@ -47,3 +47,8 @@ profile.cov
 /dashboard/assets/package-lock.json
 
 **/yarn-error.log
+
+vendor/*
+
+# Metadium
+/metadium/admin_abi.go

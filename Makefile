@@ -11,6 +11,23 @@
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
+# USE_ROCKSDB
+# - undefined | "NO": Do not use
+# - "YES": build a static lib from vendor directory, and use that one
+# - "EXISTING": use existing rocksdb shared lib.
+ifndef USE_ROCKSDB
+  USE_ROCKSDB = NO
+else
+  ifneq ($(shell uname), Linux)
+	USE_ROCKSDB = NO
+  endif
+endif
+
+ifneq ($(USE_ROCKSDB), NO)
+ROCKSDB_ENV=DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb CGO_CFLAGS=-I$${DIR}/include CGO_LDFLAGS="-L$${DIR} -lrocksdb -lstdc++ -lm -lz"
+ROCKSDB_TAG=-tags rocksdb
+endif
+
 metadium: gmet logrot
 	@[ -d build/conf ] || mkdir -p build/conf
 	@cp -p metadium/scripts/gmet.sh metadium/scripts/solc.sh build/bin/
@@ -20,8 +37,8 @@ metadium: gmet logrot
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
 
-gmet:
-	build/env.sh go run build/ci.go install ./cmd/gmet
+gmet: rocksdb metadium/admin_abi.go
+	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
 
@@ -60,6 +77,11 @@ lint: ## Run linters.
 clean:
 	./build/clean_go_build_cache.sh
 	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf
+	@ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb;		\
+	if [ -d $${ROCKSDB_DIR} ]; then			\
+		cd $${ROCKSDB_DIR};		  	\
+		make clean;				\
+	fi
 
 # The devtools target installs tools required for 'go generate'.
 # You need to put $GOBIN (or $GOPATH/bin) in your PATH to use 'go generate'.
@@ -165,3 +187,51 @@ geth-windows-amd64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=windows/amd64 -v ./cmd/geth
 	@echo "Windows amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
+
+ifneq ($(USE_ROCKSDB), YES)
+rocksdb:
+else
+rocksdb:
+	@build/env.sh test 1;
+	@export GOPATH=$(shell pwd)/build/_workspace;			\
+	[ -d build/_workspace/bin ] || mkdir -p build/_workspace/bin;	\
+	if [ ! -x build/_workspace/bin/govendor ]; then			\
+		echo "Installing govendor...";				\
+		go get -v -u github.com/kardianos/govendor;		\
+	fi;								\
+	if [ ! -f vendor/github.com/facebook/rocksdb/README.md ]; then	\
+		echo "Syncing rocksdb...";				\
+		cd $${GOPATH}/src/github.com/ethereum/go-ethereum/vendor; \
+		$${GOPATH}/bin/govendor sync -v;			\
+	fi
+	@cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
+		make static_lib;
+endif
+
+metadium/admin_abi.go: metadium/contracts/MetadiumAdmin-template.sol build/bin/solc
+	@PATH=${PATH}:build/bin metadium/scripts/solc.sh -f abi $< /tmp/junk.$$$$; \
+	echo 'package metadium' > $@;				\
+	echo 'var AdminAbi = `'`cat /tmp/junk.$$$$`'`' >> $@;	\
+	rm -f /tmp/junk.$$$$;
+
+ifneq ($(shell uname), Linux)
+
+build/bin/solc:
+	@test 1
+
+else
+
+SOLC_URL=https://github.com/ethereum/solidity/releases/download/v0.4.24/solc-static-linux
+build/bin/solc:
+	@[ -d build/bin ] || mkdir -p build/bin;		\
+	if [ ! -x build/bin/solc ]; then			\
+		if which curl > /dev/null 2>&1; then		\
+			curl -Ls -o build/bin/solc $(SOLC_URL);	\
+			chmod +x build/bin/solc;		\
+		elif which wget > /dev/null 2>&1; then		\
+			wget -nv -o build/bin/solc $(SOLC_URL);	\
+			chmod +x build/bin/solc;		\
+		fi						\
+	fi
+
+endif

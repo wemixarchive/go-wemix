@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/big"
+	"net/http"
 	"os"
 	"strings"
 
@@ -128,6 +130,19 @@ The first node becomes the boot miner who's allowed to generate blocks before ad
 
 Deploy a contract from a contract file in .js or .json format.`,
 			},
+			{
+				Name:   "download-genesis",
+				Usage:  "Download genesis file a peer",
+				Action: utils.MigrateFlags(downloadGenesis),
+				Flags: []cli.Flag{
+					urlFlag,
+					outFlag,
+				},
+				Description: `
+    geth metadium download-genesis [--url <url>] [--out <file-name>
+
+Download a genesis file from a peer to initialize.`,
+			},
 		},
 	}
 
@@ -220,9 +235,9 @@ func nodeKey2Id(ctx *cli.Context) error {
 
 type genesisConfig struct {
 	Members []*struct {
-		Addr    string `json:"addr"`
-		Balance int64  `json:"balance"`
-		Stake   int64  `json:"stake"`
+		Addr    string   `json:"addr"`
+		Balance *big.Int `json:"balance"`
+		Stake   int64    `json:"stake"`
 	} `json:"members"`
 	Nodes []*struct {
 		Name string `json:"name"`
@@ -302,7 +317,7 @@ func genGenesis(ctx *cli.Context) error {
 	alloc := map[string]map[string]string{}
 	for _, m := range config.Members {
 		alloc[m.Addr] = map[string]string{
-			"balance": strings.ToLower(hexutil.EncodeUint64(uint64(m.Balance))),
+			"balance": hexutil.EncodeBig(m.Balance),
 		}
 	}
 	genesis["alloc"] = alloc
@@ -478,6 +493,46 @@ func deployContract(ctx *cli.Context) error {
 			receipt.ContractAddress.String(), hash.String())
 	}
 
+	return nil
+}
+
+type genesisReturn struct {
+	Result string `json:"result"`
+}
+
+func downloadGenesis(ctx *cli.Context) error {
+	url := ctx.String(urlFlag.Name)
+	if url == "" {
+		return fmt.Errorf("URL is not given")
+	}
+
+	req := `{"id":1, "jsonrpc":"2.0", "method":"eth_genesis", "params":[]}`
+	rsp, err := http.Post(url, "application/json", bytes.NewBuffer([]byte(req)))
+	if err != nil {
+		return err
+	}
+
+	buf := make([]byte, 1024*1024)
+	n, err := rsp.Body.Read(buf)
+	if err != nil && err != io.EOF {
+		return err
+	}
+
+	var genesis genesisReturn
+	if err := json.Unmarshal(buf[:n], &genesis); err != nil {
+		return err
+	}
+
+	w := os.Stdout
+	if fn := ctx.String(outFlag.Name); fn != "" {
+		w, err = os.OpenFile(fn, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			utils.Fatalf("%v", err)
+		}
+		defer w.Close()
+	}
+
+	w.Write([]byte(genesis.Result))
 	return nil
 }
 

@@ -428,6 +428,11 @@ web3._extend({
 			params: 2,
 			inputFormatter:[null, null],
 		}),
+		new web3._extend.Method({
+			name: 'dbStats',
+			call: 'debug_dbStats',
+			params: 0,
+		}),
 	],
 	properties: []
 });

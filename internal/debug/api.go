@@ -34,6 +34,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -233,4 +234,14 @@ func expandHome(p string) string {
 		}
 	}
 	return filepath.Clean(p)
+}
+
+func (*HandlerT) dbStats(b interface{}) []uint64 {
+	bb, ok := b.(bool)
+	if ok {
+		ethdb.EnableStats(bb)
+	}
+
+	r_count, r_bytees, w_count, w_bytes, l_count, d_count := ethdb.Stats()
+	return []uint64{ r_count, r_bytees, w_count, w_bytes, l_count, d_count }
 }
