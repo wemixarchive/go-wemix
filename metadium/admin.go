@@ -665,7 +665,7 @@ func (ma *metaAdmin) iigetNodes(height int) (bool, []*metaNode) {
 	})
 
 	for _, n := range nodes {
-		if n.Id == ma.self.Id || ma.isPeerUp(n.Id) {
+		if (ma.self != nil && n.Id == ma.self.Id) || ma.isPeerUp(n.Id) {
 			n.Status = "up"
 		} else {
 			n.Status = "down"
@@ -687,7 +687,7 @@ func (ma *metaAdmin) iigetNodes(height int) (bool, []*metaNode) {
 	}
 
 	amMiner := false
-	if miner != nil && miner.Id == ma.self.Id {
+	if miner != nil && ma.self != nil && miner.Id == ma.self.Id {
 		amMiner = true
 	}
 
