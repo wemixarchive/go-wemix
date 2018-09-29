@@ -60,11 +60,14 @@ type metaAdmin struct {
 	bootAccount common.Address
 	nodeInfo    *p2p.NodeInfo
 	from        common.Address
-	to          common.Address
+	anchor      common.Address
+	admin       common.Address
 	Updates     chan bool
 	rpcCli      *rpc.Client
 	cli         *ethclient.Client
-	abi         abi.ABI
+
+	adminAbi  abi.ABI
+	anchorAbi abi.ABI
 
 	lastBlock     int
 	modifiedBlock int
@@ -111,19 +114,45 @@ func (ma *metaAdmin) getGenesisInfo() (string, common.Address, error) {
 }
 
 // it should be the first transaction of the coinbase of the genesis block
-func (ma *metaAdmin) getAdminContractAddress() common.Address {
+func (ma *metaAdmin) getAdminAnchorAddress() common.Address {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	for i := uint64(0); i < 10; i++ {
-		addr := crypto.CreateAddress(ma.bootAccount, i)
-		m, _ := ma.getInt(ctx, &addr, nil, "magic")
-		if m == magic {
-			return addr
+		anchorAddress := crypto.CreateAddress(ma.bootAccount, i)
+		anchorContract := &metclient.RemoteContract{
+			Cli: ma.cli,
+			To:  &anchorAddress,
+			Abi: ma.anchorAbi,
+		}
+
+		var v *big.Int
+		err := metclient.CallContract(ctx, anchorContract, "magic", nil, &v, nil)
+		if err == nil && int(v.Int64()) == magic {
+			return anchorAddress
 		}
 	}
 
 	return nilAddress
+}
+
+func (ma *metaAdmin) getAdminAddress() common.Address {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	anchorContract := &metclient.RemoteContract{
+		Cli: ma.cli,
+		To:  &ma.anchor,
+		Abi: ma.anchorAbi,
+	}
+
+	var adminAddress common.Address
+	err := metclient.CallContract(ctx, anchorContract, "admin", nil, &adminAddress, nil)
+	if err != nil {
+		utils.Fatalf("Anchored admin address is invalid: %s\n", err)
+	}
+
+	return adminAddress
 }
 
 func (ma *metaAdmin) getInt(ctx context.Context, to *common.Address, block *big.Int, name string) (int, error) {
@@ -157,10 +186,10 @@ func (ma *metaAdmin) getNode(ctx context.Context, id string, block *big.Int) (*m
 
 	output = []interface{}{&present, &jsonOut}
 	if len(id) == 0 {
-		err = ma.callContract(ctx, &ma.to, "firstNode", input, &output, block)
+		err = ma.callContract(ctx, &ma.admin, "firstNode", input, &output, block)
 	} else {
 		input = []interface{}{[]byte(id)}
-		err = ma.callContract(ctx, &ma.to, "getNode", input, &output, block)
+		err = ma.callContract(ctx, &ma.admin, "getNode", input, &output, block)
 	}
 	if err != nil {
 		return nil, err
@@ -203,7 +232,7 @@ func (ma *metaAdmin) callContract(ctx context.Context, to *common.Address, name 
 	contract := &metclient.RemoteContract{
 		Cli: ma.cli,
 		To:  to,
-		Abi: ma.abi,
+		Abi: ma.adminAbi,
 	}
 
 	return metclient.CallContract(ctx, contract, name, input, output, block)
@@ -220,7 +249,7 @@ func (ma *metaAdmin) getMembers(ctx context.Context, block *big.Int) ([]*metaMem
 	)
 
 	output = []interface{}{&present, &addr, &stake, &prev, &next}
-	err = ma.callContract(ctx, &ma.to, "firstMember", input, &output, block)
+	err = ma.callContract(ctx, &ma.admin, "firstMember", input, &output, block)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +266,7 @@ func (ma *metaAdmin) getMembers(ctx context.Context, block *big.Int) ([]*metaMem
 		} else {
 			input = []interface{}{next}
 			output = []interface{}{&present, &addr, &stake, &prev, &next}
-			err = ma.callContract(ctx, &ma.to, "getMember", input, &output, block)
+			err = ma.callContract(ctx, &ma.admin, "getMember", input, &output, block)
 			if err != nil {
 				return nil, err
 			}
@@ -260,7 +289,7 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer i
 		return
 	}
 
-	modifiedBlock, err = ma.getInt(ctx, &ma.to, block.Number, "modifiedBlock")
+	modifiedBlock, err = ma.getInt(ctx, &ma.admin, block.Number, "modifiedBlock")
 	if err != nil {
 		return
 	}
@@ -268,7 +297,7 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer i
 		return
 	}
 
-	blocksPer, err = ma.getInt(ctx, &ma.to, block.Number, "blocksPer")
+	blocksPer, err = ma.getInt(ctx, &ma.admin, block.Number, "blocksPer")
 	if err != nil {
 		return
 	}
@@ -352,19 +381,26 @@ func StartAdmin(stack *node.Node) {
 		utils.Fatalf("Failed to attach to self: %v", err)
 	}
 
-	contract, err := metclient.LoadJsonContract(strings.NewReader(AdminAbi))
+	anchorContract, err := metclient.LoadJsonContract(strings.NewReader(AdminAnchorAbi))
+	if err != nil {
+		utils.Fatalf("Loading ABI failed: %v", err)
+	}
+
+	adminContract, err := metclient.LoadJsonContract(strings.NewReader(AdminAbi))
 	if err != nil {
 		utils.Fatalf("Loading ABI failed: %v", err)
 	}
 
 	admin = &metaAdmin{
-		lock:    &sync.Mutex{},
-		from:    nilAddress,
-		to:      nilAddress,
-		Updates: make(chan bool, 10),
-		rpcCli:  rpcCli,
-		cli:     ethclient.NewClient(rpcCli),
-		abi:     contract.Abi,
+		lock:      &sync.Mutex{},
+		from:      nilAddress,
+		anchor:    nilAddress,
+		admin:     nilAddress,
+		Updates:   make(chan bool, 10),
+		rpcCli:    rpcCli,
+		cli:       ethclient.NewClient(rpcCli),
+		anchorAbi: anchorContract.Abi,
+		adminAbi:  adminContract.Abi,
 	}
 
 	admin.bootNodeId, admin.bootAccount, err = admin.getGenesisInfo()
@@ -397,6 +433,15 @@ func (ma *metaAdmin) addPeer(node *metaNode) error {
 func (ma *metaAdmin) update() {
 	//refresh := params.ConsensusMethod == "etcd" && !etcdhelper.IsRunning()
 	refresh := false
+
+	newAdmin := ma.getAdminAddress()
+	if newAdmin == nilAddress {
+		return
+	} else if newAdmin != ma.admin {
+		ma.admin = newAdmin
+		refresh = true
+	}
+
 	blockNum, modifiedBlock, blocksPer, nodes, addedNodes, updatedNodes, deletedNodes, err := ma.getData(refresh)
 	if err != nil {
 		log.Error(fmt.Sprintf("Failed to get nodes: %v", err))
@@ -497,11 +542,13 @@ func (ma *metaAdmin) run() {
 			}
 		}
 
-		if ma.to == nilAddress {
-			ma.to = ma.getAdminContractAddress()
+		if ma.anchor == nilAddress {
+			ma.anchor = ma.getAdminAnchorAddress()
 		}
-
-		if ma.to != nilAddress && ma.nodeInfo != nil {
+		if ma.anchor != nilAddress && ma.admin == nilAddress {
+			ma.admin = ma.getAdminAddress()
+		}
+		if ma.admin != nilAddress && ma.nodeInfo != nil {
 			ma.update()
 		}
 
@@ -779,7 +826,8 @@ func Info() interface{} {
 
 		info := &map[string]interface{}{
 			"consensus":     params.ConsensusMethod,
-			"to":            admin.to,
+			"anchor":        admin.anchor,
+			"admin":         admin.admin,
 			"modifiedblock": admin.modifiedBlock,
 			"blocksPer":     admin.blocksPer,
 			"self":          self,
