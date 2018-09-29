@@ -149,7 +149,7 @@ function clean_all ()
     done
 }
 
-function start ()
+function start_old ()
 {
     d=$(get_data_dir "$1")
     if [ -x "$d/bin/gmet" ]; then
@@ -205,6 +205,39 @@ function start ()
 	      ${PORT_OPT} ${RPC_PORT_OPT} ${TXPOOL_OPTS}		\
 	      ${TARGET_GAS_LIMIT_OPT} ${METADIUM_OPTS}			\
 	      --gasprice ${GAS_PRICE} ${RCJS}
+    fi
+}
+
+function start ()
+{
+    d=$(get_data_dir "$1")
+    if [ -x "$d/bin/gmet" ]; then
+        GMET="$d/bin/gmet"
+    else
+	echo "Cannot find gmet"
+	return
+    fi
+    if [ -x "$d/bin/logrot" ]; then
+	LOGROT="$d/bin/logrot"
+    else
+	echo "Cannot find logrot"
+	return
+    fi
+
+    [ -f "$d/.rc" ] && source "$d/.rc"
+    [ "$COINBASE" = "" ] && COINBASE="" || COINBASE="--miner.etherbase $COINBASE"
+
+    RPCOPT="--rpc --rpcaddr 0.0.0.0"
+
+    cd $d
+    if [ ! "$2" = "inner" ]; then
+	$GMET --datadir ${PWD} $COINBASE --nodiscover --metrics	\
+	      $RPCOPT 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
+    else
+	exec > >(${LOGROT} ${d}/logs/log 10M 5)
+	exec 2>&1
+	exec $GMET --datadir ${PWD} $COINBASE --nodiscover --metrivcs	\
+	      $RPCOPT
     fi
 }
 
