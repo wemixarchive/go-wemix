@@ -76,7 +76,7 @@ lint: ## Run linters.
 
 clean:
 	./build/clean_go_build_cache.sh
-	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf
+	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf metadium/admin_abi.go
 	@ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb;		\
 	if [ -d $${ROCKSDB_DIR} ]; then			\
 		cd $${ROCKSDB_DIR};		  	\
@@ -208,10 +208,23 @@ rocksdb:
 		make static_lib;
 endif
 
+AWK_CODE='								\
+BEGIN { print "package metadium"; bin = 0; name = ""; abi = ""; }	\
+/^{/ { bin = 1; abi = ""; name = ""; }					\
+/^}/ { bin = 0; abi = abi "}"; print "var " name "Abi = `" abi "`"; }	\
+{									\
+  if (bin == 1) {							\
+    abi = abi $$0;							\
+    if ($$1 == "\"contractName\":") {					\
+      name = $$2;							\
+      gsub(",|\"", "", name);						\
+    }									\
+  }									\
+}'
+
 metadium/admin_abi.go: metadium/contracts/MetadiumAdmin-template.sol build/bin/solc
 	@PATH=${PATH}:build/bin metadium/scripts/solc.sh -f abi $< /tmp/junk.$$$$; \
-	echo 'package metadium' > $@;				\
-	echo 'var AdminAbi = `'`cat /tmp/junk.$$$$`'`' >> $@;	\
+	cat /tmp/junk.$$$$ | awk $(AWK_CODE) > $@;	\
 	rm -f /tmp/junk.$$$$;
 
 ifneq ($(shell uname), Linux)
