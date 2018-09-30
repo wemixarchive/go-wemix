@@ -105,5 +105,5 @@ var (
 	MaxIdleBlockInterval    uint64 = 600        // in seconds
 	BlocksPerTurn           uint64 = 100
 
-	NonceLimit				uint64 = 100000		// nonce limit for non-governing accounts
+	NonceLimit				uint64 = 10000		// nonce limit for non-governing accounts
 )
