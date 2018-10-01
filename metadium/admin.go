@@ -419,7 +419,9 @@ func (ma *metaAdmin) addPeer(node *metaNode) error {
 	var v *bool
 	ctx, cancel := context.WithCancel(context.Background())
 	id := fmt.Sprintf("enode://%s@%s:%d", node.Id, node.Ip, node.Port)
-	e := ma.rpcCli.CallContext(ctx, &v, "admin_addTrustedPeer", id)
+	// TODO: trusted peers need more work
+	//e := ma.rpcCli.CallContext(ctx, &v, "admin_addTrustedPeer", id)
+	e := ma.rpcCli.CallContext(ctx, &v, "admin_addPeer", id)
 	cancel()
 	if e != nil || !*v {
 		log.Error(fmt.Sprintf("Cannot add peer %s: %v", id, e))
