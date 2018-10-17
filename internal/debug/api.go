@@ -236,7 +236,7 @@ func expandHome(p string) string {
 	return filepath.Clean(p)
 }
 
-func (*HandlerT) dbStats(b interface{}) []uint64 {
+func (*HandlerT) DbStats(b interface{}) []uint64 {
 	bb, ok := b.(bool)
 	if ok {
 		ethdb.EnableStats(bb)
