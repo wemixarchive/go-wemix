@@ -50,6 +50,9 @@ geth:
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
 
+dbbench:
+	build/env.sh go run build/ci.go install ./cmd/dbbench
+
 swarm:
 	build/env.sh go run build/ci.go install ./cmd/swarm
 	@echo "Done building."
