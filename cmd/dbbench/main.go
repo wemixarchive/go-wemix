@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -91,22 +92,41 @@ func stats(device string) []uint64 {
 	return []uint64{disk_r_count, disk_r_bytes, disk_w_couhnt, disk_w_bytes, r_count, r_bytes, w_count, w_bytes, l_count, d_count}
 }
 
+func diskUsage(dbPath string) (int, error) {
+	cmd := exec.Command("du", "-s", dbPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+	ls := regexp.MustCompile(`\s+`).Split(strings.TrimSpace(string(out)), -1)
+	du, err := strconv.Atoi(ls[0])
+	if err != nil {
+		return 0, err
+	}
+	return du, nil
+}
+
 func header() {
-	fmt.Printf("@,OP,Prefix,Start,End,Elap(ms),R(#),R(KB),R(KB/s),W(#),W(KB),W(KB/s),DbR(#),DbR(KB),DbW(#),DbW(KB),Has(#),Del(#)\n")
+	fmt.Printf("@,OP,Prefix,Start,End,Time,Elap,DB(KB),R(#),R(KB),R(KB/s),W(#),W(KB),W(KB/s),DbR(#),DbR(KB),DbR(KB/s),DbW(#),DbW(KB),DbW(KB/s),Has(#),Del(#)\n")
 }
 
 func pre(device string) (time.Time, []uint64) {
 	return time.Now(), stats(device)
 }
 
-func post(device, header string, ot time.Time, ss []uint64) {
+func post(dbPath, device, header string, ot time.Time, ss []uint64) {
 	dur := uint64(time.Since(ot) / time.Millisecond)
 	se := stats(device)
 	for i := 0; i < len(se); i++ {
 		se[i] = se[i] - ss[i]
 	}
 
-	fmt.Printf("%s,%d", header, dur)
+	du, err := diskUsage(dbPath)
+	if err != nil {
+		fmt.Printf("Failed to get disk usage: %v\n", err)
+	}
+
+	fmt.Printf("%s,%d,%d,%d", header, ot.Unix(), dur/1000, du)
 	for i := 0; i < len(se); i++ {
 		v := se[i]
 		// 1: disk read bytes
@@ -132,14 +152,13 @@ func post(device, header string, ot time.Time, ss []uint64) {
 }
 
 func usage() {
-	fmt.Printf(`Usage: dbbench <options>... <db-name>
+	fmt.Printf(`Usage: dbbench [<options>...] <db-name>
 	[<read>|<write> <prefix> <start> <end> [<batch> <value-size>]]
 
 options:
+-H:	no header
 -t rocksdb|leveldb:	choose between rocksdb and leveldb (leveldb).
 -d <device-name>:	where to collect disk stats from
--s <value-size>:	value size in bytes (32 bytes).
--H:	no header
 -v:	verbose
 `)
 }
@@ -148,6 +167,7 @@ func main() {
 	var (
 		which    string = "leveldb"
 		device   string
+		dbPath   string
 		db       ethdb.Database
 		err      error
 		noHeader bool = false
@@ -188,18 +208,20 @@ func main() {
 		return
 	}
 
+	dbPath = nargs[0]
+
 	ethdb.EnableStats(true)
 	switch which {
 	case "leveldb":
-		db, err = ethdb.NewLDBDatabase(nargs[0], 1024, 1024)
+		db, err = ethdb.NewLDBDatabase(dbPath, 1024, 1024)
 		if err != nil {
-			fmt.Printf("Cannot open DB %s: %v\n", nargs[0], err)
+			fmt.Printf("Cannot open DB %s: %v\n", dbPath, err)
 			return
 		}
 	case "rocksdb":
-		db, err = ethdb.NewRDBDatabase(nargs[0], 1024, 1024)
+		db, err = ethdb.NewRDBDatabase(dbPath, 1024, 1024)
 		if err != nil {
-			fmt.Printf("Cannot open DB %s: %v\n", nargs[0], err)
+			fmt.Printf("Cannot open DB %s: %v\n", dbPath, err)
 			return
 		}
 	default:
@@ -221,7 +243,7 @@ func main() {
 			}
 			ot, stats := pre(device)
 			read(db, prefix, six, eix, verbose)
-			post(device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, eix), ot, stats)
+			post(dbPath, device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, eix), ot, stats)
 		} else if nargs[1] == "write" && len(nargs) >= 7 {
 			prefix := nargs[2]
 			six, e1 := strconv.Atoi(nargs[3])
@@ -237,7 +259,7 @@ func main() {
 			}
 			ot, stats := pre(device)
 			write(db, prefix, six, eix, batch, valueSize)
-			post(device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, eix), ot, stats)
+			post(dbPath, device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, eix), ot, stats)
 		} else {
 			usage()
 		}
@@ -263,7 +285,7 @@ func main() {
 
 				ot, stats := pre(device)
 				read(db, prefix, six, eix, verbose)
-				post(device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, eix), ot, stats)
+				post(dbPath, device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, eix), ot, stats)
 			} else if ls[0] == "write" && len(ls) >= 6 {
 				prefix := ls[1]
 				six, e1 := strconv.Atoi(ls[2])
@@ -275,7 +297,7 @@ func main() {
 				}
 				ot, stats := pre(device)
 				write(db, prefix, six, eix, batch, valueSize)
-				post(device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, eix), ot, stats)
+				post(dbPath, device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, eix), ot, stats)
 			}
 		}
 	}
