@@ -24,3 +24,8 @@ import "errors"
 func ReadDiskStats(stats *DiskStats) error {
 	return errors.New("Not implemented")
 }
+
+// ReadProcDiskStats retrieves the disk IO stats from /proc/diskstats
+func ReadProcDiskStats(device string, stats *DiskStats) error {
+	return errors.New("Not implemented")
+}
