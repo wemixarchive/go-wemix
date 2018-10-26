@@ -431,7 +431,7 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'dbStats',
 			call: 'debug_dbStats',
-			params: 1,
+			params: 2,
 		}),
 	],
 	properties: []

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -69,4 +70,54 @@ func ReadDiskStats(stats *DiskStats) error {
 			stats.WriteBytes = value
 		}
 	}
+}
+
+// ReadProcDiskStats retrieves the disk IO stats from /proc/diskstats
+func ReadProcDiskStats(device string, stats *DiskStats) error {
+	stats.ReadCount, stats.ReadBytes, stats.WriteCount, stats.WriteBytes = 0, 0, 0, 0
+
+	// Open the process disk IO counter file
+	inf, err := os.Open("/proc/diskstats")
+	if err != nil {
+		return err
+	}
+	defer inf.Close()
+	in := bufio.NewReader(inf)
+	r := regexp.MustCompile(`\s+`)
+
+	// Iterate over the IO counter, and extract what we need
+	for {
+		// Read the next line and split to key and value
+		line, err := in.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		parts := r.Split(strings.TrimSpace(line), -1)
+		if len(parts) < 10 {
+			continue
+		}
+		if len(device) > 0 && device != parts[2] {
+			continue
+		} else if len(device) == 0 && parts[1] != "0" {
+			continue
+		}
+
+		r_count,   e1 := strconv.ParseInt(parts[3], 10, 64)
+		r_sectors, e2 := strconv.ParseInt(parts[5], 10, 64)
+		w_count,   e3 := strconv.ParseInt(parts[7], 10, 64)
+		w_sectors, e4 := strconv.ParseInt(parts[9], 10, 64)
+		if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
+			continue
+		}
+
+		stats.ReadCount += r_count
+		stats.ReadBytes += r_sectors * 512
+		stats.WriteCount += w_count
+		stats.WriteBytes += w_sectors * 512
+	}
+
+	return nil
 }

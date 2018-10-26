@@ -516,6 +516,8 @@ func EnableStats(b bool) {
 	_stats_enabled = b
 }
 
-func Stats() (r_count, r_bytes, w_count, w_bytes, l_count, d_count uint64) {
-	return _r_count, _r_bytes, _w_count, _w_bytes, _l_count, _d_count
+func Stats(device string) (disk_r_count, disk_r_bytes, disk_w_couhnt, disk_w_bytes, r_count, r_bytes, w_count, w_bytes, l_count, d_count uint64) {
+	var diskStats metrics.DiskStats
+	metrics.ReadProcDiskStats(device, &diskStats)
+	return uint64(diskStats.ReadCount), uint64(diskStats.ReadBytes), uint64(diskStats.WriteCount), uint64(diskStats.WriteBytes), _r_count, _r_bytes, _w_count, _w_bytes, _l_count, _d_count
 }
