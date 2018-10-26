@@ -170,6 +170,7 @@ var (
 		utils.MaxIdleBlockInterval,
 		utils.BlocksPerTurn,
 		utils.NonceLimit,
+		utils.UseRocksDb,
 	}
 )
 

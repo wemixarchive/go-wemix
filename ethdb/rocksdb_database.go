@@ -44,6 +44,7 @@ func NewRDBDatabase(file string, cache int, handles int) (*RDBDatabase, error) {
 
 	opts := C.rocksdb_options_create()
 	C.rocksdb_options_set_create_if_missing(opts, 1)
+	C.rocksdb_options_set_max_open_files(opts, C.int(handles))
 
 	wopts := C.rocksdb_writeoptions_create()
 	ropts := C.rocksdb_readoptions_create()
