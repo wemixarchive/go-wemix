@@ -115,7 +115,7 @@ contract Admin {
 
     constructor() public {
         tokens = 1000000;	// To Be Substituted
-        blocksPer = 10;		// To Be Substituted
+        blocksPer = 100;	// To Be Substituted
 
         address[1] memory _members = [ msg.sender ]; // To Be Substituted
         int[1] memory _stakes = [ int(1000000) ]; // To Be Substituted
