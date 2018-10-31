@@ -8,8 +8,6 @@ FIXED_GAS_LIMIT=0x40000000
 GAS_PRICE=1000000000
 MAX_IDLE_BLOCK_INTERVAL=600
 BLOCKS_PER_TURN=10
-MINER_THREADS=1
-[ "${METADIUM_ABI}" = "" ] && METADIUM_ABI=MetadiumAdmin.js
 
 function get_data_dir ()
 {
@@ -228,16 +226,17 @@ function start ()
     [ "$COINBASE" = "" ] && COINBASE="" || COINBASE="--miner.etherbase $COINBASE"
 
     RPCOPT="--rpc --rpcaddr 0.0.0.0"
+    [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
 
     cd $d
     if [ ! "$2" = "inner" ]; then
-	$GMET --datadir ${PWD} $COINBASE --nodiscover --metrics	\
-	      $RPCOPT 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
+	$GMET --datadir ${PWD} $COINBASE --nodiscover --metrics		  \
+	      $RPCOPT $NONCE_LIMIT 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
     else
 	exec > >(${LOGROT} ${d}/logs/log 10M 5)
 	exec 2>&1
 	exec $GMET --datadir ${PWD} $COINBASE --nodiscover --metrivcs	\
-	      $RPCOPT
+	      $RPCOPT $NONCE_LIMIT
     fi
 }
 
