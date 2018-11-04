@@ -646,7 +646,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 // the pool due to pricing constraints.
 func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// Check nonce limit
-	if tx.Nonce() > params.NonceLimit {
+	if params.NonceLimit != 0 && tx.Nonce() > params.NonceLimit {
 		return false, fmt.Errorf("Too many transactions (%d) for an account", params.NonceLimit)
 	}
 	// If the transaction is already known, discard it

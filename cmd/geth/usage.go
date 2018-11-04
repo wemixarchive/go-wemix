@@ -239,6 +239,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.MaxIdleBlockInterval,
 			utils.BlocksPerTurn,
 			utils.NonceLimit,
+			utils.UseRocksDb,
 		},
 	},
 	{
