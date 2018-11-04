@@ -16,11 +16,14 @@ GO ?= latest
 # - "YES": build a static lib from vendor directory, and use that one
 # - "EXISTING": use existing rocksdb shared lib.
 ifndef USE_ROCKSDB
-  USE_ROCKSDB = NO
-else
-  ifneq ($(shell uname), Linux)
-	USE_ROCKSDB = NO
+  ifeq ($(shell uname), Linux)
+    USE_ROCKSDB = YES
+  else
+    USE_ROCKSDB = NO
   endif
+endif
+ifneq ($(shell uname), Linux)
+  USE_ROCKSDB = NO
 endif
 
 ifneq ($(USE_ROCKSDB), NO)
