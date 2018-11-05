@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -12,6 +13,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto/sha3"
@@ -22,9 +25,10 @@ var (
 	big1 = big.NewInt(1)
 )
 
-func read(db ethdb.Database, prefix string, start, end int, verbose bool) error {
-	for i := start; i <= end; i++ {
-		ks := fmt.Sprintf("%s-%d", prefix, i)
+func read(db ethdb.Database, prefix string, start, end, numThreads int, verbose bool) error {
+
+	doRead := func(idx int) error {
+		ks := fmt.Sprintf("%s-%d", prefix, idx)
 		k := sha3.Sum256([]byte(ks))
 		v, err := db.Get(k[:])
 		if err != nil {
@@ -34,56 +38,97 @@ func read(db ethdb.Database, prefix string, start, end int, verbose bool) error 
 		if verbose {
 			fmt.Printf("%s(<-%s): %d %s\n", hex.EncodeToString(k[:]), string(ks), len(v), hex.EncodeToString(v))
 		}
+		return nil
 	}
+
+	ix := int64(start)
+	var wg sync.WaitGroup
+	for i := 0; i < numThreads; i++ {
+		wg.Add(1)
+		go func(gid int) {
+			defer wg.Done()
+
+			for {
+				jx := atomic.AddInt64(&ix, 1) - 1
+				if jx > int64(end) {
+					break
+				}
+				doRead(int(jx))
+			}
+		}(i)
+	}
+
+	wg.Wait()
 	return nil
+}
+
+func sha_256(b []byte) []byte {
+	x := sha256.Sum256(b)
+	return x[:]
 }
 
 func genVal(key []byte, sz int) []byte {
 	sz = (sz + 31) / 32
-	v0 := sha3.Sum256(key)
-	v := v0[:]
-	bi := big.NewInt(0)
-	bi.SetBytes(v)
+	v := sha_256(key)
 	for i := 1; i < sz; i++ {
-		bi.Add(bi, big1)
-		bib := bi.Bytes()
-		l := len(bib)
-		if l < 32 {
-			l = 32 - l
-			bib = append(bib, v0[:l]...)
-		}
-		v = append(v, bib[:32]...)
+		v = append(v, sha_256(v)...)
 	}
 	return v
 }
 
-func write(db ethdb.Database, prefix string, start, end, batchCount, valueSize int) error {
-	dbb := db.NewBatch()
-	defer dbb.Reset()
+func write(db ethdb.Database, prefix string, start, end, numThreads, batchCount, valueSize int) error {
 
-	for i := start; i <= end; i++ {
-		ks := fmt.Sprintf("%s-%d", prefix, i)
+	flush := func(dbb ethdb.Batch) error {
+		var err error
+		if dbb.ValueSize() > 0 {
+			err = dbb.Write()
+		}
+		dbb.Reset()
+		return err
+	}
+
+	var dbbs []ethdb.Batch
+	for i := 0; i < numThreads; i++ {
+		dbbs = append(dbbs, db.NewBatch())
+	}
+
+	defer func() {
+		for i := 0; i < numThreads; i++ {
+			flush(dbbs[i])
+		}
+	}()
+
+	doWrite := func(gid, idx int) error {
+		dbb := dbbs[gid]
+
+		ks := fmt.Sprintf("%s-%d", prefix, idx)
 		k := sha3.Sum256([]byte(ks))
 		dbb.Put(k[:], genVal(k[:], valueSize))
 
 		if dbb.ValueSize() >= batchCount {
-			err := dbb.Write()
-			if err != nil {
-				fmt.Printf("Failed to write: %v\n", err)
-				return nil
+			flush(dbb)
+		}
+		return nil
+	}
+
+	ix := int64(start)
+	var wg sync.WaitGroup
+	for i := 0; i < numThreads; i++ {
+		wg.Add(1)
+		go func(gid int) {
+			defer wg.Done()
+
+			for {
+				jx := atomic.AddInt64(&ix, 1) - 1
+				if jx > int64(end) {
+					break
+				}
+				doWrite(gid, int(jx))
 			}
-			dbb.Reset()
-		}
+		}(i)
 	}
 
-	if dbb.ValueSize() > 0 {
-		err := dbb.Write()
-		if err != nil {
-			fmt.Printf("Failed to write: %v\n", err)
-			return nil
-		}
-	}
-
+	wg.Wait()
 	return nil
 }
 
@@ -158,20 +203,26 @@ func usage() {
 options:
 -H:	no header
 -t rocksdb|leveldb:	choose between rocksdb and leveldb (leveldb).
--d <device-name>:	where to collect disk stats from
+-d <device-name>:	where to collect disk stats from ("")
+-r <num-threads>:	number of read threads (1)
+-w <num-threads>:	number of write threads (1)
 -v:	verbose
+
+It's going to use about 1035 file descriptors, so don't forget to set open file descriptor limit to 2048, .e.g "ulimit -n 2048".
 `)
 }
 
 func main() {
 	var (
-		which    string = "leveldb"
-		device   string
-		dbPath   string
-		db       ethdb.Database
-		err      error
-		noHeader bool = false
-		verbose  bool = false
+		which        string = "leveldb"
+		device       string
+		dbPath       string
+		db           ethdb.Database
+		err          error
+		noHeader     bool = false
+		readThreads  int = 1
+		writeThreads int = 1
+		verbose      bool = false
 	)
 
 	var nargs []string
@@ -193,6 +244,23 @@ func main() {
 				return
 			}
 			which = os.Args[i+1]
+			i++
+		case "-r":
+			fallthrough
+		case "-w":
+			if i >= len(os.Args)-1 {
+				usage()
+				return
+			}
+			if os.Args[i] == "-r" {
+				readThreads, err = strconv.Atoi(os.Args[i+1])
+			} else {
+				writeThreads, err = strconv.Atoi(os.Args[i+1])
+			}
+			if err != nil {
+				usage()
+				return
+			}
 			i++
 		case "-v":
 			verbose = true
@@ -242,7 +310,7 @@ func main() {
 				header()
 			}
 			ot, stats := pre(device)
-			read(db, prefix, six, eix, verbose)
+			read(db, prefix, six, eix, readThreads, verbose)
 			post(dbPath, device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, eix), ot, stats)
 		} else if nargs[1] == "write" && len(nargs) >= 7 {
 			prefix := nargs[2]
@@ -258,7 +326,7 @@ func main() {
 				header()
 			}
 			ot, stats := pre(device)
-			write(db, prefix, six, eix, batch, valueSize)
+			write(db, prefix, six, eix, writeThreads, batch, valueSize)
 			post(dbPath, device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, eix), ot, stats)
 		} else {
 			usage()
@@ -284,7 +352,7 @@ func main() {
 				}
 
 				ot, stats := pre(device)
-				read(db, prefix, six, eix, verbose)
+				read(db, prefix, six, eix, readThreads, verbose)
 				post(dbPath, device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, eix), ot, stats)
 			} else if ls[0] == "write" && len(ls) >= 6 {
 				prefix := ls[1]
@@ -296,7 +364,7 @@ func main() {
 					continue
 				}
 				ot, stats := pre(device)
-				write(db, prefix, six, eix, batch, valueSize)
+				write(db, prefix, six, eix, writeThreads, batch, valueSize)
 				post(dbPath, device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, eix), ot, stats)
 			}
 		}
