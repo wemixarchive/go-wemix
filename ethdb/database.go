@@ -26,6 +26,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/errors"
 	"github.com/syndtr/goleveldb/leveldb/filter"
@@ -67,7 +68,7 @@ type LDBDatabase struct {
 
 // TODO: returns either leveldb or rocksdb based on configuration
 func NewDatabase(file string, cache int, handles int) (Database, error) {
-	if false /*params.UseRocksDb*/ {
+	if params.UseRocksDb != 0 {
 		return NewRDBDatabase(file, cache, handles)
 	} else {
 		return NewLDBDatabase(file, cache, handles)
