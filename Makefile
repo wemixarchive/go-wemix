@@ -51,7 +51,7 @@ geth:
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
 
 dbbench:
-	build/env.sh go run build/ci.go install ./cmd/dbbench
+	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/dbbench
 
 swarm:
 	build/env.sh go run build/ci.go install ./cmd/swarm
