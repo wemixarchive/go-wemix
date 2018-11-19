@@ -7,7 +7,8 @@ solc --version > /dev/null 2>&1
 if [ $? = 0 ]; then
     SOLC=solc
 else
-    docker --version > /dev/null 2>&1 && SOLC="docker run -v $(pwd):/tmp --workdir /tmp --rm ethereum/solc:stable"
+#    docker --version > /dev/null 2>&1 && SOLC="docker run -v $(pwd):/tmp --workdir /tmp --rm ethereum/solc:stable"
+    docker --version > /dev/null 2>&1 && SOLC="docker run -v $(pwd):/tmp --workdir /tmp --rm ethereum/solc:0.4.24"
 fi
 
 if [ "$SOLC" = "" ]; then
