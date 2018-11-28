@@ -211,7 +211,7 @@ rocksdb:
 		$${GOPATH}/bin/govendor sync -v;			\
 	fi
 	@cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
-		make static_lib;
+		make -j24 static_lib;
 endif
 
 AWK_CODE='								\

@@ -383,4 +383,33 @@ func SendContract(ctx context.Context, contract *RemoteContract, method string,
 	return
 }
 
+func SendValue(ctx context.Context, cli *ethclient.Client, from *keystore.Key, to common.Address, amount, gas, _gasPrice int) (hash common.Hash, err error) {
+	chainId, gasPrice, nonce, err := GetOpportunisticTxParams(
+		ctx, cli, from.Address, false, true)
+	if err != nil {
+		return
+	}
+	if _gasPrice > 0 {
+		gasPrice = big.NewInt(int64(_gasPrice))
+	}
+
+	var tx, stx *types.Transaction
+	tx = types.NewTransaction(nonce.Uint64(), to, big.NewInt(int64(amount)),
+		uint64(gas), gasPrice, nil)
+
+	signer := types.NewEIP155Signer(chainId)
+	stx, err = types.SignTx(tx, signer, from.PrivateKey)
+	if err != nil {
+		return
+	}
+
+	err = cli.SendTransaction(ctx, stx)
+	if err != nil {
+		return
+	}
+
+	hash = stx.Hash()
+	return
+}
+
 // EOF
