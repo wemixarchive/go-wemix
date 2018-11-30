@@ -355,8 +355,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 					// Metadium: to generate an empty block after maxBlockInterval
 					if !metaminer.IsPoW() && w.eth.TxPool().PendingEmpty() {
 						commit(false, commitInterruptNone)
+					} else {
+						timer.Reset(recommit)
 					}
-					timer.Reset(recommit)
 					continue
 				}
 				commit(true, commitInterruptResubmit)
@@ -453,7 +454,7 @@ func (w *worker) mainLoop() {
 					txs[acc] = append(txs[acc], tx)
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
-				w.commitTransactions(txset, coinbase, nil)
+				w.commitTransactions(txset, coinbase, nil, nil, nil)
 				w.updateSnapshot()
 			} else {
 				// If we're mining, but nothing is being processed, wake on new transactions
@@ -696,7 +697,7 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	return receipt.Logs, nil
 }
 
-func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
+func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32, tstart *time.Time, committedTxs map[common.Hash]*types.Transaction) bool {
 	// Short circuit if current is nil
 	if w.current == nil {
 		return true
@@ -738,6 +739,14 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		tx := txs.Peek()
 		if tx == nil {
 			break
+		}
+		// Break if it took too long
+		if tstart != nil && time.Since(*tstart).Seconds() >= 4 {
+			break
+		}
+		// mark it processed
+		if committedTxs != nil {
+			committedTxs[tx.Hash()] = tx
 		}
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance is the transaction pool.
@@ -806,6 +815,75 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	if interrupt != nil {
 		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
 	}
+	return false
+}
+
+func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart time.Time) bool {
+	if !metaminer.IsMiner(int(num.Int64())) {
+		log.Debug("Not a miner.")
+		return true
+	} else if w.eth.TxPool().PendingEmpty() && time.Now().Unix() - w.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
+		log.Debug("No pending transactions.")
+		return true
+	}
+
+	// committed transactions in this round
+	committedTxs := map[common.Hash]*types.Transaction{}
+	round := 0
+	for {
+		round++
+
+		// Fill the block with all available pending transactions.
+		pending, err := w.eth.TxPool().Pending()
+		if err != nil {
+			log.Error("Failed to fetch pending transactions", "err", err)
+			break
+		}
+
+		// Short circuit if there is no available pending transactions
+		if len(pending) == 0 {
+			break
+		}
+
+		// remove processed txs from 'pending'
+		if len(committedTxs) > 0 {
+			for k, x := range pending {
+				var z types.Transactions
+				for _, y := range x {
+					if _, ok := committedTxs[y.Hash()]; !ok {
+						z = append(z, y)
+					}
+				}
+				if len(z) > 0 {
+					pending[k] = z
+				} else {
+					delete(pending, k)
+				}
+			}
+		}
+
+		n := len(committedTxs)
+		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, pending)
+		if w.commitTransactions(txs, w.coinbase, interrupt, &tstart, committedTxs) {
+			return true
+		}
+		n = len(committedTxs) - n
+
+		// less than 500 ms elapsed, transactions are less than 500 and
+		// all handled, then try to get more transactions
+		if time.Since(tstart).Nanoseconds() / 1000000 < 500 &&
+			0 < n && n < 500 {
+			round++
+			continue
+		} else {
+			round++
+			break
+		}
+	}
+	log.Debug("Block %d: %d ms elapsed, %d processed, %d rounds.\n",
+		num.Int64(), time.Since(tstart).Nanoseconds() / 1000000,
+		len(committedTxs), round)
+
 	return false
 }
 
@@ -898,30 +976,25 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 		delete(w.possibleUncles, hash)
 	}
 
-	// Fill the block with all available pending transactions.
-	var pending map[common.Address]types.Transactions
-	if !metaminer.IsPoW() && !metaminer.IsMiner(int(num.Int64())) {
-		log.Debug("Not a miner.")
-		return
-	} else if !metaminer.IsPoW() && w.eth.TxPool().PendingEmpty() && time.Now().Unix() - w.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
-		log.Debug("No pending transactions.")
-		return
-	} else {
-		var err error
-		pending, err = w.eth.TxPool().Pending()
-		if err != nil {
-			log.Error("Failed to fetch pending transactions", "err", err)
-			return
+	if !metaminer.IsPoW() {
+		if !w.commitTransactionsEx(num, interrupt, tstart) {
+			w.commit(uncles, w.fullTaskHook, true, tstart)
 		}
+		return
 	}
 
-	// Metadium: this ends up in a loop creating empty blocks.
-	if metaminer.IsPoW() && !noempty {
+	if !noempty {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
 		w.commit(uncles, nil, false, tstart)
 	}
 
+	// Fill the block with all available pending transactions.
+	pending, err := w.eth.TxPool().Pending()
+	if err != nil {
+		log.Error("Failed to fetch pending transactions", "err", err)
+		return
+	}
 	// Short circuit if there is no available pending transactions
 	if len(pending) == 0 {
 		w.updateSnapshot()
@@ -937,13 +1010,13 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 	}
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
-		if w.commitTransactions(txs, w.coinbase, interrupt) {
+		if w.commitTransactions(txs, w.coinbase, interrupt, nil, nil) {
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
-		if w.commitTransactions(txs, w.coinbase, interrupt) {
+		if w.commitTransactions(txs, w.coinbase, interrupt, nil, nil) {
 			return
 		}
 	}
