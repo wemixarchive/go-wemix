@@ -254,9 +254,20 @@ func Deploy(ctx context.Context, cli *ethclient.Client, from *keystore.Key,
 		gasPrice = big.NewInt(int64(_gasPrice))
 	}
 
+	var data []byte
+	if args == nil || len(args) == 0 {
+		data = contractData.Bytecode
+	} else {
+		data, err = contractData.Abi.Pack("", args...)
+		if err != nil {
+			return
+		}
+		data = append(contractData.Bytecode, data...)
+	}
+
 	var tx, stx *types.Transaction
 	tx = types.NewContractCreation(nonce.Uint64(), nil, uint64(gas), gasPrice,
-		contractData.Bytecode)
+		data)
 
 	signer := types.NewEIP155Signer(chainId)
 	stx, err = types.SignTx(tx, signer, from.PrivateKey)
