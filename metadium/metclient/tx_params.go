@@ -16,7 +16,7 @@ import (
 // Also we might have to maintain window ala tcp window to accomodate nonces
 // used in failed transactions.
 var (
-	_lock     = sync.Mutex{}
+	_lock     = &sync.Mutex{}
 	_chainId  *big.Int
 	_gasPrice *big.Int
 	_nonces   = map[common.Address]*big.Int{}
@@ -30,8 +30,8 @@ func GetOpportunisticTxParams(ctx context.Context, cli *ethclient.Client, addr c
 		// pass
 	} else {
 		// cache's good
-		chainId = _chainId
-		gasPrice = _gasPrice
+		chainId = big.NewInt(_chainId.Int64())
+		gasPrice = big.NewInt(_gasPrice.Int64())
 		nonce = big.NewInt(_nonce.Int64())
 		if incNonce {
 			_nonce.Add(_nonce, common.Big1)
@@ -45,8 +45,10 @@ func GetOpportunisticTxParams(ctx context.Context, cli *ethclient.Client, addr c
 		if err != nil {
 			return
 		}
-		_chainId = cid
+		_chainId = big.NewInt(cid.Int64())
 		chainId = big.NewInt(cid.Int64())
+	} else {
+		chainId = big.NewInt(_chainId.Int64())
 	}
 	if refresh || _gasPrice == nil {
 		var gp *big.Int
@@ -54,8 +56,10 @@ func GetOpportunisticTxParams(ctx context.Context, cli *ethclient.Client, addr c
 		if err != nil {
 			return
 		}
-		_gasPrice = gp
+		_gasPrice = big.NewInt(gp.Int64())
 		gasPrice = big.NewInt(gp.Int64())
+	} else {
+		gasPrice = big.NewInt(_gasPrice.Int64())
 	}
 
 	var _n1, _n2 uint64
