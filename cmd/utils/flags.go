@@ -634,6 +634,11 @@ var (
 		Usage: "LevelDB (0) or RocksDB (1)",
 		Value: params.UseRocksDb,
 	}
+	PrefetchCount = cli.IntFlag{
+		Name:  "prefetchcount",
+		Usage: "Transaction prefetch count for faster db read",
+		Value: params.PrefetchCount,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1314,6 +1319,7 @@ func SetupNetwork(ctx *cli.Context) {
 	params.BlocksPerTurn = ctx.GlobalUint64(BlocksPerTurn.Name)
 	params.NonceLimit = ctx.GlobalUint64(NonceLimit.Name)
 	params.UseRocksDb = ctx.GlobalInt(UseRocksDb.Name)
+	params.PrefetchCount = ctx.GlobalInt(PrefetchCount.Name)
 
 	if params.ConsensusMethod == params.ConsensusInvalid {
 		params.ConsensusMethod = params.ConsensusPoW
