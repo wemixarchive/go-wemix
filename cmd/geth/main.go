@@ -171,6 +171,7 @@ var (
 		utils.BlocksPerTurn,
 		utils.NonceLimit,
 		utils.UseRocksDb,
+		utils.PrefetchCount,
 	}
 )
 

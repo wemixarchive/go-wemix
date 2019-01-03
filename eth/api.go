@@ -146,6 +146,17 @@ func (api *PrivateMinerAPI) GetHashrate() uint64 {
 	return api.e.miner.HashRate()
 }
 
+// Get and set params.PrefetchCount
+func (api *PrivateMinerAPI) GetPrefetchCount() int {
+	return params.PrefetchCount
+}
+
+func (api *PrivateMinerAPI) SetPrefetchCount(count int)  {
+	if 0 <= count && count <= 65535 {
+		params.PrefetchCount = count
+	}
+}
+
 // PrivateAdminAPI is the collection of Ethereum full node-related APIs
 // exposed over the private admin endpoint.
 type PrivateAdminAPI struct {

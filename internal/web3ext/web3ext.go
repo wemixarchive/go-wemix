@@ -537,6 +537,15 @@ web3._extend({
 			name: 'getHashrate',
 			call: 'miner_getHashrate'
 		}),
+		new web3._extend.Method({
+			name: 'getPrefetchCount',
+			call: 'miner_getPrefetchCount'
+		}),
+		new web3._extend.Method({
+			name: 'setPrefetchCount',
+			call: 'miner_setPrefetchCount',
+			params: 1,
+		}),
 	],
 	properties: []
 });
