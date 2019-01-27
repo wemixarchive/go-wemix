@@ -149,7 +149,9 @@ func (ma *metaAdmin) getAdminAddress() common.Address {
 	var adminAddress common.Address
 	err := metclient.CallContract(ctx, anchorContract, "admin", nil, &adminAddress, nil)
 	if err != nil {
-		utils.Fatalf("Anchored admin address is invalid: %s\n", err)
+		log.Debug("Metadium", "Anchored admin address is invalid", err)
+		ma.anchor = nilAddress
+		return nilAddress
 	}
 
 	return adminAddress
