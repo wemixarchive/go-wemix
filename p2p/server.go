@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/event"
@@ -316,6 +317,24 @@ func (srv *Server) RemovePeer(node *discover.Node) {
 	select {
 	case srv.removestatic <- node:
 	case <-srv.quit:
+	}
+}
+
+func (srv *Server) disconnectPeer(id discover.NodeID) error {
+	var peer *Peer
+	select {
+	case srv.peerOp <- func(peers map[discover.NodeID]*Peer) {
+		peer, _ = peers[id]
+	}:
+		<-srv.peerOpDone
+	case <- srv.quit:
+	}
+
+	if peer == nil {
+		return ethereum.NotFound
+	} else {
+		peer.Disconnect(DiscRequested)
+		return nil
 	}
 }
 
@@ -887,6 +906,14 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *discover.Node) e
 	err = srv.checkpoint(c, srv.posthandshake)
 	if err != nil {
 		clog.Trace("Rejected peer before protocol handshake", "err", err)
+		if err == DiscAlreadyConnected {
+			// drop this peer so that it can be reconnected afresh
+			if err2 := srv.disconnectPeer(c.id); err2 == nil {
+				clog.Trace("Disconnect this peer to reconnect afresh later")
+			} else {
+				clog.Trace("Disconnect this peer failed", "err", err2)
+			}
+		}
 		return err
 	}
 	// Run the protocol handshake
