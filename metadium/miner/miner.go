@@ -11,20 +11,12 @@ import (
 )
 
 var (
-	// notification channel when a new transaction arrives
-	TxNotifier           = make(chan bool, 1)
 	IsMinerFunc          func(int) bool
 	IsPartnerFunc        func(string) bool
 	CalculateRewardsFunc func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
 	VerifyRewardsFunc    func(*big.Int, string) error
 	RequirePendingTxsFunc  func() bool
 )
-
-func TxNotify() {
-	if params.ConsensusMethod != params.ConsensusPoW {
-		TxNotifier <- true
-	}
-}
 
 func IsMiner(height int) bool {
 	if IsMinerFunc == nil {

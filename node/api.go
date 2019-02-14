@@ -295,11 +295,11 @@ func (api *PublicAdminAPI) NodeInfo() (*p2p.NodeInfo, error) {
 
 // PeerInfo retrieves all the information we know about the peer node
 func (api *PublicAdminAPI) PeerInfo(id discover.NodeID) (*p2p.PeerInfo, error) {
-    server := api.node.Server()
-    if server == nil {
-        return nil, ErrNodeStopped
-    }
-    return server.PeerInfo(id), nil
+	server := api.node.Server()
+	if server == nil {
+		return nil, ErrNodeStopped
+	}
+	return server.PeerInfo(id), nil
 }
 
 // Datadir retrieves the current data directory the node is using.
@@ -307,8 +307,15 @@ func (api *PublicAdminAPI) Datadir() string {
 	return api.node.DataDir()
 }
 
+// MetadiumInfo retrieves the information about Metadium
 func (api *PublicAdminAPI) MetadiumInfo() interface{} {
 	return metaapi.Info()
+}
+
+// MetadiumMiners returns the status of miners
+// 'node' can a name, node id or ip address
+func (api *PublicAdminAPI) MetadiumMiners(node string) interface{} {
+	return metaapi.GetMiners(node)
 }
 
 // PublicDebugAPI is the collection of debugging related API methods exposed over

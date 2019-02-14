@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -36,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -691,7 +693,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	// Metadium: leader wants to get left-over transactions if any
 	case p.version >= eth63 && msg.Code == GetPendingTxsMsg:
 		if !pm.txpool.PendingEmpty() {
-			fmt.Println("XXX: got GetPendingTxsMsg, must have lost tx")
 			txs, err := pm.txpool.Pending()
 			if err != nil {
 				return err
@@ -699,6 +700,20 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				p.resendPendingTxs(txs)
 			}
 		}
+		return nil
+
+	case p.version >= eth63 && msg.Code == GetStatusExMsg:
+		if err := p.SendStatusEx(metaapi.GetMinerStatus()); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		return nil
+
+	case p.version >= eth63 && msg.Code == StatusExMsg:
+		var status metaapi.MetadiumMinerStatus
+		if err := msg.Decode(&status); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		metaapi.GotStatusEx(&status)
 		return nil
 
 	default:
@@ -829,5 +844,14 @@ func (pm *ProtocolManager) syncPendingTxs() {
 		case <-pm.noMorePeers:
 			return
 		}
+	}
+}
+
+// RequestMinerStatus sends GetStatusExMsg to the given peer
+func (pm *ProtocolManager) RequestMinerStatus(id discover.NodeID) error {
+	if p := pm.peers.Peer(fmt.Sprintf("%x", id[:8])); p != nil {
+		return p.RequestStatusEx()
+	} else {
+		return ethereum.NotFound
 	}
 }
