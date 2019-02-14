@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -377,6 +378,8 @@ func StartAdmin(stack *node.Node) {
 	metaminer.VerifyRewardsFunc = verifyRewards
 	metaminer.RequirePendingTxsFunc = requirePendingTxs
 	metaapi.Info = Info
+	metaapi.GetMiners = getMiners
+	metaapi.GetMinerStatus = getMinerStatus
 
 	rpcCli, err := stack.Attach()
 	if err != nil {
@@ -790,6 +793,20 @@ func IsPartner(id string) bool {
 	return n.Partner
 }
 
+func (ma *metaAdmin) toMiningPeers(nodes []*metaNode) string {
+	var bb bytes.Buffer
+	for _, n := range nodes {
+		if bb.Len() != 0 {
+			bb.Write([]byte(" "))
+		}
+		bb.Write([]byte(fmt.Sprintf("%s/%s", n.Name, n.Status)))
+		if n.Miner {
+			bb.Write([]byte("/*"))
+		}
+	}
+	return string(bb.Bytes())
+}
+
 func (ma *metaAdmin) miners() string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -800,19 +817,8 @@ func (ma *metaAdmin) miners() string {
 	}
 	height := int(block.Number.Int64())
 
-	var bb bytes.Buffer
 	_, nodes := ma.iigetNodes(height + 1)
-	for _, n := range nodes {
-		if bb.Len() != 0 {
-			bb.Write([]byte(" "))
-		}
-		bb.Write([]byte(fmt.Sprintf("%s/%s", n.Name, n.Status)))
-		if n.Miner {
-			bb.Write([]byte("/*"))
-		}
-	}
-
-	return string(bb.Bytes())
+	return ma.toMiningPeers(nodes)
 }
 
 func Info() interface{} {
@@ -840,6 +846,169 @@ func Info() interface{} {
 		}
 		return info
 	}
+}
+
+func getMinerStatus() *metaapi.MetadiumMinerStatus {
+	if admin == nil || admin.self == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	header, err := admin.cli.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return nil
+	}
+	height := int(header.Number.Int64())
+
+	_, nodes := admin.iigetNodes(height + 1)
+	miningPeers := admin.toMiningPeers(nodes)
+
+	admin.lock.Lock()
+	defer admin.lock.Unlock()
+
+	var (
+		mining, syncing bool
+		syncProgress    *ethereum.SyncProgress
+	)
+	if err = admin.rpcCli.CallContext(ctx, &mining, "eth_mining"); err != nil {
+		mining = false
+	}
+	if syncProgress, err = admin.cli.SyncProgress(ctx); err != nil {
+		log.Error("SyncProgress failed", "error", err)
+	}
+	if syncProgress != nil {
+		syncing = true
+	} else {
+		syncing = false
+		syncProgress = &ethereum.SyncProgress{}
+	}
+
+	return &metaapi.MetadiumMinerStatus{
+		Name:              admin.self.Name,
+		Id:                admin.self.Id,
+		Addr:              fmt.Sprintf("%s:%d", admin.self.Ip, admin.self.Port),
+		Status:            "up",
+		Miner:             admin.self.Miner,
+		MiningPeers:       miningPeers,
+		Mining:            mining,
+		LatestBlockHeight: header.Number,
+		LatestBlockHash:   header.Hash(),
+		Syncing:           syncing,
+		SyncProgress:      *syncProgress,
+	}
+}
+
+// Returns the array of peer status
+// 'id' could be null, a name, node id (public key) or ip address of a miner
+func getMiners(id string) []*metaapi.MetadiumMinerStatus {
+	if admin == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	nodes := admin.igetNodes()
+
+	var node *metaNode
+	for _, n := range nodes {
+		if strings.EqualFold(n.Name, id) || strings.EqualFold(n.Id, id) || strings.EqualFold(n.Ip, id) {
+			node = n
+			break
+		}
+	}
+
+	getDownStatus := func(node *metaNode) *metaapi.MetadiumMinerStatus {
+		return &metaapi.MetadiumMinerStatus{
+			Name:   node.Name,
+			Id:     node.Id,
+			Addr:   fmt.Sprintf("%s:%d", node.Ip, node.Port),
+			Status: "down",
+		}
+	}
+
+	var miners []*metaapi.MetadiumMinerStatus
+	var err error
+	statusExCh := make(chan *metaapi.MetadiumMinerStatus, 1)
+	metaapi.SetStatusExChannel(statusExCh)
+	defer func() {
+		metaapi.SetStatusExChannel(nil)
+		close(statusExCh)
+	}()
+
+	timer := time.NewTimer(5 * time.Second)
+	peers := map[string]bool{}
+	count := 0
+
+	if node != nil {
+		if admin.self != nil && admin.self.Id == node.Id {
+			miners = append(miners, getMinerStatus())
+			return miners
+		} else if !admin.isPeerUp(node.Id) {
+			miners = append(miners, getDownStatus(node))
+			return miners
+		}
+
+		err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", &node.Id)
+		if err != nil {
+			log.Error("Metadium RequestMinerStatus Failed", "id", node.Id, "error", err)
+		} else {
+			peers[node.Name] = false
+			count++
+		}
+	} else {
+		for _, n := range nodes {
+			if admin.self != nil && admin.self.Id == n.Id {
+				miners = append(miners, getMinerStatus())
+				continue
+			} else if !admin.isPeerUp(n.Id) {
+				miners = append(miners, getDownStatus(n))
+				continue
+			}
+
+			err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", n.Id)
+			if err != nil {
+				log.Error("Metadium RequestMinerStatus Failed", "id", n.Id, "error", err)
+			} else {
+				peers[n.Name] = false
+				count++
+			}
+		}
+	}
+
+	done := false
+	if count == 0 {
+		done = true
+	}
+	for {
+		if done {
+			break
+		}
+		select {
+		case s := <-statusExCh:
+			if b, ok := peers[s.Name]; ok {
+				miners = append(miners, s)
+				if b == false {
+					peers[s.Name] = true
+					count--
+					if count <= 0 {
+						done = true
+					}
+				}
+			}
+		case <-timer.C:
+			done = true
+		}
+	}
+
+	if len(miners) > 1 {
+		sort.Slice(miners, func(i, j int) bool {
+			return miners[i].Name < miners[j].Name
+		})
+	}
+	return miners
 }
 
 func (ma *metaAdmin) getTxPoolStatus() (pending, queued uint, err error) {

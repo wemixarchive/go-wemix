@@ -198,6 +198,17 @@ web3._extend({
 			name: 'stopWS',
 			call: 'admin_stopWS'
 		}),
+		new web3._extend.Method({
+			name: 'requestMinerStatus',
+			call: 'admin_requestMinerStatus',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'metadiumMiners',
+			call: 'admin_metadiumMiners',
+			params: 1,
+			inputFormatter: [null]
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
