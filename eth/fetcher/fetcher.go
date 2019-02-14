@@ -30,13 +30,13 @@ import (
 )
 
 const (
-	arriveTimeout = 500 * time.Millisecond // Time allowance before an announced block is explicitly requested
-	gatherSlack   = 100 * time.Millisecond // Interval used to collate almost-expired announces with fetches
-	fetchTimeout  = 5 * time.Second        // Maximum allotted time to return an explicitly requested block
-	maxUncleDist  = 7                      // Maximum allowed backward distance from the chain head
-	maxQueueDist  = 32                     // Maximum allowed distance from the chain head to queue
-	hashLimit     = 256                    // Maximum number of unique blocks a peer may have announced
-	blockLimit    = 64                     // Maximum number of unique blocks a peer may have delivered
+	arriveTimeout = 5000 * time.Millisecond // Time allowance before an announced block is explicitly requested
+	gatherSlack   = 1000 * time.Millisecond // Interval used to collate almost-expired announces with fetches
+	fetchTimeout  = 50 * time.Second       // Maximum allotted time to return an explicitly requested block
+	maxUncleDist  = 70                     // Maximum allowed backward distance from the chain head
+	maxQueueDist  = 320                    // Maximum allowed distance from the chain head to queue
+	hashLimit     = 2560                   // Maximum number of unique blocks a peer may have announced
+	blockLimit    = 640                    // Maximum number of unique blocks a peer may have delivered
 )
 
 var (
