@@ -86,6 +86,9 @@ type metaAdmin struct {
 
 	lock  *sync.Mutex
 	nodes map[string]*metaNode
+
+	// # of blocks consecutively mined by this node
+	blocksMined int
 }
 
 var (
@@ -181,7 +184,8 @@ func (ma *metaAdmin) getInt(ctx context.Context, to *common.Address, block *big.
 	}
 }
 
-func (ma *metaAdmin) igetNodes() []*metaNode {
+// returns []*metaNode from map[string]*metaNode
+func (ma *metaAdmin) getNodes() []*metaNode {
 	ma.lock.Lock()
 	defer ma.lock.Unlock()
 
@@ -190,6 +194,64 @@ func (ma *metaAdmin) igetNodes() []*metaNode {
 		nodes = append(nodes, i)
 	}
 	return nodes
+}
+
+// returns
+// 1. currentMiner *metaNode: the current leader
+// 2. nextMiner *metaNode: the most eligible miner for the given height,
+//   which is up and running
+// 3. nodes []*metaNode: copies of map[string]*metaNode, not references,
+//   sorted by id, i.e. mining order
+// 'locked' indicates whether ma.lock is held by the caller or not
+func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNode, []*metaNode) {
+	var nodes []*metaNode
+	if !locked {
+		ma.lock.Lock()
+	}
+	for _, i := range ma.nodes {
+		n := new(metaNode)
+		*n = *i
+		nodes = append(nodes, n)
+	}
+	if !locked {
+		ma.lock.Unlock()
+	}
+	if len(nodes) == 0 {
+		return nil, nil, nodes
+	}
+
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Id < nodes[j].Id
+	})
+
+	for _, n := range nodes {
+		if (ma.self != nil && n.Id == ma.self.Id) || ma.isPeerUp(n.Id) {
+			n.Status = "up"
+		} else {
+			n.Status = "down"
+		}
+	}
+
+	var leaderName = ma.etcdLeaderName()
+	var miner, next *metaNode
+	ix := height / admin.blocksPer % len(nodes)
+	i := ix
+	for j := 0; j < len(nodes); j++ {
+		if miner != nil && next != nil {
+			break
+		}
+		n := nodes[i]
+		if miner == nil && n.Name == leaderName {
+			miner = n
+			miner.Miner = true
+		}
+		if next == nil && n.Status == "up" {
+			next = n
+		}
+		i = (i + 1) % len(nodes)
+	}
+
+	return miner, next, nodes
 }
 
 func (ma *metaAdmin) getNode(ctx context.Context, id string, block *big.Int) (*metaNode, error) {
@@ -335,7 +397,7 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer i
 		}
 	}
 
-	oldNodes := ma.igetNodes()
+	oldNodes := ma.getNodes()
 	sort.Slice(oldNodes, func(i, j int) bool {
 		return oldNodes[i].Id < oldNodes[j].Id
 	})
@@ -387,6 +449,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 
 	metaminer.IsMinerFunc = IsMiner
 	metaminer.IsPartnerFunc = IsPartner
+	metaminer.LogBlockFunc = LogBlock
 	metaminer.CalculateRewardsFunc = calculateRewards
 	metaminer.VerifyRewardsFunc = verifyRewards
 	metaminer.RequirePendingTxsFunc = requirePendingTxs
@@ -711,53 +774,6 @@ func (ma *metaAdmin) isPeerUp(id string) bool {
 	return err == nil && nodeInfo != nil
 }
 
-func (ma *metaAdmin) iigetNodes(height int) (bool, []*metaNode) {
-	var nodes []*metaNode
-	ma.lock.Lock()
-	for _, i := range ma.nodes {
-		n := new(metaNode)
-		*n = *i
-		nodes = append(nodes, n)
-	}
-	ma.lock.Unlock()
-	if len(nodes) == 0 {
-		return false, nodes
-	}
-
-	sort.Slice(nodes, func(i, j int) bool {
-		return nodes[i].Id < nodes[j].Id
-	})
-
-	for _, n := range nodes {
-		if (ma.self != nil && n.Id == ma.self.Id) || ma.isPeerUp(n.Id) {
-			n.Status = "up"
-		} else {
-			n.Status = "down"
-		}
-	}
-
-	var miner *metaNode
-	ix := height / admin.blocksPer % len(nodes)
-	i := ix
-	for j := 0; j < len(nodes); j++ {
-		n := nodes[i]
-		if n.Status == "up" && (n.NotBefore == 0 || height >= n.NotBefore) &&
-			(n.NotAfter == 0 || height <= n.NotAfter) {
-			miner = n
-			miner.Miner = true
-			break
-		}
-		i = (i + 1) % len(nodes)
-	}
-
-	amMiner := false
-	if miner != nil && ma.self != nil && miner.Id == ma.self.Id {
-		amMiner = true
-	}
-
-	return amMiner, nodes
-}
-
 func IsMiner(height int) bool {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return true
@@ -778,8 +794,12 @@ func IsMiner(height int) bool {
 			admin.update()
 		}
 
-		amMiner, _ := admin.iigetNodes(height)
-		return amMiner
+		if admin.etcdIsLeader() {
+			return true
+		} else {
+			admin.blocksMined = 0
+			return false
+		}
 	} else {
 		return false
 	}
@@ -801,6 +821,36 @@ func IsPartner(id string) bool {
 	// TODO: need to check NotBefore and NotAfter
 
 	return n.Partner
+}
+
+func LogBlock(height int64) {
+	if admin == nil || admin.self == nil {
+		return
+	}
+
+	admin.lock.Lock()
+	defer admin.lock.Unlock()
+
+	admin.blocksMined++
+	height++
+	if admin.blocksMined >= admin.blocksPer &&
+		int(height) % admin.blocksPer == 0 {
+		// time to yield leader role
+		_, next, _ := admin.getMinerNodes(int(height), true)
+		if next.Id == admin.self.Id {
+			log.Info("Metadium - yield to self", "mined", admin.blocksMined,
+				"new miner", "self")
+		} else {
+			if err := admin.etcdMoveLeader(next.Name); err == nil {
+				log.Info("Metadium - yielded", "mined", admin.blocksMined,
+					"new miner", next.Name)
+				admin.blocksMined = 0
+			} else {
+				log.Error("Metadium - yield failed", "mined", admin.blocksMined,
+					"new miner", next.Name, "error", err)
+			}
+		}
+	}
 }
 
 func (ma *metaAdmin) toMiningPeers(nodes []*metaNode) string {
@@ -827,7 +877,7 @@ func (ma *metaAdmin) miners() string {
 	}
 	height := int(block.Number.Int64())
 
-	_, nodes := ma.iigetNodes(height + 1)
+	_, _, nodes := ma.getMinerNodes(height+1, false)
 	return ma.toMiningPeers(nodes)
 }
 
@@ -873,7 +923,7 @@ func getMinerStatus() *metaapi.MetadiumMinerStatus {
 	}
 	height := int(header.Number.Int64())
 
-	_, nodes := admin.iigetNodes(height + 1)
+	_, _, nodes := admin.getMinerNodes(height+1, false)
 	miningPeers := admin.toMiningPeers(nodes)
 
 	admin.lock.Lock()
@@ -921,7 +971,7 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	nodes := admin.igetNodes()
+	nodes := admin.getNodes()
 
 	var node *metaNode
 	for _, n := range nodes {

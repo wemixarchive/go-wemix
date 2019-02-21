@@ -395,6 +395,39 @@ func (ma *metaAdmin) etcdStop() error {
 	return nil
 }
 
+func (ma *metaAdmin) etcdIsLeader() bool {
+	if !ma.etcdIsRunning() {
+		return false
+	} else {
+		return ma.etcd.Server.ID() == ma.etcd.Server.Leader()
+	}
+}
+
+// returns the name of the leader node
+func (ma *metaAdmin) etcdLeaderName() string {
+	if !ma.etcdIsRunning() {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(),
+		ma.etcd.Server.Cfg.ReqTimeout())
+	rsp, err := ma.etcdCli.MemberList(ctx)
+	cancel()
+
+	if err != nil {
+		return ""
+	}
+
+	leaderId := uint64(ma.etcd.Server.Leader())
+	for _, i := range rsp.Members {
+		if uint64(i.ID) == leaderId {
+			return i.Name
+		}
+	}
+
+	return ""
+}
+
 func (ma *metaAdmin) etcdInfo() interface{} {
 	if ma.etcd == nil {
 		return ErrNotRunning
