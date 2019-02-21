@@ -13,6 +13,7 @@ import (
 var (
 	IsMinerFunc          func(int) bool
 	IsPartnerFunc        func(string) bool
+	LogBlockFunc         func(int64)
 	CalculateRewardsFunc func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
 	VerifyRewardsFunc    func(*big.Int, string) error
 	RequirePendingTxsFunc  func() bool
@@ -31,6 +32,12 @@ func IsPartner(id string) bool {
 		return false
 	} else {
 		return IsPartnerFunc(id)
+	}
+}
+
+func LogBlock(height int64) {
+	if LogBlockFunc != nil {
+		LogBlockFunc(height)
 	}
 }
 

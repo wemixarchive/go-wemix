@@ -110,7 +110,7 @@ function wipe ()
 
     cd $d
     /bin/rm -rf geth/LOCK geth/chaindata geth/ethash geth/lightchaindata \
-	geth/transactions.rlp geth/nodes geth.ipc logs/* default.etcd
+	geth/transactions.rlp geth/nodes geth.ipc logs/* etcd
 }
 
 function wipe_all ()
@@ -247,7 +247,13 @@ function start_all ()
             continue
         fi
         start $i
+	echo "started $i."
     done
+}
+
+function get_gmet_pids ()
+{
+    ps axww | grep -v grep | grep "gmet.*datadir.*${NODE}" | awk '{print $1}'
 }
 
 function do_nodes ()
@@ -302,29 +308,33 @@ case "$1" in
     ;;
 
 "stop")
+    echo -n "stopping..."
     if [ ! "$2" = "" ]; then
         NODE=$2
     else
         NODE=
     fi
-    for i in {1..10}; do
-        ps axww | grep -v grep | grep -q "gmet.*datadir.*${NODE}"
-        if [ ! $? = 0 ]; then
-            break
-        else
-            ps axww | grep -v grep | grep "gmet.*datadir.*${NODE}" | awk '{print $1}' | xargs -L1 sudo kill
-            sleep 3;
-        fi
-    done
-    ps axww | grep -v grep | grep -q "gmet.*datadir.*${NODE}"
-    if [ $? = 0 ]; then
-        ps axww | grep -v grep | grep "gmet.*datadir.*${NODE}" | awk '{print $1}' | xargs -L1 sudo kill -9
+    PIDS=`get_gmet_pids`
+    if [ ! "$PIDS" = "" ]; then
+	echo $PIDS | xargs -L1 sudo kill
     fi
+    for i in {1..200}; do
+	PIDS=`get_gmet_pids`
+	[ "$PIDS" = "" ] && break
+	echo -n "."
+	sleep 1
+    done
+    PIDS=`get_gmet_pids`
+    if [ ! "$PIDS" = "" ]; then
+	echo $PIDS | xargs -L1 sudo kill -9
+    fi
+    echo "done."
     ;;
 
 "start")
     if [ ! "$2" = "" ]; then
         start $2
+	echo "started $2."
     else
         start_all
     fi
