@@ -105,8 +105,9 @@ func (ma *metaAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	cfg := embed.NewConfig()
 	cfg.Dir = ma.etcdDir
 	cfg.Name = ma.self.Name
-	u, _ := url.Parse(fmt.Sprintf("http://%s:%d", ma.self.Ip, ma.self.Port+1))
+	u, _ := url.Parse(fmt.Sprintf("http://%s:%d", "0.0.0.0", ma.self.Port+1))
 	cfg.LPUrls = []url.URL{*u}
+	u, _ = url.Parse(fmt.Sprintf("http://%s:%d", ma.self.Ip, ma.self.Port+1))
 	cfg.APUrls = []url.URL{*u}
 	u, _ = url.Parse(fmt.Sprintf("http://localhost:%d", ma.self.Port+2))
 	cfg.LCUrls = []url.URL{*u}
