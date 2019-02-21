@@ -299,6 +299,11 @@ func (p *peer) SendStatusEx(status *metaapi.MetadiumMinerStatus) error {
 	return p2p.Send(p.rw, StatusExMsg, status)
 }
 
+// SendEtcdCluster sends this node's etcd cluster
+func (p *peer) SendEtcdCluster(cluster string) error {
+	return p2p.Send(p.rw, EtcdClusterMsg, cluster)
+}
+
 // RequestOneHeader is a wrapper around the header query functions to fetch a
 // single header. It is used solely by the fetcher.
 func (p *peer) RequestOneHeader(hash common.Hash) error {
@@ -350,6 +355,12 @@ func (p *peer) RequestPendingTxs() error {
 func (p *peer) RequestStatusEx() error {
 	p.Log().Debug("Fetching extended status")
 	return p2p.Send(p.rw, GetStatusExMsg, common.Big1)
+}
+
+// RequestEtcdAddMember requests the peer to add this node to the cluster
+func (p *peer) RequestEtcdAddMember() error {
+	p.Log().Debug("Trying to join etcd network")
+	return p2p.Send(p.rw, EtcdAddMemberMsg, common.Big1)
 }
 
 // Handshake executes the eth protocol handshake, negotiating version number,

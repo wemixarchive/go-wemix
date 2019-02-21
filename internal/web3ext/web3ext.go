@@ -209,6 +209,40 @@ web3._extend({
 			params: 1,
 			inputFormatter: [null]
 		}),
+		new web3._extend.Method({
+			name: 'requestEtcdAddMember',
+			call: 'admin_requestEtcdAddMember',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'etcdInit',
+			call: 'admin_etcdInit',
+			params: 0,
+		}),
+		new web3._extend.Method({
+			name: 'etcdAddMember',
+			call: 'admin_etcdAddMember',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'etcdRemoveMember',
+			call: 'admin_etcdRemoveMember',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'etcdJoin',
+			call: 'admin_etcdJoin',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'etcdMoveLeader',
+			call: 'admin_etcdMoveLeader',
+			params: 1,
+			inputFormatter: [null]
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
