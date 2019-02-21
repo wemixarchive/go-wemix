@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -251,8 +252,42 @@ func (api *PrivateAdminAPI) ImportChain(file string) (bool, error) {
 	return true, nil
 }
 
+// RequestMinerStatus asks the given peer to send extended status
 func (api *PrivateAdminAPI) RequestMinerStatus(id discover.NodeID) error {
 	return api.eth.protocolManager.RequestMinerStatus(id)
+}
+
+// RequestEtcdAddMember asks the given peer to add this node to the etcd cluster
+func (api *PrivateAdminAPI) RequestEtcdAddMember(id discover.NodeID) error {
+	return api.eth.protocolManager.RequestEtcdAddMember(id)
+}
+
+// Initializes an etcd cluster
+func (api *PrivateAdminAPI) EtcdInit() error {
+	return metaapi.EtcdInit()
+}
+
+// Manually adds a node to an etcd cluster.
+// TODO: to be removed
+func (api *PrivateAdminAPI) EtcdAddMember(name string) (string, error) {
+	return metaapi.EtcdAddMember(name)
+}
+
+// Manually removes a node from an etcd cluster
+// TODO: to be removed
+func (api *PrivateAdminAPI) EtcdRemoveMember(name string) (string, error) {
+	return metaapi.EtcdRemoveMember(name)
+}
+
+// Manually join an etcd network
+// TODO: to be removed
+func (api *PrivateAdminAPI) EtcdJoin(cluster string) error {
+	return metaapi.EtcdJoin(cluster)
+}
+
+// Manually move leader in case the leader is misbehaving
+func (api *PrivateAdminAPI) EtcdMoveLeader(name string) error {
+	return metaapi.EtcdMoveLeader(name)
 }
 
 // PublicDebugAPI is the collection of Ethereum full node APIs exposed

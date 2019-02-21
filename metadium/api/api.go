@@ -27,25 +27,40 @@ type MetadiumMinerStatus struct {
 }
 
 var (
-	statusExLock = &sync.Mutex{}
-	statusExCh   chan *MetadiumMinerStatus
+	msgChannelLock = &sync.Mutex{}
+	msgChannel     chan interface{}
 
-	Info           func() interface{}
+	Info func() interface{}
+
 	GetMinerStatus func() *MetadiumMinerStatus
 	GetMiners      func(node string) []*MetadiumMinerStatus
+
+	EtcdInit         func() error
+	EtcdAddMember    func(name string) (string, error)
+	EtcdRemoveMember func(name string) (string, error)
+	EtcdJoin         func(cluster string) error
+	EtcdMoveLeader   func(name string) error
 )
 
-func SetStatusExChannel(ch chan *MetadiumMinerStatus) {
-	statusExLock.Lock()
-	defer statusExLock.Unlock()
-	statusExCh = ch
+func SetMsgChannel(ch chan interface{}) {
+	msgChannelLock.Lock()
+	defer msgChannelLock.Unlock()
+	msgChannel = ch
 }
 
 func GotStatusEx(status *MetadiumMinerStatus) {
-	statusExLock.Lock()
-	defer statusExLock.Unlock()
-	if statusExCh != nil {
-		statusExCh <- status
+	msgChannelLock.Lock()
+	defer msgChannelLock.Unlock()
+	if msgChannel != nil {
+		msgChannel <- status
+	}
+}
+
+func GotEtcdCluster(cluster string) {
+	msgChannelLock.Lock()
+	defer msgChannelLock.Unlock()
+	if msgChannel != nil {
+		msgChannel <- cluster
 	}
 }
 

@@ -716,6 +716,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		metaapi.GotStatusEx(&status)
 		return nil
 
+	case p.version >= eth63 && msg.Code == EtcdAddMemberMsg:
+		cluster, _ := metaapi.EtcdAddMember(p.ID().String())
+		if err := p.SendEtcdCluster(cluster); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		return nil
+
+	case p.version >= eth63 && msg.Code == EtcdClusterMsg:
+		var cluster string
+		if err := msg.Decode(&cluster); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		metaapi.GotEtcdCluster(cluster)
+		return nil
+
 	default:
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
@@ -851,6 +866,15 @@ func (pm *ProtocolManager) syncPendingTxs() {
 func (pm *ProtocolManager) RequestMinerStatus(id discover.NodeID) error {
 	if p := pm.peers.Peer(fmt.Sprintf("%x", id[:8])); p != nil {
 		return p.RequestStatusEx()
+	} else {
+		return ethereum.NotFound
+	}
+}
+
+// RequestEtcdAddMember is an internal protocol level command to add a node to the etcd cluster
+func (pm *ProtocolManager) RequestEtcdAddMember(id discover.NodeID) error {
+	if p := pm.peers.Peer(fmt.Sprintf("%x", id[:8])); p != nil {
+		return p.RequestEtcdAddMember()
 	} else {
 		return ethereum.NotFound
 	}

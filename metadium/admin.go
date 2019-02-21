@@ -7,15 +7,19 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"path"
 	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/embed"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/cmd/utils"
@@ -60,12 +64,17 @@ type metaAdmin struct {
 	bootNodeId  string // allowed to generate block without admin contract
 	bootAccount common.Address
 	nodeInfo    *p2p.NodeInfo
-	from        common.Address
 	anchor      common.Address
 	admin       common.Address
 	Updates     chan bool
 	rpcCli      *rpc.Client
 	cli         *ethclient.Client
+
+	etcd        *embed.Etcd
+	etcdCli     *clientv3.Client
+	etcdDir     string
+	etcdPort    int
+	etcdTimeout time.Duration
 
 	adminAbi  abi.ABI
 	anchorAbi abi.ABI
@@ -80,10 +89,14 @@ type metaAdmin struct {
 }
 
 var (
-	magic      = 0x4d6574616469756d // Metadium
-	big0       = big.NewInt(0)
-	nilAddress = common.Address{}
-	admin      *metaAdmin
+	magic           = 0x4d6574616469756d // Metadium
+	etcdClusterName = "Metadium"
+	big0            = big.NewInt(0)
+	nilAddress      = common.Address{}
+	admin           *metaAdmin
+
+	ErrNotRunning     = errors.New("Not Running")
+	ErrAlreadyRunning = errors.New("Already Running")
 )
 
 func (n *metaNode) eq(m *metaNode) bool {
@@ -365,7 +378,7 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer i
 	return
 }
 
-func StartAdmin(stack *node.Node) {
+func StartAdmin(stack *node.Node, datadir string) {
 	if !(params.ConsensusMethod == params.ConsensusPoA ||
 		params.ConsensusMethod == params.ConsensusETCD ||
 		params.ConsensusMethod == params.ConsensusPBFT) {
@@ -380,6 +393,11 @@ func StartAdmin(stack *node.Node) {
 	metaapi.Info = Info
 	metaapi.GetMiners = getMiners
 	metaapi.GetMinerStatus = getMinerStatus
+	metaapi.EtcdInit = EtcdInit
+	metaapi.EtcdAddMember = EtcdAddMember
+	metaapi.EtcdRemoveMember = EtcdRemoveMember
+	metaapi.EtcdJoin = EtcdJoin
+	metaapi.EtcdMoveLeader = EtcdMoveLeader
 
 	rpcCli, err := stack.Attach()
 	if err != nil {
@@ -397,15 +415,16 @@ func StartAdmin(stack *node.Node) {
 	}
 
 	admin = &metaAdmin{
-		lock:      &sync.Mutex{},
-		from:      nilAddress,
-		anchor:    nilAddress,
-		admin:     nilAddress,
-		Updates:   make(chan bool, 10),
-		rpcCli:    rpcCli,
-		cli:       ethclient.NewClient(rpcCli),
-		anchorAbi: anchorContract.Abi,
-		adminAbi:  adminContract.Abi,
+		lock:        &sync.Mutex{},
+		anchor:      nilAddress,
+		admin:       nilAddress,
+		Updates:     make(chan bool, 10),
+		rpcCli:      rpcCli,
+		cli:         ethclient.NewClient(rpcCli),
+		etcdDir:     path.Join(datadir, "etcd"),
+		etcdTimeout: 30 * time.Second,
+		anchorAbi:   anchorContract.Abi,
+		adminAbi:    adminContract.Abi,
 	}
 
 	admin.bootNodeId, admin.bootAccount, err = admin.getGenesisInfo()
@@ -438,7 +457,6 @@ func (ma *metaAdmin) addPeer(node *metaNode) error {
 }
 
 func (ma *metaAdmin) update() {
-	//refresh := params.ConsensusMethod == "etcd" && !etcdhelper.IsRunning()
 	refresh := false
 
 	newAdmin := ma.getAdminAddress()
@@ -456,7 +474,6 @@ func (ma *metaAdmin) update() {
 		(modifiedBlock != 0 && ma.modifiedBlock != modifiedBlock) {
 		log.Debug(fmt.Sprintf("Modified Block: %d", modifiedBlock))
 
-		self := ma.self
 		ma.modifiedBlock = modifiedBlock
 		ma.blocksPer = blocksPer
 
@@ -468,16 +485,6 @@ func (ma *metaAdmin) update() {
 			}
 		}
 		ma.nodes = _nodes
-
-		if params.ConsensusMethod == params.ConsensusETCD {
-			needToStartEtcd := self == nil && ma.self != nil
-			if !needToStartEtcd && ma.self != nil {
-				//needToStartEtcd = !etcdhelper.IsRunning()
-			}
-			if needToStartEtcd {
-				//ma.startEtcd()
-			}
-		}
 
 		log.Debug(fmt.Sprintf("Added:\n"))
 		for _, i := range addedNodes {
@@ -543,7 +550,7 @@ func (ma *metaAdmin) run() {
 		if ma.nodeInfo == nil {
 			nodeInfo, err := ma.getNodeInfo()
 			if err != nil {
-				log.Error(fmt.Sprintf("Failed to get node info: %v", err))
+				log.Error("Failed to get node info", "error", err)
 			} else {
 				ma.nodeInfo = nodeInfo
 			}
@@ -557,6 +564,9 @@ func (ma *metaAdmin) run() {
 		}
 		if ma.admin != nilAddress && ma.nodeInfo != nil {
 			ma.update()
+			if !ma.etcdIsRunning() {
+				EtcdStart()
+			}
 		}
 
 		ma.checkMining()
@@ -675,7 +685,7 @@ func (ma *metaAdmin) getNodeInfo() (*p2p.NodeInfo, error) {
 	err := ma.rpcCli.CallContext(ctx, &nodeInfo, "admin_nodeInfo")
 	cancel()
 	if err != nil {
-		log.Error(fmt.Sprintf("Cannot get node info: %v", err))
+		log.Error("Cannot get node info", "error", err)
 	}
 	return nodeInfo, err
 }
@@ -691,7 +701,7 @@ func (ma *metaAdmin) getPeerInfo(id string) (*p2p.NodeInfo, error) {
 	err = ma.rpcCli.CallContext(ctx, &nodeInfo, "admin_peerInfo", nodeId)
 	cancel()
 	if err != nil {
-		log.Error(fmt.Sprintf("Cannot get peer info(%s): %v", id, err))
+		log.Error("Cannot get peer info", "id", id, "error", err)
 	}
 	return nodeInfo, err
 }
@@ -843,6 +853,7 @@ func Info() interface{} {
 			"self":          self,
 			"nodes":         nodes,
 			"miners":        admin.miners(),
+			"etcd":          admin.etcdInfo(),
 		}
 		return info
 	}
@@ -931,11 +942,11 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 
 	var miners []*metaapi.MetadiumMinerStatus
 	var err error
-	statusExCh := make(chan *metaapi.MetadiumMinerStatus, 1)
-	metaapi.SetStatusExChannel(statusExCh)
+	msgch := make(chan interface{}, 1)
+	metaapi.SetMsgChannel(msgch)
 	defer func() {
-		metaapi.SetStatusExChannel(nil)
-		close(statusExCh)
+		metaapi.SetMsgChannel(nil)
+		close(msgch)
 	}()
 
 	timer := time.NewTimer(5 * time.Second)
@@ -987,8 +998,12 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 			break
 		}
 		select {
-		case s := <-statusExCh:
-			if b, ok := peers[s.Name]; ok {
+		case msg := <-msgch:
+			s, ok := msg.(*metaapi.MetadiumMinerStatus)
+			if !ok {
+				continue
+			}
+			if b, exists := peers[s.Name]; exists {
 				miners = append(miners, s)
 				if b == false {
 					peers[s.Name] = true
