@@ -99,9 +99,9 @@ func (ma *metaAdmin) etcdFixCluster(cluster string) (string, error) {
 
 func (ma *metaAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	// LPUrls: listening peer urls
-	// APUrls: advertized peer urls
+	// APUrls: advertised peer urls
 	// LCUrls: listening client urls
-	// LPUrls: advertized client urls
+	// LPUrls: advertised client urls
 	cfg := embed.NewConfig()
 	cfg.Dir = ma.etcdDir
 	cfg.Name = ma.self.Name
