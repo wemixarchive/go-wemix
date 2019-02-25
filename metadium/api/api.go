@@ -21,6 +21,7 @@ type MetadiumMinerStatus struct {
 	Mining            bool        `json:"mining"`
 	LatestBlockHeight *big.Int    `json:"latest-block-height"`
 	LatestBlockHash   common.Hash `json:"latest-block-hash"`
+	LatestBlockTd     *big.Int    `json:"latest-block-td"`
 
 	Syncing      bool                  `json:"syncing"`
 	SyncProgress ethereum.SyncProgress `json:"sync-progress"`

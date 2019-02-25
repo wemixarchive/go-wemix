@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/log"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 )
 
@@ -165,7 +166,10 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 	// Short circuit if no peers are available
 	if peer == nil {
 		return
+	} else if metaminer.AmPartner() && !metaminer.IsPartner(peer.ID().String()) {
+		return
 	}
+
 	// Make sure the peer's TD is higher than our own
 	currentBlock := pm.blockchain.CurrentBlock()
 	td := pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())

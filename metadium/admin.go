@@ -448,6 +448,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 	}
 
 	metaminer.IsMinerFunc = IsMiner
+	metaminer.AmPartnerFunc = AmPartner
 	metaminer.IsPartnerFunc = IsPartner
 	metaminer.LogBlockFunc = LogBlock
 	metaminer.CalculateRewardsFunc = calculateRewards
@@ -805,6 +806,18 @@ func IsMiner(height int) bool {
 	}
 }
 
+func AmPartner() bool {
+	if admin == nil {
+		return false
+	}
+
+	admin.lock.Lock()
+	defer admin.lock.Unlock()
+
+	return (admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId) ||
+		(admin.self != nil && admin.self.Partner)
+}
+
 func IsPartner(id string) bool {
 	if admin == nil {
 		return false
@@ -815,7 +828,11 @@ func IsPartner(id string) bool {
 
 	n, ok := admin.nodes[id]
 	if !ok {
-		return false
+		if id == admin.bootNodeId {
+			return true
+		} else {
+			return false
+		}
 	}
 
 	// TODO: need to check NotBefore and NotAfter
@@ -834,7 +851,7 @@ func LogBlock(height int64) {
 	admin.blocksMined++
 	height++
 	if admin.blocksMined >= admin.blocksPer &&
-		int(height) % admin.blocksPer == 0 {
+		int(height)%admin.blocksPer == 0 {
 		// time to yield leader role
 		_, next, _ := admin.getMinerNodes(int(height), true)
 		if next.Id == admin.self.Id {
