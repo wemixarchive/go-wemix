@@ -102,10 +102,10 @@ var (
 	ConsensusMethod         int    = ConsensusPoA   // consensus method
 	FixedDifficulty         uint64 = 1          // 0 means no fixed difficulty
 	FixedGasLimit           uint64 = 0x10000000     // 0 means no fixed gas limit
-	MaxIdleBlockInterval    uint64 = 600        // in seconds
+	MaxIdleBlockInterval    uint64 = 5          // in seconds
 	BlocksPerTurn           uint64 = 100
 
-	NonceLimit				uint64 = 10000		// nonce limit for non-governing accounts
+	NonceLimit				uint64 = 0		    // nonce limit for non-governing accounts
 	UseRocksDb              int    = 1          // LevelDB (0) or RocksDB (1)
 	PrefetchCount           int    = 0          // Transaction Prefetch count for faster db read
 )
