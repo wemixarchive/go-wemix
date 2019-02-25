@@ -63,7 +63,7 @@ const (
 	GetReceiptsMsg = 0x0f
 	ReceiptsMsg    = 0x10
 
-	// Added by Metadium
+	// Added by Metadium, meta/71
 	GetPendingTxsMsg = 0x11
 	GetStatusExMsg   = 0x12
 	StatusExMsg      = 0x13

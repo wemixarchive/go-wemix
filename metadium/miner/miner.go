@@ -12,6 +12,7 @@ import (
 
 var (
 	IsMinerFunc          func(int) bool
+	AmPartnerFunc        func() bool
 	IsPartnerFunc        func(string) bool
 	LogBlockFunc         func(int64)
 	CalculateRewardsFunc func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
@@ -32,6 +33,14 @@ func IsPartner(id string) bool {
 		return false
 	} else {
 		return IsPartnerFunc(id)
+	}
+}
+
+func AmPartner() bool {
+	if AmPartnerFunc == nil {
+		return false
+	} else {
+		return AmPartnerFunc()
 	}
 }
 

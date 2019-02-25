@@ -429,6 +429,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return p.SendBlockHeaders(headers)
 
 	case msg.Code == BlockHeadersMsg:
+		if metaminer.AmPartner() && !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
+
 		// A batch of headers arrived to one of our previous requests
 		var headers []*types.Header
 		if err := msg.Decode(&headers); err != nil {
@@ -509,6 +514,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return p.SendBlockBodiesRLP(bodies)
 
 	case msg.Code == BlockBodiesMsg:
+		if metaminer.AmPartner() && !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
+
 		// A batch of block bodies arrived to one of our previous requests
 		var request blockBodiesData
 		if err := msg.Decode(&request); err != nil {
@@ -620,6 +630,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	case msg.Code == NewBlockHashesMsg:
+		if metaminer.AmPartner() && !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
+
 		var announces newBlockHashesData
 		if err := msg.Decode(&announces); err != nil {
 			return errResp(ErrDecode, "%v: %v", msg, err)
@@ -640,6 +655,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	case msg.Code == NewBlockMsg:
+		if metaminer.AmPartner() && !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
+
 		// Retrieve and decode the propagated block
 		var request newBlockData
 		if err := msg.Decode(&request); err != nil {
@@ -692,6 +712,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	// Metadium: leader wants to get left-over transactions if any
 	case p.version >= eth63 && msg.Code == GetPendingTxsMsg:
+		if !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
 		if !pm.txpool.PendingEmpty() {
 			txs, err := pm.txpool.Pending()
 			if err != nil {
@@ -703,20 +727,38 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return nil
 
 	case p.version >= eth63 && msg.Code == GetStatusExMsg:
-		if err := p.SendStatusEx(metaapi.GetMinerStatus()); err != nil {
+		if !metaminer.AmPartner() || !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
+		statusEx := metaapi.GetMinerStatus()
+		statusEx.LatestBlockTd = pm.blockchain.GetTd(statusEx.LatestBlockHash,
+			statusEx.LatestBlockHeight.Uint64())
+		if err := p.SendStatusEx(statusEx); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 		return nil
 
 	case p.version >= eth63 && msg.Code == StatusExMsg:
+		if !metaminer.AmPartner() || !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
 		var status metaapi.MetadiumMinerStatus
 		if err := msg.Decode(&status); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+		if _, td := p.Head(); status.LatestBlockTd.Cmp(td) > 0 {
+			p.SetHead(status.LatestBlockHash, status.LatestBlockTd)
 		}
 		metaapi.GotStatusEx(&status)
 		return nil
 
 	case p.version >= eth63 && msg.Code == EtcdAddMemberMsg:
+		if !metaminer.AmPartner() || !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
 		cluster, _ := metaapi.EtcdAddMember(p.ID().String())
 		if err := p.SendEtcdCluster(cluster); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
@@ -724,6 +766,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return nil
 
 	case p.version >= eth63 && msg.Code == EtcdClusterMsg:
+		if !metaminer.AmPartner() || !metaminer.IsPartner(p.ID().String()) {
+			// ignore it
+			return nil
+		}
 		var cluster string
 		if err := msg.Decode(&cluster); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
