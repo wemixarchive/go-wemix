@@ -285,6 +285,10 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 	if err := misc.VerifyForkHashes(chain.Config(), header, uncle); err != nil {
 		return err
 	}
+	// Metadium: Check if it's generated and signed by a registered node
+	if !metaminer.VerifyBlockSig(header.Number, header.MinerNodeId, header.Root, header.MinerNodeSig) {
+		return consensus.ErrUnauthorized
+	}
 	return nil
 }
 
@@ -555,6 +559,14 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	// sign header.Root with node's private key
+	nodeId, sig, err := metaminer.SignBlock(header.Root)
+	if err != nil {
+		return nil, err
+	} else {
+		header.MinerNodeId = nodeId
+		header.MinerNodeSig = sig
+	}
 
 	// Header seems complete, assemble into a block and return
 	return types.NewBlock(header, txs, uncles, receipts), nil

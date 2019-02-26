@@ -61,6 +61,8 @@ type metaMember struct {
 }
 
 type metaAdmin struct {
+	stack *node.Node
+
 	bootNodeId  string // allowed to generate block without admin contract
 	bootAccount common.Address
 	nodeInfo    *p2p.NodeInfo
@@ -453,6 +455,8 @@ func StartAdmin(stack *node.Node, datadir string) {
 	metaminer.LogBlockFunc = LogBlock
 	metaminer.CalculateRewardsFunc = calculateRewards
 	metaminer.VerifyRewardsFunc = verifyRewards
+	metaminer.SignBlockFunc = signBlock
+	metaminer.VerifyBlockSigFunc = verifyBlockSig
 	metaminer.RequirePendingTxsFunc = requirePendingTxs
 	metaapi.Info = Info
 	metaapi.GetMiners = getMiners
@@ -479,6 +483,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 	}
 
 	admin = &metaAdmin{
+		stack:       stack,
 		lock:        &sync.Mutex{},
 		anchor:      nilAddress,
 		admin:       nilAddress,
@@ -741,6 +746,23 @@ func calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Ad
 func verifyRewards(num *big.Int, rewards string) error {
 	return nil
 	//return admin.verifyRewards(num, rewards)
+}
+
+func signBlock(hash common.Hash) (nodeId, sig []byte, err error) {
+	if admin == nil {
+		err = errors.New("Not initialized")
+		return
+	}
+
+	prvKey := admin.stack.Server().PrivateKey
+	sig, err = crypto.Sign(hash.Bytes(), prvKey)
+	return discover.PubkeyID(&prvKey.PublicKey).Bytes(), sig, err
+}
+
+func verifyBlockSig(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool {
+	// TODO: need to check if nodeId is a valid partner in the 'height' block.
+	pubKey, err := crypto.Ecrecover(hash.Bytes(), sig)
+	return err == nil && nodeId != nil && len(pubKey) > 1 && bytes.Equal(nodeId, pubKey[1:])
 }
 
 func (ma *metaAdmin) getNodeInfo() (*p2p.NodeInfo, error) {
