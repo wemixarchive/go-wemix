@@ -3,7 +3,7 @@
 package miner
 
 import (
-	"fmt"
+	"errors"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -11,13 +11,15 @@ import (
 )
 
 var (
-	IsMinerFunc          func(int) bool
-	AmPartnerFunc        func() bool
-	IsPartnerFunc        func(string) bool
-	LogBlockFunc         func(int64)
-	CalculateRewardsFunc func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
-	VerifyRewardsFunc    func(*big.Int, string) error
-	RequirePendingTxsFunc  func() bool
+	IsMinerFunc           func(int) bool
+	AmPartnerFunc         func() bool
+	IsPartnerFunc         func(string) bool
+	LogBlockFunc          func(int64)
+	CalculateRewardsFunc  func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
+	VerifyRewardsFunc     func(*big.Int, string) error
+	SignBlockFunc         func(hash common.Hash) (nodeid, sig []byte, err error)
+	VerifyBlockSigFunc    func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
+	RequirePendingTxsFunc func() bool
 )
 
 func IsMiner(height int) bool {
@@ -56,7 +58,7 @@ func IsPoW() bool {
 
 func CalculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
 	if CalculateRewardsFunc == nil {
-		return nil, fmt.Errorf("Not initialized")
+		return nil, errors.New("Not initialized")
 	} else {
 		return CalculateRewardsFunc(num, blockReward, fees, addBalance)
 	}
@@ -64,9 +66,26 @@ func CalculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Ad
 
 func VerifyRewards(num *big.Int, rewards string) error {
 	if VerifyRewardsFunc == nil {
-		return fmt.Errorf("Not initialized")
+		return errors.New("Not initialized")
 	} else {
 		return VerifyRewardsFunc(num, rewards)
+	}
+}
+
+func SignBlock(hash common.Hash) (nodeId, sig []byte, err error) {
+	if SignBlockFunc == nil {
+		err = errors.New("Not initialized")
+	} else {
+		nodeId, sig, err = SignBlockFunc(hash)
+	}
+	return
+}
+
+func VerifyBlockSig(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool {
+	if VerifyBlockSigFunc == nil {
+		return false
+	} else {
+		return VerifyBlockSigFunc(height, nodeId, hash, sig)
 	}
 }
 
