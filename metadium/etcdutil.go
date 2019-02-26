@@ -264,6 +264,8 @@ func (ma *metaAdmin) etcdWipe() error {
 func (ma *metaAdmin) etcdInit() error {
 	if ma.etcdIsRunning() {
 		return ErrAlreadyRunning
+	} else if ma.self == nil {
+		return ErrNotRunning
 	}
 
 	cfg := ma.etcdNewConfig(true)
