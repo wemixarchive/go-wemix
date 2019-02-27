@@ -199,6 +199,11 @@ web3._extend({
 			call: 'admin_stopWS'
 		}),
 		new web3._extend.Method({
+			name: 'syncWith',
+			call: 'admin_synchronizeWith',
+			params: 1
+		}),
+		new web3._extend.Method({
 			name: 'requestMinerStatus',
 			call: 'admin_requestMinerStatus',
 			params: 1

@@ -405,10 +405,10 @@ func (ma *metaAdmin) etcdIsLeader() bool {
 	}
 }
 
-// returns the name of the leader node
-func (ma *metaAdmin) etcdLeaderName() string {
+// returns leader id and node
+func (ma *metaAdmin) etcdLeader(locked bool) (uint64, *metaNode) {
 	if !ma.etcdIsRunning() {
-		return ""
+		return 0, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(),
@@ -417,17 +417,30 @@ func (ma *metaAdmin) etcdLeaderName() string {
 	cancel()
 
 	if err != nil {
-		return ""
+		return 0, nil
 	}
 
-	leaderId := uint64(ma.etcd.Server.Leader())
+	lid := uint64(ma.etcd.Server.Leader())
 	for _, i := range rsp.Members {
-		if uint64(i.ID) == leaderId {
-			return i.Name
+		if uint64(i.ID) == lid {
+			var node *metaNode
+			if !locked {
+				ma.lock.Lock()
+			}
+			for _, j := range ma.nodes {
+				if i.Name == j.Name {
+					node = j
+					break
+				}
+			}
+			if !locked {
+				ma.lock.Unlock()
+			}
+			return lid, node
 		}
 	}
 
-	return ""
+	return 0, nil
 }
 
 func (ma *metaAdmin) etcdInfo() interface{} {

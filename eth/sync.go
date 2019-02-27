@@ -17,10 +17,12 @@
 package eth
 
 import (
+	"fmt"
 	"math/rand"
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -217,5 +219,14 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
 		go pm.BroadcastBlock(head, false)
+	}
+}
+
+func (pm *ProtocolManager) SynchroniseWith(id discover.NodeID) error {
+	if p := pm.peers.Peer(fmt.Sprintf("%x", id[:8])); p != nil {
+		pm.synchronise(p)
+		return nil
+	} else {
+		return ethereum.NotFound
 	}
 }
