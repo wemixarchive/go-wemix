@@ -234,7 +234,7 @@ func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNod
 		}
 	}
 
-	var leaderName = ma.etcdLeaderName()
+	_, leaderNode := ma.etcdLeader(locked)
 	var miner, next *metaNode
 	ix := height / admin.blocksPer % len(nodes)
 	i := ix
@@ -243,7 +243,7 @@ func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNod
 			break
 		}
 		n := nodes[i]
-		if miner == nil && n.Name == leaderName {
+		if miner == nil && leaderNode != nil && n.Name == leaderNode.Name {
 			miner = n
 			miner.Miner = true
 		}
@@ -502,6 +502,12 @@ func StartAdmin(stack *node.Node, datadir string) {
 	}
 
 	go admin.run()
+	go func() {
+		for {
+			admin.updateMiner(false)
+			time.Sleep(1 * time.Second)
+		}
+	}()
 }
 
 func (ma *metaAdmin) addPeer(node *metaNode) error {
@@ -795,37 +801,6 @@ func (ma *metaAdmin) getPeerInfo(id string) (*p2p.NodeInfo, error) {
 func (ma *metaAdmin) isPeerUp(id string) bool {
 	nodeInfo, err := ma.getPeerInfo(id)
 	return err == nil && nodeInfo != nil
-}
-
-func IsMiner(height int) bool {
-	if params.ConsensusMethod == params.ConsensusPoW {
-		return true
-	} else if params.ConsensusMethod == params.ConsensusETCD {
-		return false
-	} else if params.ConsensusMethod == params.ConsensusPoA {
-		if admin == nil {
-			return false
-		} else if admin.self == nil || len(admin.nodes) <= 0 {
-			if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
-				return true
-			} else {
-				return false
-			}
-		}
-
-		if height != admin.lastBlock {
-			admin.update()
-		}
-
-		if admin.etcdIsLeader() {
-			return true
-		} else {
-			admin.blocksMined = 0
-			return false
-		}
-	} else {
-		return false
-	}
 }
 
 func AmPartner() bool {

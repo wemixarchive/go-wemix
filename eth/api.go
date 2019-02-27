@@ -290,6 +290,11 @@ func (api *PrivateAdminAPI) EtcdMoveLeader(name string) error {
 	return metaapi.EtcdMoveLeader(name)
 }
 
+// Synchronize with the peer
+func (api *PrivateAdminAPI) SynchroniseWith(id discover.NodeID) error {
+	return api.eth.protocolManager.SynchroniseWith(id)
+}
+
 // PublicDebugAPI is the collection of Ethereum full node APIs exposed
 // over the public debugging endpoint.
 type PublicDebugAPI struct {
