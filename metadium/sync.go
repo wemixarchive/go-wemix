@@ -94,7 +94,7 @@ func (ma *metaAdmin) updateMiner(locked bool) {
 	}
 
 	lid, lnode := ma.etcdLeader(locked)
-	if lid != leaderId {
+	if lid != leaderId && lid != 0 {
 		syncLock.Lock()
 		_, oldLeader := leaderId, leader
 		leaderId, leader = lid, lnode
