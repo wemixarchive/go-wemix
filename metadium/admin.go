@@ -837,6 +837,24 @@ func IsPartner(id string) bool {
 	return n.Partner
 }
 
+func (ma *metaAdmin) pendingEmpty() bool {
+	type txpool_status struct {
+		Pending hexutil.Uint `json:"pending"`
+		Queued  hexutil.Uint `json:"queued"`
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var status txpool_status
+	if err := admin.rpcCli.CallContext(ctx, &status, "txpool_status"); err != nil {
+		log.Error("Canot get txpool.status", "error", err)
+		return false
+	}
+
+	return status.Pending == 0
+}
+
 func LogBlock(height int64) {
 	if admin == nil || admin.self == nil {
 		return
@@ -850,6 +868,11 @@ func LogBlock(height int64) {
 	if admin.blocksMined >= admin.blocksPer &&
 		int(height)%admin.blocksPer == 0 {
 		// time to yield leader role
+
+		if !admin.pendingEmpty() {
+			log.Info("Metadium - not yielding due to pending txs...")
+			return
+		}
 		_, next, _ := admin.getMinerNodes(int(height), true)
 		if next.Id == admin.self.Id {
 			log.Info("Metadium - yield to self", "mined", admin.blocksMined,
