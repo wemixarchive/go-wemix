@@ -669,6 +669,12 @@
 			"revisionTime": "2016-04-24T11:30:07Z"
 		},
 		{
+			"checksumSHA1": "bKMZjd2wPw13VwoE7mBeSv5djFA=",
+			"path": "github.com/matttproud/golang_protobuf_extensions/pbutil",
+			"revision": "c12348ce28de40eed0136aa2b644d0ee0650e56c",
+			"revisionTime": "2016-04-24T11:30:07Z"
+		},
+		{
 			"checksumSHA1": "L3leymg2RT8hFl5uL+5KP/LpBkg=",
 			"path": "github.com/mitchellh/go-wordwrap",
 			"revision": "ad45545899c7b13c020ea92b2072220eefad42b8",
@@ -993,6 +999,12 @@
 			"revisionTime": "2017-10-17T19:57:56Z"
 		},
 		{
+			"checksumSHA1": "SCjmkRvVva63m2zGRaAyTYh5xkM=",
+			"path": "github.com/tmc/grpc-websocket-proxy/wsproxy",
+			"revision": "830351dc03c6f07d625727d5f993a463babb20e1",
+			"revisionTime": "2017-10-17T19:57:56Z"
+		},
+		{
 			"checksumSHA1": "nD6S4KB0S+YHxVMDDE+w3PyXaMk=",
 			"path": "github.com/uber/jaeger-client-go",
 			"revision": "f7e0d4744fa6d5287c53b8ac8d4f83089ce07ce8",
@@ -1203,6 +1215,12 @@
 			"revisionTime": "2018-09-26T22:24:25Z"
 		},
 		{
+			"checksumSHA1": "fhxj9uzosD3dQefNF5JuGJzGZwg=",
+			"path": "golang.org/x/crypto/internal/chacha20",
+			"revision": "e3636079e1a4c1f337f212cc5cd2aca108f6c900",
+			"revisionTime": "2018-09-26T22:24:25Z"
+		},
+		{
 			"checksumSHA1": "/U7f2gaH6DnEmLguVLDbipU6kXU=",
 			"path": "golang.org/x/crypto/internal/subtle",
 			"revision": "e3636079e1a4c1f337f212cc5cd2aca108f6c900",
@@ -1253,8 +1271,8 @@
 		{
 			"checksumSHA1": "vKbPb9fpjCdzuoOvajOJnYfHG2g=",
 			"path": "golang.org/x/crypto/poly1305",
-			"revision": "ff983b9c42bc9fbf91556e191cc8efb585c16908",
-			"revisionTime": "2018-07-25T11:53:45Z"
+			"revision": "e3636079e1a4c1f337f212cc5cd2aca108f6c900",
+			"revisionTime": "2018-09-26T22:24:25Z"
 		},
 		{
 			"checksumSHA1": "vKbPb9fpjCdzuoOvajOJnYfHG2g=",

@@ -33,7 +33,7 @@ func (ma *metaAdmin) getLatestBlockInfo(node *metaNode) (height *big.Int, hash c
 	}()
 
 	timer := time.NewTimer(60 * time.Second)
-	err = ma.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", &node.Id)
+	err = ma.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", &node.Idv4)
 	if err != nil {
 		log.Error("Metadium RequestMinerStatus Failed", "id", node.Id, "error", err)
 		return
@@ -79,7 +79,7 @@ func (ma *metaAdmin) syncWith(node *metaNode) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	err = ma.rpcCli.CallContext(ctx, nil, "admin_synchroniseWith", &node.Id)
+	err = ma.rpcCli.CallContext(ctx, nil, "admin_synchroniseWith", &node.Idv4)
 	if err != nil {
 		log.Error("Metadium", "failed to synchronize with", node.Name,
 			"error", err)

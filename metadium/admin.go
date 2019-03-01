@@ -43,7 +43,7 @@ type metaNode struct {
 	Partner   bool   `json:"partner"`
 	Name      string `json:"name"`
 	Id        string `json:"id"`
-	V4Id      string `json:"v4id"`
+	Idv4      string `json:"idv4"`
 	Ip        string `json:"ip"`
 	Port      int    `json:"port"`
 	NotBefore int    `json:"notBefore"`
@@ -117,15 +117,15 @@ func (n *metaNode) eq(m *metaNode) bool {
 }
 
 // convert v5 id to v4 id
-func toV4Id(id string) (string, error) {
+func toIdv4(id string) (string, error) {
 	if len(id) == 64 {
 		return id, nil
 	} else if len(id) == 128 {
-		v4id, err := enode.ParseV4(fmt.Sprintf("enode://%v@127.0.0.1:8589", id))
+		idv4, err := enode.ParseV4(fmt.Sprintf("enode://%v@127.0.0.1:8589", id))
 		if err != nil {
 			return "", err
 		} else {
-			return v4id.ID().String(), nil
+			return idv4.ID().String(), nil
 		}
 	} else {
 		return "", fmt.Errorf("Invalid V5 Identifier")
@@ -150,7 +150,7 @@ func (ma *metaAdmin) getGenesisInfo() (string, common.Address, error) {
 	if len(nodeId) < 128 {
 		panic("Invalid bootnode id in the genesis block.")
 	}
-	nodeId, err = toV4Id(nodeId[len(nodeId)-128:])
+	nodeId, err = toIdv4(nodeId[len(nodeId)-128:])
 	if err != nil {
 		panic("Invalid bootnode id in the genesis block.")
 	}
@@ -252,7 +252,7 @@ func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNod
 	})
 
 	for _, n := range nodes {
-		if (ma.self != nil && n.Id == ma.self.Id) || ma.isPeerUp(n.Id) {
+		if (ma.self != nil && n.Id == ma.self.Id) || ma.isPeerUp(n.Idv4) {
 			n.Status = "up"
 		} else {
 			n.Status = "down"
@@ -308,7 +308,7 @@ func (ma *metaAdmin) getNode(ctx context.Context, id string, block *big.Int) (*m
 	n := new(metaNode)
 	err = json.Unmarshal([]byte(jsonOut), n)
 	if err == nil {
-		n.V4Id, err = toV4Id(n.Id)
+		n.Idv4, err = toIdv4(n.Id)
 	}
 	return n, err
 }
@@ -539,7 +539,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 }
 
 func (ma *metaAdmin) addPeer(node *metaNode) error {
-	if node.V4Id == ma.nodeInfo.ID {
+	if node.Idv4 == ma.nodeInfo.ID {
 		return nil
 	}
 
@@ -582,8 +582,8 @@ func (ma *metaAdmin) update() {
 
 		_nodes := map[string]*metaNode{}
 		for _, i := range nodes {
-			_nodes[i.Id] = i
-			if i.V4Id == ma.nodeInfo.ID {
+			_nodes[i.Idv4] = i
+			if i.Idv4 == ma.nodeInfo.ID {
 				ma.self = i
 			}
 		}
@@ -840,6 +840,7 @@ func AmPartner() bool {
 		(admin.self != nil && admin.self.Partner)
 }
 
+// id is v4 id
 func IsPartner(id string) bool {
 	if admin == nil {
 		return false
@@ -1069,12 +1070,12 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 		if admin.self != nil && admin.self.Id == node.Id {
 			miners = append(miners, getMinerStatus())
 			return miners
-		} else if !admin.isPeerUp(node.Id) {
+		} else if !admin.isPeerUp(node.Idv4) {
 			miners = append(miners, getDownStatus(node))
 			return miners
 		}
 
-		err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", &node.Id)
+		err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", &node.Idv4)
 		if err != nil {
 			log.Error("Metadium RequestMinerStatus Failed", "id", node.Id, "error", err)
 		} else {
@@ -1086,12 +1087,12 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 			if admin.self != nil && admin.self.Id == n.Id {
 				miners = append(miners, getMinerStatus())
 				continue
-			} else if !admin.isPeerUp(n.Id) {
+			} else if !admin.isPeerUp(n.Idv4) {
 				miners = append(miners, getDownStatus(n))
 				continue
 			}
 
-			err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", n.Id)
+			err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", n.Idv4)
 			if err != nil {
 				log.Error("Metadium RequestMinerStatus Failed", "id", n.Id, "error", err)
 			} else {
