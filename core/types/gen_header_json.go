@@ -13,6 +13,7 @@ import (
 
 var _ = (*headerMarshaling)(nil)
 
+// MarshalJSON marshals as JSON.
 func (h Header) MarshalJSON() ([]byte, error) {
 	type Header struct {
 		ParentHash   common.Hash   `json:"parentHash"       gencodec:"required"`
@@ -30,10 +31,10 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Time         *hexutil.Big  `json:"timestamp"        gencodec:"required"`
 		Extra        hexutil.Bytes `json:"extraData"        gencodec:"required"`
 		Rewards	     []byte        `json:"rewards"          gencodec:"required"`
-		MixDigest    common.Hash   `json:"mixHash"          gencodec:"required"`
-		Nonce        BlockNonce    `json:"nonce"            gencodec:"required"`
-		MinerNodeId  hexutil.Bytes `json:"minderNodeId"     gencodec:"required"`
-		MinerNodeSig hexutil.Bytes `json:"minderNodeId"     gencodec:"required"`
+		MixDigest    common.Hash   `json:"mixHash"`
+		Nonce        BlockNonce    `json:"nonce"`
+		MinerNodeId  hexutil.Bytes `json:"minderNodeId"`
+		MinerNodeSig hexutil.Bytes `json:"minderNodeId"`
 		Hash         common.Hash   `json:"hash"`
 	}
 	var enc Header
@@ -60,6 +61,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&enc)
 }
 
+// UnmarshalJSON unmarshals from JSON.
 func (h *Header) UnmarshalJSON(input []byte) error {
 	type Header struct {
 		ParentHash   *common.Hash    `json:"parentHash"       gencodec:"required"`
@@ -77,10 +79,10 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		Time         *hexutil.Big    `json:"timestamp"        gencodec:"required"`
 		Extra        *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
 		Rewards      *hexutil.Bytes  `json:"rewards"          gencodec:"required"`
-		MixDigest    *common.Hash    `json:"mixHash"          gencodec:"required"`
-		Nonce        *BlockNonce     `json:"nonce"            gencodec:"required"`
-		MinerNodeId  *hexutil.Bytes  `json:"minerNodeId"      gencodec:"required"`
-		MinerNodeSig *hexutil.Bytes  `json:"minerNodeSig"     gencodec:"required"`
+		MixDigest    *common.Hash    `json:"mixHash"`
+		Nonce        *BlockNonce     `json:"nonce"`
+		MinerNodeId  *hexutil.Bytes  `json:"minerNodeId"`
+		MinerNodeSig *hexutil.Bytes  `json:"minerNodeSig"`
 	}
 	var dec Header
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -146,14 +148,12 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'rewards' for Header")
 	}
 	h.Rewards = *dec.Rewards
-	if dec.MixDigest == nil {
-		return errors.New("missing required field 'mixHash' for Header")
+	if dec.MixDigest != nil {
+		h.MixDigest = *dec.MixDigest
 	}
-	h.MixDigest = *dec.MixDigest
-	if dec.Nonce == nil {
-		return errors.New("missing required field 'nonce' for Header")
+	if dec.Nonce != nil {
+		h.Nonce = *dec.Nonce
 	}
-	h.Nonce = *dec.Nonce
 	if dec.MinerNodeId != nil {
 		h.MinerNodeId = *dec.MinerNodeId
 	}

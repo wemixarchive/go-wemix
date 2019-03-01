@@ -36,7 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	metaapi "github.com/ethereum/go-ethereum/metadium/api"
-	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -67,6 +67,15 @@ func (api *PublicEthereumAPI) Coinbase() (common.Address, error) {
 // Hashrate returns the POW hashrate
 func (api *PublicEthereumAPI) Hashrate() hexutil.Uint64 {
 	return hexutil.Uint64(api.e.Miner().HashRate())
+}
+
+// ChainId is the EIP-155 replay-protection chain id for the current ethereum chain config.
+func (api *PublicEthereumAPI) ChainId() hexutil.Uint64 {
+	chainID := new(big.Int)
+	if config := api.e.chainConfig; config.IsEIP155(api.e.blockchain.CurrentBlock().Number()) {
+		chainID = config.ChainID
+	}
+	return (hexutil.Uint64)(chainID.Uint64())
 }
 
 // PublicMinerAPI provides an API to control the miner.
@@ -253,12 +262,12 @@ func (api *PrivateAdminAPI) ImportChain(file string) (bool, error) {
 }
 
 // RequestMinerStatus asks the given peer to send extended status
-func (api *PrivateAdminAPI) RequestMinerStatus(id discover.NodeID) error {
+func (api *PrivateAdminAPI) RequestMinerStatus(id enode.ID) error {
 	return api.eth.protocolManager.RequestMinerStatus(id)
 }
 
 // RequestEtcdAddMember asks the given peer to add this node to the etcd cluster
-func (api *PrivateAdminAPI) RequestEtcdAddMember(id discover.NodeID) error {
+func (api *PrivateAdminAPI) RequestEtcdAddMember(id enode.ID) error {
 	return api.eth.protocolManager.RequestEtcdAddMember(id)
 }
 
@@ -291,7 +300,7 @@ func (api *PrivateAdminAPI) EtcdMoveLeader(name string) error {
 }
 
 // Synchronize with the peer
-func (api *PrivateAdminAPI) SynchroniseWith(id discover.NodeID) error {
+func (api *PrivateAdminAPI) SynchroniseWith(id enode.ID) error {
 	return api.eth.protocolManager.SynchroniseWith(id)
 }
 
@@ -491,16 +500,16 @@ func (api *PrivateDebugAPI) getModifiedAccounts(startBlock, endBlock *types.Bloc
 	if startBlock.Number().Uint64() >= endBlock.Number().Uint64() {
 		return nil, fmt.Errorf("start block height (%d) must be less than end block height (%d)", startBlock.Number().Uint64(), endBlock.Number().Uint64())
 	}
+	triedb := api.eth.BlockChain().StateCache().TrieDB()
 
-	oldTrie, err := trie.NewSecure(startBlock.Root(), trie.NewDatabase(api.eth.chainDb), 0)
+	oldTrie, err := trie.NewSecure(startBlock.Root(), triedb, 0)
 	if err != nil {
 		return nil, err
 	}
-	newTrie, err := trie.NewSecure(endBlock.Root(), trie.NewDatabase(api.eth.chainDb), 0)
+	newTrie, err := trie.NewSecure(endBlock.Root(), triedb, 0)
 	if err != nil {
 		return nil, err
 	}
-
 	diff, _ := trie.NewDifferenceIterator(oldTrie.NodeIterator([]byte{}), newTrie.NodeIterator([]byte{}))
 	iter := trie.NewIterator(diff)
 

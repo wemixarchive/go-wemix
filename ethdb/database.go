@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
+// +build !js
+
 package ethdb
 
 import (
@@ -187,15 +189,12 @@ func (db *LDBDatabase) LDB() *leveldb.DB {
 
 // Meter configures the database metrics collectors and
 func (db *LDBDatabase) Meter(prefix string) {
-	if metrics.Enabled {
-		// Initialize all the metrics collector at the requested prefix
-		db.compTimeMeter = metrics.NewRegisteredMeter(prefix+"compact/time", nil)
-		db.compReadMeter = metrics.NewRegisteredMeter(prefix+"compact/input", nil)
-		db.compWriteMeter = metrics.NewRegisteredMeter(prefix+"compact/output", nil)
-		db.diskReadMeter = metrics.NewRegisteredMeter(prefix+"disk/read", nil)
-		db.diskWriteMeter = metrics.NewRegisteredMeter(prefix+"disk/write", nil)
-	}
-	// Initialize write delay metrics no matter we are in metric mode or not.
+	// Initialize all the metrics collector at the requested prefix
+	db.compTimeMeter = metrics.NewRegisteredMeter(prefix+"compact/time", nil)
+	db.compReadMeter = metrics.NewRegisteredMeter(prefix+"compact/input", nil)
+	db.compWriteMeter = metrics.NewRegisteredMeter(prefix+"compact/output", nil)
+	db.diskReadMeter = metrics.NewRegisteredMeter(prefix+"disk/read", nil)
+	db.diskWriteMeter = metrics.NewRegisteredMeter(prefix+"disk/write", nil)
 	db.writeDelayMeter = metrics.NewRegisteredMeter(prefix+"compact/writedelay/duration", nil)
 	db.writeDelayNMeter = metrics.NewRegisteredMeter(prefix+"compact/writedelay/counter", nil)
 
@@ -421,96 +420,6 @@ func (b *ldbBatch) ValueSize() int {
 func (b *ldbBatch) Reset() {
 	b.b.Reset()
 	b.size = 0
-}
-
-type table struct {
-	db     Database
-	prefix string
-}
-
-// NewTable returns a Database object that prefixes all keys with a given
-// string.
-func NewTable(db Database, prefix string) Database {
-	return &table{
-		db:     db,
-		prefix: prefix,
-	}
-}
-
-func (dt *table) Put(key []byte, value []byte) error {
-	if _stats_enabled {
-		atomic.AddUint64(&_w_count, 1)
-		atomic.AddUint64(&_w_bytes, uint64(len(key) + len(value)))
-	}
-	return dt.db.Put(append([]byte(dt.prefix), key...), value)
-}
-
-func (dt *table) Has(key []byte) (bool, error) {
-	if _stats_enabled {
-		atomic.AddUint64(&_l_count, 1)
-	}
-	return dt.db.Has(append([]byte(dt.prefix), key...))
-}
-
-func (dt *table) Get(key []byte) ([]byte, error) {
-	dat, err := dt.db.Get(append([]byte(dt.prefix), key...))
-	if _stats_enabled {
-		atomic.AddUint64(&_r_count, 1)
-		atomic.AddUint64(&_r_bytes, uint64(len(key) + len(dat)))
-	}
-	return dat, err
-}
-
-func (dt *table) Delete(key []byte) error {
-	if _stats_enabled {
-		atomic.AddUint64(&_d_count, 1)
-	}
-	return dt.db.Delete(append([]byte(dt.prefix), key...))
-}
-
-func (dt *table) Close() {
-	// Do nothing; don't close the underlying DB.
-}
-
-type tableBatch struct {
-	batch  Batch
-	prefix string
-}
-
-// NewTableBatch returns a Batch object which prefixes all keys with a given string.
-func NewTableBatch(db Database, prefix string) Batch {
-	return &tableBatch{db.NewBatch(), prefix}
-}
-
-func (dt *table) NewBatch() Batch {
-	return &tableBatch{dt.db.NewBatch(), dt.prefix}
-}
-
-func (tb *tableBatch) Put(key, value []byte) error {
-	if _stats_enabled {
-		atomic.AddUint64(&_w_count, 1)
-		atomic.AddUint64(&_w_bytes, uint64(len(key) + len(value)))
-	}
-	return tb.batch.Put(append([]byte(tb.prefix), key...), value)
-}
-
-func (tb *tableBatch) Delete(key []byte) error {
-	if _stats_enabled {
-		atomic.AddUint64(&_d_count, 1)
-	}
-	return tb.batch.Delete(append([]byte(tb.prefix), key...))
-}
-
-func (tb *tableBatch) Write() error {
-	return tb.batch.Write()
-}
-
-func (tb *tableBatch) ValueSize() int {
-	return tb.batch.ValueSize()
-}
-
-func (tb *tableBatch) Reset() {
-	tb.batch.Reset()
 }
 
 func EnableStats(b bool) {

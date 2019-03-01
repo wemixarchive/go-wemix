@@ -33,7 +33,8 @@ import (
 	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ethereum/go-ethereum/p2p/discv5"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -42,6 +43,7 @@ type metaNode struct {
 	Partner   bool   `json:"partner"`
 	Name      string `json:"name"`
 	Id        string `json:"id"`
+	V4Id      string `json:"v4id"`
 	Ip        string `json:"ip"`
 	Port      int    `json:"port"`
 	NotBefore int    `json:"notBefore"`
@@ -114,6 +116,22 @@ func (n *metaNode) eq(m *metaNode) bool {
 	}
 }
 
+// convert v5 id to v4 id
+func toV4Id(id string) (string, error) {
+	if len(id) == 64 {
+		return id, nil
+	} else if len(id) == 128 {
+		v4id, err := enode.ParseV4(fmt.Sprintf("enode://%v@127.0.0.1:8589", id))
+		if err != nil {
+			return "", err
+		} else {
+			return v4id.ID().String(), nil
+		}
+	} else {
+		return "", fmt.Errorf("Invalid V5 Identifier")
+	}
+}
+
 // returns
 // 1) extradata of genesis block, which is the id of the node that is allowed
 //   to generated blocks before admin contract is established.
@@ -129,6 +147,13 @@ func (ma *metaAdmin) getGenesisInfo() (string, common.Address, error) {
 	}
 
 	nodeId := hex.EncodeToString(block.Extra)
+	if len(nodeId) < 128 {
+		panic("Invalid bootnode id in the genesis block.")
+	}
+	nodeId, err = toV4Id(nodeId[len(nodeId)-128:])
+	if err != nil {
+		panic("Invalid bootnode id in the genesis block.")
+	}
 	return nodeId, block.Coinbase, nil
 }
 
@@ -223,7 +248,7 @@ func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNod
 	}
 
 	sort.Slice(nodes, func(i, j int) bool {
-		return nodes[i].Id < nodes[j].Id
+		return nodes[i].Name < nodes[j].Name
 	})
 
 	for _, n := range nodes {
@@ -282,6 +307,9 @@ func (ma *metaAdmin) getNode(ctx context.Context, id string, block *big.Int) (*m
 
 	n := new(metaNode)
 	err = json.Unmarshal([]byte(jsonOut), n)
+	if err == nil {
+		n.V4Id, err = toV4Id(n.Id)
+	}
 	return n, err
 }
 
@@ -401,10 +429,10 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer i
 
 	oldNodes := ma.getNodes()
 	sort.Slice(oldNodes, func(i, j int) bool {
-		return oldNodes[i].Id < oldNodes[j].Id
+		return oldNodes[i].Name < oldNodes[j].Name
 	})
 	sort.Slice(nodes, func(i, j int) bool {
-		return nodes[i].Id < nodes[j].Id
+		return nodes[i].Name < nodes[j].Name
 	})
 
 	i, j := 0, 0
@@ -412,7 +440,7 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer i
 		if i >= len(oldNodes) || j >= len(nodes) {
 			break
 		}
-		v := strings.Compare(oldNodes[i].Id, nodes[j].Id)
+		v := strings.Compare(oldNodes[i].Name, nodes[j].Name)
 		if v == 0 {
 			if !oldNodes[i].eq(nodes[j]) {
 				updatedNodes = append(updatedNodes, nodes[j])
@@ -511,7 +539,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 }
 
 func (ma *metaAdmin) addPeer(node *metaNode) error {
-	if node.Id == ma.nodeInfo.ID {
+	if node.V4Id == ma.nodeInfo.ID {
 		return nil
 	}
 
@@ -555,7 +583,7 @@ func (ma *metaAdmin) update() {
 		_nodes := map[string]*metaNode{}
 		for _, i := range nodes {
 			_nodes[i.Id] = i
-			if i.Id == ma.nodeInfo.ID {
+			if i.V4Id == ma.nodeInfo.ID {
 				ma.self = i
 			}
 		}
@@ -762,7 +790,9 @@ func signBlock(hash common.Hash) (nodeId, sig []byte, err error) {
 
 	prvKey := admin.stack.Server().PrivateKey
 	sig, err = crypto.Sign(hash.Bytes(), prvKey)
-	return discover.PubkeyID(&prvKey.PublicKey).Bytes(), sig, err
+	v5id := discv5.PubkeyID(&prvKey.PublicKey) 
+	nodeId = v5id[:]
+	return
 }
 
 func verifyBlockSig(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool {
@@ -783,14 +813,9 @@ func (ma *metaAdmin) getNodeInfo() (*p2p.NodeInfo, error) {
 }
 
 func (ma *metaAdmin) getPeerInfo(id string) (*p2p.NodeInfo, error) {
-	nodeId, err := discover.HexID(id)
-	if err != nil {
-		return nil, err
-	}
-
 	var nodeInfo *p2p.NodeInfo
 	ctx, cancel := context.WithCancel(context.Background())
-	err = ma.rpcCli.CallContext(ctx, &nodeInfo, "admin_peerInfo", nodeId)
+	err := ma.rpcCli.CallContext(ctx, &nodeInfo, "admin_peerInfo", id)
 	cancel()
 	if err != nil {
 		log.Error("Cannot get peer info", "id", id, "error", err)
