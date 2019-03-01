@@ -165,7 +165,7 @@ func (ma *metaAdmin) etcdAddMember(name string) (string, error) {
 	var node *metaNode
 	ma.lock.Lock()
 	for _, i := range ma.nodes {
-		if i.Name == name || i.Id == name || i.Ip == name {
+		if i.Name == name || i.Id == name || i.Idv4 == name ||  i.Ip == name {
 			node = i
 			break
 		}
@@ -326,7 +326,7 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 
 	ma.lock.Lock()
 	for _, i := range ma.nodes {
-		if i.Name == name || i.Id == name || i.Ip == name {
+		if i.Name == name || i.Id == name || i.Idv4 == name || i.Ip == name {
 			node = i
 			break
 		}
@@ -346,7 +346,7 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 
 	timer := time.NewTimer(30 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
-	err := admin.rpcCli.CallContext(ctx, nil, "admin_requestEtcdAddMember", &node.Id)
+	err := admin.rpcCli.CallContext(ctx, nil, "admin_requestEtcdAddMember", &node.Idv4)
 	cancel()
 	if err != nil {
 		log.Error("Metadium admin_requestEtcdAddMember failed", "id", node.Id, "error", err)
@@ -547,7 +547,7 @@ func EtcdStart() {
 		}
 		admin.lock.Unlock()
 
-		if node != nil && admin.isPeerUp(node.Id) {
+		if node != nil && admin.isPeerUp(node.Idv4) {
 			log.Info("Metadium", "Trying to join", node.Name)
 			admin.etcdJoin(node.Name)
 		}

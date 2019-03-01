@@ -24,7 +24,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/metadium/metclient"
-	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/ethereum/go-ethereum/p2p/discv5"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -229,7 +230,18 @@ func nodeKey2Id(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%v\n", discover.PubkeyID(&nodeKey.PublicKey))
+	idv5 := discv5.PubkeyID(&nodeKey.PublicKey)
+	idv4 := enode.PubkeyToIDV4(&nodeKey.PublicKey)
+	fmt.Printf("idv4: %v\nidv5: %v\n", idv4, idv5)
+	// or
+	//idv4 := enode.NewV4(&nodeKey.PublicKey, nil, 0, 0)
+	//fmt.Printf("idv4: %v\idv5: %v\n", idv4.ID(), idv5)
+
+	// to recover v4id from enode
+	enodeUrl := fmt.Sprintf("enode://%v@127.0.0.1:8589", idv5)
+	idv42, _ := enode.ParseV4(enodeUrl)
+	_ = idv42
+
 	return nil
 }
 
