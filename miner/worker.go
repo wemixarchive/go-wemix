@@ -963,6 +963,8 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 		return true
 	}
 
+	log.Debug("Was the miner for", "number", num)
+
 	// committed transactions in this round
 	committedTxs := map[common.Hash]*types.Transaction{}
 	round := 0
@@ -1174,6 +1176,10 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+	if !metaminer.IsMiner(int(w.current.header.Number.Int64())) {
+		return errors.New("Not Miner")
+	}
+
 	// Deep copy receipts here to avoid interaction between different tasks.
 	receipts := make([]*types.Receipt, len(w.current.receipts))
 	for i, l := range w.current.receipts {
