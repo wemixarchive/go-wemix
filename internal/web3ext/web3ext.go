@@ -201,7 +201,7 @@ web3._extend({
 		}),
 		new web3._extend.Method({
 			name: 'syncWith',
-			call: 'admin_synchronizeWith',
+			call: 'admin_synchroniseWith',
 			params: 1
 		}),
 		new web3._extend.Method({
@@ -210,10 +210,10 @@ web3._extend({
 			params: 1
 		}),
 		new web3._extend.Method({
-			name: 'metadiumMiners',
-			call: 'admin_metadiumMiners',
-			params: 1,
-			inputFormatter: [null]
+			name: 'metadiumNodes',
+			call: 'admin_metadiumNodes',
+			params: 2,
+			inputFormatter: [null, null]
 		}),
 		new web3._extend.Method({
 			name: 'requestEtcdAddMember',

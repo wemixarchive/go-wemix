@@ -25,7 +25,7 @@ func (ma *metaAdmin) getLatestBlockInfo(node *metaNode) (height *big.Int, hash c
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	msgch := make(chan interface{}, 1)
+	msgch := make(chan interface{}, 16)
 	metaapi.SetMsgChannel(msgch)
 	defer func() {
 		metaapi.SetMsgChannel(nil)
