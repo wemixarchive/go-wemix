@@ -954,6 +954,62 @@ func (w *worker) commitTransactionsSimple(txs *TxOrderer, coinbase common.Addres
 	return false
 }
 
+// collects ancestors' block times for possible throttling
+func (w *worker) ancestorTimes(num *big.Int) []int64 {
+	ts := make([]int64, 6)
+	for i := 0; i < len(ts); i++ {
+		bn := num.Int64()
+		switch i {
+		case 0:
+			bn -= 1
+		case 1:
+			bn -= 10
+		case 2:
+			bn -= 50
+		case 3:
+			bn -= 100
+		case 4:
+			bn -= 500
+		case 5:
+			bn -= 1000
+		}
+		if bn <= 0 {
+			continue
+		}
+		if bh := w.chain.GetHeaderByNumber(uint64(bn)); bh != nil {
+			ts[i] = bh.Time.Int64()
+		}
+	}
+	return ts
+}
+
+// returns throttle delay if necessary in seconds
+// blocks  seconds  seconds per
+//     10        1  0.1
+//     50       10  0.2
+//    100       50  0.5
+//    500      500  1
+//   1000     2000  2
+func (w *worker) throttleMining(ts []int64) int64 {
+	t := time.Now().Unix()
+	var dt int64
+
+	// 1000th
+	if dt = t - ts[5]; ts[5] > 0 && dt < 2000 {
+		return 2000 - dt
+	}
+	if dt = t - ts[4]; ts[4] > 0 && dt < 500 {
+		return 500 - dt
+	}
+	if dt = t - ts[3]; ts[3] > 0 && dt < 50 {
+		return 50 - dt
+	}
+	if dt = t - ts[2]; ts[2] > 0 && dt < 10 {
+		return 10 - dt
+	}
+	return 0
+}
+
 func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart time.Time) bool {
 	if !metaminer.IsMiner(int(num.Int64())) {
 		log.Debug("Not a miner.")
@@ -964,6 +1020,9 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 	}
 
 	log.Debug("Was the miner for", "number", num)
+
+	ts := w.ancestorTimes(num)
+	throttleCleared := false
 
 	// committed transactions in this round
 	committedTxs := map[common.Hash]*types.Transaction{}
@@ -1023,6 +1082,16 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 		// all handled, then try to get more transactions
 		if time.Since(tstart).Nanoseconds() / 1000000 < 500 &&
 			0 < n && n < 500 {
+			round++
+			continue
+		} else if dt := w.throttleMining(ts); !throttleCleared && dt > 0 {
+			throttleCleared = true
+			drt := dt
+			if drt > 5 {
+				drt = 5
+			}
+			log.Error("Metadium: too many blocks", "ahead", dt, "sleeping", drt, "pending", len(pending))
+			time.Sleep(time.Duration(drt) * time.Second)
 			round++
 			continue
 		} else {
