@@ -11,6 +11,7 @@
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
+USE_ROCKSDB=NO
 # USE_ROCKSDB
 # - undefined | "NO": Do not use
 # - "YES": build a static lib from vendor directory, and use that one
