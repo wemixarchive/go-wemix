@@ -337,7 +337,7 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 		return ethereum.NotFound
 	}
 
-	msgch := make(chan interface{}, 1)
+	msgch := make(chan interface{}, 32)
 	metaapi.SetMsgChannel(msgch)
 	defer func() {
 		metaapi.SetMsgChannel(nil)

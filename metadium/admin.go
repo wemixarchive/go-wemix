@@ -20,7 +20,6 @@ import (
 
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/embed"
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -790,7 +789,7 @@ func signBlock(hash common.Hash) (nodeId, sig []byte, err error) {
 
 	prvKey := admin.stack.Server().PrivateKey
 	sig, err = crypto.Sign(hash.Bytes(), prvKey)
-	v5id := discv5.PubkeyID(&prvKey.PublicKey) 
+	v5id := discv5.PubkeyID(&prvKey.PublicKey)
 	nodeId = v5id[:]
 	return
 }
@@ -992,43 +991,30 @@ func getMinerStatus() *metaapi.MetadiumMinerStatus {
 	admin.lock.Lock()
 	defer admin.lock.Unlock()
 
-	var (
-		mining, syncing bool
-		syncProgress    *ethereum.SyncProgress
-	)
-	if err = admin.rpcCli.CallContext(ctx, &mining, "eth_mining"); err != nil {
-		mining = false
-	}
-	if syncProgress, err = admin.cli.SyncProgress(ctx); err != nil {
-		log.Error("SyncProgress failed", "error", err)
-	}
-	if syncProgress != nil {
-		syncing = true
-	} else {
-		syncing = false
-		syncProgress = &ethereum.SyncProgress{}
-	}
-
 	return &metaapi.MetadiumMinerStatus{
 		Name:              admin.self.Name,
-		Id:                admin.self.Id,
+		Id:                admin.self.Idv4,
 		Addr:              fmt.Sprintf("%s:%d", admin.self.Ip, admin.self.Port),
 		Status:            "up",
 		Miner:             admin.self.Miner,
 		MiningPeers:       miningPeers,
-		Mining:            mining,
 		LatestBlockHeight: header.Number,
 		LatestBlockHash:   header.Hash(),
-		Syncing:           syncing,
-		SyncProgress:      *syncProgress,
+		RttMs:             big0,
 	}
 }
 
 // Returns the array of peer status
 // 'id' could be null, a name, node id (public key) or ip address of a miner
-func getMiners(id string) []*metaapi.MetadiumMinerStatus {
+func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 	if admin == nil {
 		return nil
+	}
+
+	if timeout <= 0 {
+		timeout = 5
+	} else if timeout > 60 {
+		timeout = 60
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1050,20 +1036,22 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 			Id:     node.Id,
 			Addr:   fmt.Sprintf("%s:%d", node.Ip, node.Port),
 			Status: "down",
+			RttMs:  big0,
 		}
 	}
 
 	var miners []*metaapi.MetadiumMinerStatus
 	var err error
-	msgch := make(chan interface{}, 1)
+	msgch := make(chan interface{}, len(nodes)*2+1)
 	metaapi.SetMsgChannel(msgch)
 	defer func() {
 		metaapi.SetMsgChannel(nil)
 		close(msgch)
 	}()
 
-	timer := time.NewTimer(5 * time.Second)
-	peers := map[string]bool{}
+	startTime := time.Now().UnixNano()
+	timer := time.NewTimer(time.Duration(timeout) * time.Second)
+	peers := map[string]*metaNode{}
 	count := 0
 
 	if node != nil {
@@ -1078,8 +1066,11 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 		err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", &node.Idv4)
 		if err != nil {
 			log.Error("Metadium RequestMinerStatus Failed", "id", node.Id, "error", err)
+			status := getDownStatus(node)
+			status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
+			miners = append(miners, status)
 		} else {
-			peers[node.Name] = false
+			peers[node.Name] = node
 			count++
 		}
 	} else {
@@ -1094,9 +1085,12 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 
 			err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", n.Idv4)
 			if err != nil {
+				status := getDownStatus(n)
+				status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
+				miners = append(miners, status)
 				log.Error("Metadium RequestMinerStatus Failed", "id", n.Id, "error", err)
 			} else {
-				peers[n.Name] = false
+				peers[n.Name] = n
 				count++
 			}
 		}
@@ -1116,10 +1110,11 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 			if !ok {
 				continue
 			}
-			if b, exists := peers[s.Name]; exists {
+			if n, exists := peers[s.Name]; exists {
+				s.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
 				miners = append(miners, s)
-				if b == false {
-					peers[s.Name] = true
+				if n != nil {
+					peers[s.Name] = nil
 					count--
 					if count <= 0 {
 						done = true
@@ -1128,6 +1123,14 @@ func getMiners(id string) []*metaapi.MetadiumMinerStatus {
 			}
 		case <-timer.C:
 			done = true
+		}
+	}
+
+	for _, n := range peers {
+		if n != nil {
+			status := getDownStatus(n)
+			status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
+			miners = append(miners, status)
 		}
 	}
 

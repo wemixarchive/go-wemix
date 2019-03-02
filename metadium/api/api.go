@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -16,15 +15,13 @@ type MetadiumMinerStatus struct {
 	Addr        string `json:"addr"`
 	Status      string `json:"status"`
 	Miner       bool   `json:"miner"`
-	MiningPeers string `json:"mining-peers"`
+	MiningPeers string `json:"miningPeers"`
 
-	Mining            bool        `json:"mining"`
-	LatestBlockHeight *big.Int    `json:"latest-block-height"`
-	LatestBlockHash   common.Hash `json:"latest-block-hash"`
-	LatestBlockTd     *big.Int    `json:"latest-block-td"`
+	LatestBlockHeight *big.Int    `json:"latestBlockHeight"`
+	LatestBlockHash   common.Hash `json:"latestBlockHash"`
+	LatestBlockTd     *big.Int    `json:"latestBlockTd"`
 
-	Syncing      bool                  `json:"syncing"`
-	SyncProgress ethereum.SyncProgress `json:"sync-progress"`
+	RttMs *big.Int `json:"rttMs"`
 }
 
 var (
@@ -34,7 +31,7 @@ var (
 	Info func() interface{}
 
 	GetMinerStatus func() *MetadiumMinerStatus
-	GetMiners      func(node string) []*MetadiumMinerStatus
+	GetMiners      func(node string, timeout int) []*MetadiumMinerStatus
 
 	EtcdInit         func() error
 	EtcdAddMember    func(name string) (string, error)
