@@ -227,15 +227,21 @@ function start ()
 
     RPCOPT="--rpc --rpcaddr 0.0.0.0"
     [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
+    [ "$BOOT_NODES" = "" ] || BOOT_NODES="--bootnodes $BOOT_NODES"
+    if [ ! "$DISCOVER" = "1" ]; then
+        DISCOVER=--nodiscover
+    else
+        DISCOVER=
+    fi  
 
     cd $d
     if [ ! "$2" = "inner" ]; then
-	$GMET --datadir ${PWD} $COINBASE --nodiscover --metrics		  \
-	      $RPCOPT $NONCE_LIMIT 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
+	$GMET --datadir ${PWD} $COINBASE $DISCOVER --metrics		  \
+	      $RPCOPT $BOOT_NODES $NONCE_LIMIT 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
     else
 	exec > >(${LOGROT} ${d}/logs/log 10M 5)
 	exec 2>&1
-	exec $GMET --datadir ${PWD} $COINBASE --nodiscover --metrivcs	\
+	exec $GMET --datadir ${PWD} $COINBASE $DISCOVER --metrivcs	\
 	      $RPCOPT $NONCE_LIMIT
     fi
 }
