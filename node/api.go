@@ -307,8 +307,15 @@ func (api *PublicAdminAPI) Datadir() string {
 	return api.node.DataDir()
 }
 
+// MetadiumInfo retrieves the information about Metadium
 func (api *PublicAdminAPI) MetadiumInfo() interface{} {
 	return metaapi.Info()
+}
+
+// MetadiumNodes returns the status of miners
+// 'node' can a name, node id or ip address
+func (api *PublicAdminAPI) MetadiumNodes(node string, timeout int) interface{} {
+	return metaapi.GetMiners(node, timeout)
 }
 
 // PublicDebugAPI is the collection of debugging related API methods exposed over

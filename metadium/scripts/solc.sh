@@ -26,6 +26,7 @@ function usage ()
 -p <gas-price>:   gas price
 -l <name>:<addr>: library name and address pair separated by ':'.
     Multiple -l options can be used to specify multiple libraries.
+-r <path>=<path>: remap paths, e.g. \"wherever=/foo/bar\"
 
 Output Formats:
   \"js\":   creates 'remix'-generated .js style file that can be loaded to
@@ -42,7 +43,7 @@ Environment Variables:
 # int compile(string solFile, string jsFile)
 function compile ()
 {
-    ${SOLC} --optimize --abi --bin $1 | awk -v gas="$SOL_GAS" -v gas_price="$SOL_GASPRICE" -v libs="$SOL_LIBS" -v outfmt=$outfmt '
+    ${SOLC} ${PATH_REMAP} --optimize --abi --bin $1 | awk -v gas="$SOL_GAS" -v gas_price="$SOL_GASPRICE" -v libs="$SOL_LIBS" -v outfmt=$outfmt '
 function flush2js() {
   if (length(gas_price) != 0) {
       gas_price_2 = ",\
@@ -57,7 +58,6 @@ function %s_new() {\n\
     data: %s_data,\n\
     gas: \"%s\"%s\n\
   }, function (e, contract) {\n\
-    console.log(e, contract);\n\
     if (typeof contract.address !== \"undefined\") {\n\
       console.log(\"Contract mined! address: \" + contract.address + \" transactionHash: \" + contract.transactionHash);\n\
     }\n\
@@ -143,7 +143,7 @@ END {
 ' > $2;
 }
 
-args=`getopt f:g:l:p: $*`
+args=`getopt f:g:l:p:r: $*`
 if [ $? != 0 ]; then
     usage;
     exit 1;
@@ -168,6 +168,11 @@ for i; do
     -l)
 	[ "$SOL_LIBS" = "" ] || SOL_LIBS="$SOL_LIBS "
 	SOL_LIBS="${SOL_LIBS}$2";
+	shift;
+	shift;;
+    -r)
+        [ "$PATH_REMAP" = "" ] || PATH_REMAP="$PATH_REMAP "
+	PATH_REMAP="${PATH_REMAP}$2";
 	shift;
 	shift;;
     esac

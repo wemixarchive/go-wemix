@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -324,6 +325,24 @@ func (srv *Server) RemovePeer(node *enode.Node) {
 	select {
 	case srv.removestatic <- node:
 	case <-srv.quit:
+	}
+}
+
+func (srv *Server) disconnectPeer(id enode.ID) error {
+	var peer *Peer
+	select {
+	case srv.peerOp <- func(peers map[enode.ID]*Peer) {
+		peer, _ = peers[id]
+	}:
+		<-srv.peerOpDone
+	case <- srv.quit:
+	}
+
+	if peer == nil {
+		return ethereum.NotFound
+	} else {
+		peer.Disconnect(DiscRequested)
+		return nil
 	}
 }
 

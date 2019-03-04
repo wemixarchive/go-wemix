@@ -27,7 +27,7 @@ ifneq ($(shell uname), Linux)
 endif
 
 ifneq ($(USE_ROCKSDB), NO)
-ROCKSDB_ENV=DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb CGO_CFLAGS=-I$${DIR}/include CGO_LDFLAGS="-L$${DIR} -lrocksdb -lstdc++ -lm -lz"
+ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb
 ROCKSDB_TAG=-tags rocksdb
 endif
 
@@ -41,7 +41,13 @@ metadium: gmet logrot
 	@echo "Done building build/metadium.tar.gz"
 
 gmet: vendor rocksdb metadium/admin_abi.go
-	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
+ifeq ($(USE_ROCKSDB), NO)
+	build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
+else
+	CGO_CFLAGS=-I$(ROCKSDB_DIR)/include \
+		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lstdc++ -lrocksdb -lm $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
+		build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
+endif
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
 

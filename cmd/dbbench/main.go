@@ -5,9 +5,11 @@ package main
 import (
 	"bufio"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -17,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
@@ -25,11 +26,65 @@ var (
 	big1 = big.NewInt(1)
 )
 
+func pack4(s []byte) []byte {
+	if len(s) % 4 == 0 {
+		return s
+	} else {
+		l := (len(s) + 3) / 4 * 4;
+		b := make([]byte, l)
+		copy(b, s)
+		for i := len(s); i < l; i++ {
+			b[i] = ' ';
+		}
+		return b
+	}
+}
+
+func getMinMax(db ethdb.Database, prefix string) (min, max int, err error) {
+	var out []byte
+	out, err = db.Get(pack4([]byte(prefix)))
+	if err != nil {
+		return
+	}
+	ls := regexp.MustCompile(`\s+`).Split(strings.TrimSpace(string(out)), -1)
+	if len(ls) < 2 {
+		err = fmt.Errorf("Invalid data")
+		return
+	}
+	min, err = strconv.Atoi(ls[0])
+	if err != nil {
+		return
+	}
+	max, err = strconv.Atoi(ls[1])
+	if err != nil {
+		return
+	}
+	return
+}
+
+func setMinMax(db ethdb.Database, prefix string, min, max int) error {
+	oldMin, oldMax, err := getMinMax(db, string(pack4([]byte(prefix))))
+	if err == nil {
+		if min > oldMin {
+			min = oldMin
+		}
+		if max < oldMax {
+			max = oldMax
+		}
+	}
+
+	if max < min {
+		max = min
+	}
+
+	return db.Put(pack4([]byte(prefix)), []byte(fmt.Sprintf("%d %d", min, max)))
+}
+
 func read(db ethdb.Database, prefix string, start, end, numThreads int, verbose bool) error {
 
 	doRead := func(idx int) error {
 		ks := fmt.Sprintf("%s-%d", prefix, idx)
-		k := sha3.Sum256([]byte(ks))
+		k := sha_256([]byte(ks))
 		v, err := db.Get(k[:])
 		if err != nil {
 			fmt.Printf("Failed to read %s: %v\n", ks, err)
@@ -62,18 +117,69 @@ func read(db ethdb.Database, prefix string, start, end, numThreads int, verbose 
 	return nil
 }
 
+// random read: returns range and error
+func rread(db ethdb.Database, prefix string, count, numThreads int, verbose bool) (int, error) {
+	min, max, err := getMinMax(db, prefix)
+	if err != nil {
+		return 0, err
+	}
+
+	doRead := func(idx int) error {
+		idx = int(int64(min) + rand.Int63()%int64(max-min+1))
+
+		ks := fmt.Sprintf("%s-%d", prefix, idx)
+		k := sha_256([]byte(ks))
+		v, err := db.Get(k[:])
+		if err != nil {
+			fmt.Printf("Failed to read %s: %v\n", ks, err)
+			return err
+		}
+		if verbose {
+			fmt.Printf("%s(<-%s): %d %s\n", hex.EncodeToString(k[:]), string(ks), len(v), hex.EncodeToString(v))
+		}
+		return nil
+	}
+
+	ix := int64(1)
+	var wg sync.WaitGroup
+	for i := 0; i < numThreads; i++ {
+		wg.Add(1)
+		go func(gid int) {
+			defer wg.Done()
+
+			for {
+				jx := atomic.AddInt64(&ix, 1) - 1
+				if jx > int64(count) {
+					break
+				}
+				doRead(int(jx))
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	return max - min + 1, nil
+}
+
 func sha_256(b []byte) []byte {
 	x := sha256.Sum256(b)
 	return x[:]
 }
 
 func genVal(key []byte, sz int) []byte {
-	sz = (sz + 31) / 32
-	v := sha_256(key)
-	for i := 1; i < sz; i++ {
-		v = append(v, sha_256(v)...)
+	var r *rand.Rand
+	if len(key) < 8 {
+		r = rand.New(rand.NewSource(int64(rand.Uint64())))
+	} else {
+		r = rand.New(rand.NewSource(int64(binary.BigEndian.Uint64(key))))
 	}
-	return v
+
+	n := (sz + 7) / 8
+	v := make([]byte, n*8)
+	for i := 0; i < n; i++ {
+		binary.BigEndian.PutUint64(v[i*8:], r.Uint64())
+	}
+	return v[:sz]
 }
 
 func write(db ethdb.Database, prefix string, start, end, numThreads, batchCount, valueSize int) error {
@@ -102,8 +208,8 @@ func write(db ethdb.Database, prefix string, start, end, numThreads, batchCount,
 		dbb := dbbs[gid]
 
 		ks := fmt.Sprintf("%s-%d", prefix, idx)
-		k := sha3.Sum256([]byte(ks))
-		dbb.Put(k[:], genVal(k[:], valueSize))
+		k := sha_256([]byte(ks))
+		dbb.Put(k, genVal(k, valueSize))
 
 		if dbb.ValueSize() >= batchCount {
 			flush(dbb)
@@ -129,6 +235,10 @@ func write(db ethdb.Database, prefix string, start, end, numThreads, batchCount,
 	}
 
 	wg.Wait()
+
+	// update min / max for this prefix
+	setMinMax(db, prefix, start, end)
+
 	return nil
 }
 
@@ -152,15 +262,18 @@ func diskUsage(dbPath string) (int, error) {
 }
 
 func header() {
-	fmt.Printf("@,OP,Prefix,Start,End,Time,Elap,DB(KB),R(#),R(KB),R(KB/s),W(#),W(KB),W(KB/s),DbR(#),DbR(KB),DbR(KB/s),DbW(#),DbW(KB),DbW(KB/s),Has(#),Del(#)\n")
+	fmt.Printf("@,OP,Prefix,Start/Range,Count,Time,Elap,TPS,DB(KB),R(#),R(KB),R(KB/s),W(#),W(KB),W(KB/s),DbR(#),DbR(KB),DbR(KB/s),DbW(#),DbW(KB),DbW(KB/s),Has(#),Del(#)\n")
 }
 
 func pre(device string) (time.Time, []uint64) {
 	return time.Now(), stats(device)
 }
 
-func post(dbPath, device, header string, ot time.Time, ss []uint64) {
+func post(dbPath, device, header string, ot time.Time, count int, ss []uint64) {
 	dur := uint64(time.Since(ot) / time.Millisecond)
+	if dur <= 0 {
+		dur = 1
+	}
 	se := stats(device)
 	for i := 0; i < len(se); i++ {
 		se[i] = se[i] - ss[i]
@@ -171,7 +284,8 @@ func post(dbPath, device, header string, ot time.Time, ss []uint64) {
 		fmt.Printf("Failed to get disk usage: %v\n", err)
 	}
 
-	fmt.Printf("%s,%d,%d,%d", header, ot.Unix(), dur/1000, du)
+	fmt.Printf("%s,%d,%d,%.3f,%d", header, ot.Unix(), dur/1000,
+		float64(count) * 1000.0 / float64(dur), du)
 	for i := 0; i < len(se); i++ {
 		v := se[i]
 		// 1: disk read bytes
@@ -198,11 +312,12 @@ func post(dbPath, device, header string, ot time.Time, ss []uint64) {
 
 func usage() {
 	fmt.Printf(`Usage: dbbench [<options>...] <db-name>
-	[<read>|<write> <prefix> <start> <end> [<batch> <value-size>]]
+	[<read>|<write> <prefix> <start> <count> [<batch> <value-size>]]
+	[rread <prefix> <count>]
 
 options:
 -H:	no header
--t rocksdb|leveldb:	choose between rocksdb and leveldb (leveldb).
+-t rocksdb|leveldb:	choose between rocksdb or leveldb (leveldb).
 -d <device-name>:	where to collect disk stats from ("")
 -r <num-threads>:	number of read threads (1)
 -w <num-threads>:	number of write threads (1)
@@ -220,8 +335,8 @@ func main() {
 		db           ethdb.Database
 		err          error
 		noHeader     bool = false
-		readThreads  int = 1
-		writeThreads int = 1
+		readThreads  int  = 1
+		writeThreads int  = 1
 		verbose      bool = false
 	)
 
@@ -301,8 +416,8 @@ func main() {
 		if nargs[1] == "read" && len(nargs) >= 5 {
 			prefix := nargs[2]
 			six, e1 := strconv.Atoi(nargs[3])
-			eix, e2 := strconv.Atoi(nargs[4])
-			if e1 != nil || e2 != nil {
+			cnt, e2 := strconv.Atoi(nargs[4])
+			if e1 != nil || e2 != nil || cnt <= 0 {
 				usage()
 				return
 			}
@@ -310,15 +425,28 @@ func main() {
 				header()
 			}
 			ot, stats := pre(device)
-			read(db, prefix, six, eix, readThreads, verbose)
-			post(dbPath, device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, eix), ot, stats)
+			read(db, prefix, six, six+cnt-1, readThreads, verbose)
+			post(dbPath, device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, cnt), ot, cnt, stats)
+		} else if nargs[1] == "rread" && len(nargs) >= 4 {
+			prefix := nargs[2]
+			cnt, e1 := strconv.Atoi(nargs[3])
+			if e1 != nil || cnt <= 0 {
+				usage()
+				return
+			}
+			if !noHeader {
+				header()
+			}
+			ot, stats := pre(device)
+			l, _ := rread(db, prefix, cnt, readThreads, verbose)
+			post(dbPath, device, fmt.Sprintf("@,rread,%s,%d,%d", prefix, l, cnt), ot, cnt, stats)
 		} else if nargs[1] == "write" && len(nargs) >= 7 {
 			prefix := nargs[2]
 			six, e1 := strconv.Atoi(nargs[3])
-			eix, e2 := strconv.Atoi(nargs[4])
+			cnt, e2 := strconv.Atoi(nargs[4])
 			batch, e3 := strconv.Atoi(nargs[5])
 			valueSize, e4 := strconv.Atoi(nargs[6])
-			if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
+			if e1 != nil || e2 != nil || e3 != nil || e4 != nil || cnt <= 0 || batch <= 0 || valueSize <= 0 {
 				usage()
 				return
 			}
@@ -326,8 +454,8 @@ func main() {
 				header()
 			}
 			ot, stats := pre(device)
-			write(db, prefix, six, eix, writeThreads, batch, valueSize)
-			post(dbPath, device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, eix), ot, stats)
+			write(db, prefix, six, six+cnt-1, writeThreads, batch, valueSize)
+			post(dbPath, device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, cnt), ot, cnt, stats)
 		} else {
 			usage()
 		}
@@ -346,26 +474,36 @@ func main() {
 			if ls[0] == "read" && len(ls) >= 4 {
 				prefix := ls[1]
 				six, e1 := strconv.Atoi(ls[2])
-				eix, e2 := strconv.Atoi(ls[3])
-				if e1 != nil || e2 != nil {
+				cnt, e2 := strconv.Atoi(ls[3])
+				if e1 != nil || e2 != nil || cnt <= 0 {
 					continue
 				}
 
 				ot, stats := pre(device)
-				read(db, prefix, six, eix, readThreads, verbose)
-				post(dbPath, device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, eix), ot, stats)
+				read(db, prefix, six, six+cnt-1, readThreads, verbose)
+				post(dbPath, device, fmt.Sprintf("@,read,%s,%d,%d", prefix, six, cnt), ot, cnt, stats)
+			} else if ls[0] == "rread" && len(ls) >= 3 {
+				prefix := ls[1]
+				cnt, e1 := strconv.Atoi(ls[2])
+				if e1 != nil || cnt <= 0 {
+					continue
+				}
+
+				ot, stats := pre(device)
+				l, _ := rread(db, prefix, cnt, readThreads, verbose)
+				post(dbPath, device, fmt.Sprintf("@,rread,%s,%d,%d", prefix, l, cnt), ot, cnt, stats)
 			} else if ls[0] == "write" && len(ls) >= 6 {
 				prefix := ls[1]
 				six, e1 := strconv.Atoi(ls[2])
-				eix, e2 := strconv.Atoi(ls[3])
+				cnt, e2 := strconv.Atoi(ls[3])
 				batch, e3 := strconv.Atoi(ls[4])
 				valueSize, e4 := strconv.Atoi(ls[5])
-				if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
+				if e1 != nil || e2 != nil || e3 != nil || e4 != nil || cnt <= 0 || batch <= 0 || valueSize <= 0 {
 					continue
 				}
 				ot, stats := pre(device)
-				write(db, prefix, six, eix, writeThreads, batch, valueSize)
-				post(dbPath, device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, eix), ot, stats)
+				write(db, prefix, six, six+cnt-1, writeThreads, batch, valueSize)
+				post(dbPath, device, fmt.Sprintf("@,write,%s,%d,%d", prefix, six, cnt), ot, cnt, stats)
 			}
 		}
 	}

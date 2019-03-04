@@ -35,6 +35,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	metaapi "github.com/ethereum/go-ethereum/metadium/api"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -155,6 +157,17 @@ func (api *PrivateMinerAPI) GetHashrate() uint64 {
 	return api.e.miner.HashRate()
 }
 
+// Get and set params.PrefetchCount
+func (api *PrivateMinerAPI) GetPrefetchCount() int {
+	return params.PrefetchCount
+}
+
+func (api *PrivateMinerAPI) SetPrefetchCount(count int)  {
+	if 0 <= count && count <= 65535 {
+		params.PrefetchCount = count
+	}
+}
+
 // PrivateAdminAPI is the collection of Ethereum full node-related APIs
 // exposed over the private admin endpoint.
 type PrivateAdminAPI struct {
@@ -246,6 +259,49 @@ func (api *PrivateAdminAPI) ImportChain(file string) (bool, error) {
 		blocks = blocks[:0]
 	}
 	return true, nil
+}
+
+// RequestMinerStatus asks the given peer to send extended status
+func (api *PrivateAdminAPI) RequestMinerStatus(id enode.ID) error {
+	return api.eth.protocolManager.RequestMinerStatus(id)
+}
+
+// RequestEtcdAddMember asks the given peer to add this node to the etcd cluster
+func (api *PrivateAdminAPI) RequestEtcdAddMember(id enode.ID) error {
+	return api.eth.protocolManager.RequestEtcdAddMember(id)
+}
+
+// Initializes an etcd cluster
+func (api *PrivateAdminAPI) EtcdInit() error {
+	return metaapi.EtcdInit()
+}
+
+// Manually adds a node to an etcd cluster.
+// TODO: to be removed
+func (api *PrivateAdminAPI) EtcdAddMember(name string) (string, error) {
+	return metaapi.EtcdAddMember(name)
+}
+
+// Manually removes a node from an etcd cluster
+// TODO: to be removed
+func (api *PrivateAdminAPI) EtcdRemoveMember(name string) (string, error) {
+	return metaapi.EtcdRemoveMember(name)
+}
+
+// Manually join an etcd network
+// TODO: to be removed
+func (api *PrivateAdminAPI) EtcdJoin(cluster string) error {
+	return metaapi.EtcdJoin(cluster)
+}
+
+// Manually move leader in case the leader is misbehaving
+func (api *PrivateAdminAPI) EtcdMoveLeader(name string) error {
+	return metaapi.EtcdMoveLeader(name)
+}
+
+// Synchronize with the peer
+func (api *PrivateAdminAPI) SynchroniseWith(id enode.ID) error {
+	return api.eth.protocolManager.SynchroniseWith(id)
 }
 
 // PublicDebugAPI is the collection of Ethereum full node APIs exposed

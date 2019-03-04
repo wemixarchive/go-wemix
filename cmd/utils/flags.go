@@ -675,6 +675,11 @@ var (
 		Usage: "LevelDB (0) or RocksDB (1)",
 		Value: params.UseRocksDb,
 	}
+	PrefetchCount = cli.IntFlag{
+		Name:  "prefetchcount",
+		Usage: "Transaction prefetch count for faster db read",
+		Value: params.PrefetchCount,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating

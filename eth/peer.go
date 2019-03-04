@@ -26,6 +26,7 @@ import (
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -293,6 +294,16 @@ func (p *peer) SendReceiptsRLP(receipts []rlp.RawValue) error {
 	return p2p.Send(p.rw, ReceiptsMsg, receipts)
 }
 
+// SendStatusEx sends this node's miner status
+func (p *peer) SendStatusEx(status *metaapi.MetadiumMinerStatus) error {
+	return p2p.Send(p.rw, StatusExMsg, status)
+}
+
+// SendEtcdCluster sends this node's etcd cluster
+func (p *peer) SendEtcdCluster(cluster string) error {
+	return p2p.Send(p.rw, EtcdClusterMsg, cluster)
+}
+
 // RequestOneHeader is a wrapper around the header query functions to fetch a
 // single header. It is used solely by the fetcher.
 func (p *peer) RequestOneHeader(hash common.Hash) error {
@@ -334,9 +345,22 @@ func (p *peer) RequestReceipts(hashes []common.Hash) error {
 	return p2p.Send(p.rw, GetReceiptsMsg, hashes)
 }
 
+// RequestPendingTxs fetches any extra left-over transactions
 func (p *peer) RequestPendingTxs() error {
 	p.Log().Debug("Fetching any extra left-over transactions")
 	return p2p.Send(p.rw, GetPendingTxsMsg, common.Big1)
+}
+
+// RequestStatusEx fetches extended status of the peer
+func (p *peer) RequestStatusEx() error {
+	p.Log().Debug("Fetching extended status")
+	return p2p.Send(p.rw, GetStatusExMsg, common.Big1)
+}
+
+// RequestEtcdAddMember requests the peer to add this node to the cluster
+func (p *peer) RequestEtcdAddMember() error {
+	p.Log().Debug("Trying to join etcd network")
+	return p2p.Send(p.rw, EtcdAddMemberMsg, common.Big1)
 }
 
 // Handshake executes the eth protocol handshake, negotiating version number,

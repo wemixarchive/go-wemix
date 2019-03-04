@@ -199,6 +199,56 @@ web3._extend({
 			name: 'stopWS',
 			call: 'admin_stopWS'
 		}),
+		new web3._extend.Method({
+			name: 'syncWith',
+			call: 'admin_synchroniseWith',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'requestMinerStatus',
+			call: 'admin_requestMinerStatus',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'metadiumNodes',
+			call: 'admin_metadiumNodes',
+			params: 2,
+			inputFormatter: [null, null]
+		}),
+		new web3._extend.Method({
+			name: 'requestEtcdAddMember',
+			call: 'admin_requestEtcdAddMember',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'etcdInit',
+			call: 'admin_etcdInit',
+			params: 0,
+		}),
+		new web3._extend.Method({
+			name: 'etcdAddMember',
+			call: 'admin_etcdAddMember',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'etcdRemoveMember',
+			call: 'admin_etcdRemoveMember',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'etcdJoin',
+			call: 'admin_etcdJoin',
+			params: 1,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'etcdMoveLeader',
+			call: 'admin_etcdMoveLeader',
+			params: 1,
+			inputFormatter: [null]
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
@@ -566,6 +616,15 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'getHashrate',
 			call: 'miner_getHashrate'
+		}),
+		new web3._extend.Method({
+			name: 'getPrefetchCount',
+			call: 'miner_getPrefetchCount'
+		}),
+		new web3._extend.Method({
+			name: 'setPrefetchCount',
+			call: 'miner_setPrefetchCount',
+			params: 1,
 		}),
 	],
 	properties: []

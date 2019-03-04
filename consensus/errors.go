@@ -34,4 +34,7 @@ var (
 	// ErrInvalidNumber is returned if a block's number doesn't equal it's parent's
 	// plus one.
 	ErrInvalidNumber = errors.New("invalid block number")
+
+	// ErrUnauthorized is returned if a block's minerNodeId or minerNodeSig is invalid.
+	ErrUnauthorized = errors.New("unauthorized block")
 )

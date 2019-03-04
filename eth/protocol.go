@@ -41,7 +41,7 @@ var ProtocolName = "meta"
 var ProtocolVersions = []uint{eth63, eth62}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
-var ProtocolLengths = []uint64{18, 8}
+var ProtocolLengths = []uint64{22, 8}
 
 const ProtocolMaxMsgSize = 100 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -63,8 +63,12 @@ const (
 	GetReceiptsMsg = 0x0f
 	ReceiptsMsg    = 0x10
 
-	// Added by Metadium
+	// Added by Metadium, meta/71
 	GetPendingTxsMsg = 0x11
+	GetStatusExMsg   = 0x12
+	StatusExMsg      = 0x13
+	EtcdAddMemberMsg = 0x14
+	EtcdClusterMsg   = 0x15
 )
 
 type errCode int

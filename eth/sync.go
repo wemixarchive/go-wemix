@@ -17,14 +17,17 @@
 package eth
 
 import (
+	"fmt"
 	"math/rand"
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/log"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
@@ -165,7 +168,10 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 	// Short circuit if no peers are available
 	if peer == nil {
 		return
+	} else if metaminer.AmPartner() && !metaminer.IsPartner(peer.ID().String()) {
+		return
 	}
+
 	// Make sure the peer's TD is higher than our own
 	currentBlock := pm.blockchain.CurrentBlock()
 	td := pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
@@ -213,5 +219,14 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
 		go pm.BroadcastBlock(head, false)
+	}
+}
+
+func (pm *ProtocolManager) SynchroniseWith(id enode.ID) error {
+	if p := pm.peers.Peer(fmt.Sprintf("%x", id[:8])); p != nil {
+		pm.synchronise(p)
+		return nil
+	} else {
+		return ethereum.NotFound
 	}
 }

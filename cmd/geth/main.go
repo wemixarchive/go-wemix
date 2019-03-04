@@ -180,6 +180,7 @@ var (
 		utils.BlocksPerTurn,
 		utils.NonceLimit,
 		utils.UseRocksDb,
+		utils.PrefetchCount,
 	}
 )
 
@@ -303,7 +304,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	utils.StartNode(stack)
 
 	// Start metadium admin
-	metadium.StartAdmin(stack)
+	metadium.StartAdmin(stack, ctx.GlobalString(utils.DataDirFlag.Name))
 
 	// Unlock any account specifically requested
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)

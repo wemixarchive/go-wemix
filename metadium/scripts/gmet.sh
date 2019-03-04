@@ -110,7 +110,7 @@ function wipe ()
 
     cd $d
     /bin/rm -rf geth/LOCK geth/chaindata geth/ethash geth/lightchaindata \
-	geth/transactions.rlp geth/nodes geth.ipc logs/* default.etcd
+	geth/transactions.rlp geth/nodes geth.ipc logs/* etcd
 }
 
 function wipe_all ()
@@ -227,15 +227,23 @@ function start ()
 
     RPCOPT="--rpc --rpcaddr 0.0.0.0"
     [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
+    [ "$BOOT_NODES" = "" ] || BOOT_NODES="--bootnodes $BOOT_NODES"
+    if [ ! "$DISCOVER" = "1" ]; then
+        DISCOVER=--nodiscover
+    else
+        DISCOVER=
+    fi  
+
+    [ -d "$d/logs" ] || mkdir -p $d/logs
 
     cd $d
     if [ ! "$2" = "inner" ]; then
-	$GMET --datadir ${PWD} $COINBASE --nodiscover --metrics		  \
-	      $RPCOPT $NONCE_LIMIT 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
+	$GMET --datadir ${PWD} $COINBASE $DISCOVER --metrics		  \
+	      $RPCOPT $BOOT_NODES $NONCE_LIMIT 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
     else
 	exec > >(${LOGROT} ${d}/logs/log 10M 5)
 	exec 2>&1
-	exec $GMET --datadir ${PWD} $COINBASE --nodiscover --metrivcs	\
+	exec $GMET --datadir ${PWD} $COINBASE $DISCOVER --metrivcs	\
 	      $RPCOPT $NONCE_LIMIT
     fi
 }
@@ -243,11 +251,20 @@ function start ()
 function start_all ()
 {
     for i in `/bin/ls -1 ${DIR}/`; do
-        if [ ! -d "${DIR}/$i" -o ! -d "${DIR}/$i/geth" ]; then
+        if [ ! -d "${DIR}/$i" -o ! -d "${DIR}/$i/geth" -o ! -f "${DIR}/$i/bin/gmet" ]; then
             continue
         fi
         start $i
+	echo "started $i."
+        return
     done
+
+    echo "Cannot find gmet directory. Check if 'geth' directory and 'bin/gmet' are present in the data directory";
+}
+
+function get_gmet_pids ()
+{
+    ps axww | grep -v grep | grep "gmet.*datadir.*${NODE}" | awk '{print $1}'
 }
 
 function do_nodes ()
@@ -302,29 +319,33 @@ case "$1" in
     ;;
 
 "stop")
+    echo -n "stopping..."
     if [ ! "$2" = "" ]; then
         NODE=$2
     else
         NODE=
     fi
-    for i in {1..10}; do
-        ps axww | grep -v grep | grep -q "gmet.*datadir.*${NODE}"
-        if [ ! $? = 0 ]; then
-            break
-        else
-            ps axww | grep -v grep | grep "gmet.*datadir.*${NODE}" | awk '{print $1}' | xargs -L1 sudo kill
-            sleep 3;
-        fi
-    done
-    ps axww | grep -v grep | grep -q "gmet.*datadir.*${NODE}"
-    if [ $? = 0 ]; then
-        ps axww | grep -v grep | grep "gmet.*datadir.*${NODE}" | awk '{print $1}' | xargs -L1 sudo kill -9
+    PIDS=`get_gmet_pids`
+    if [ ! "$PIDS" = "" ]; then
+	echo $PIDS | xargs -L1 sudo kill
     fi
+    for i in {1..200}; do
+	PIDS=`get_gmet_pids`
+	[ "$PIDS" = "" ] && break
+	echo -n "."
+	sleep 1
+    done
+    PIDS=`get_gmet_pids`
+    if [ ! "$PIDS" = "" ]; then
+	echo $PIDS | xargs -L1 sudo kill -9
+    fi
+    echo "done."
     ;;
 
 "start")
     if [ ! "$2" = "" ]; then
         start $2
+	echo "started $2."
     else
         start_all
     fi

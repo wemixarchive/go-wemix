@@ -3,7 +3,7 @@
 package miner
 
 import (
-	"fmt"
+	"errors"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -11,20 +11,16 @@ import (
 )
 
 var (
-	// notification channel when a new transaction arrives
-	TxNotifier           = make(chan bool, 1)
-	IsMinerFunc          func(int) bool
-	IsPartnerFunc        func(string) bool
-	CalculateRewardsFunc func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
-	VerifyRewardsFunc    func(*big.Int, string) error
-	RequirePendingTxsFunc  func() bool
+	IsMinerFunc           func(int) bool
+	AmPartnerFunc         func() bool
+	IsPartnerFunc         func(string) bool
+	LogBlockFunc          func(int64)
+	CalculateRewardsFunc  func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
+	VerifyRewardsFunc     func(*big.Int, string) error
+	SignBlockFunc         func(hash common.Hash) (nodeid, sig []byte, err error)
+	VerifyBlockSigFunc    func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
+	RequirePendingTxsFunc func() bool
 )
-
-func TxNotify() {
-	if params.ConsensusMethod != params.ConsensusPoW {
-		TxNotifier <- true
-	}
-}
 
 func IsMiner(height int) bool {
 	if IsMinerFunc == nil {
@@ -42,13 +38,27 @@ func IsPartner(id string) bool {
 	}
 }
 
+func AmPartner() bool {
+	if AmPartnerFunc == nil {
+		return false
+	} else {
+		return AmPartnerFunc()
+	}
+}
+
+func LogBlock(height int64) {
+	if LogBlockFunc != nil {
+		LogBlockFunc(height)
+	}
+}
+
 func IsPoW() bool {
 	return params.ConsensusMethod == params.ConsensusPoW
 }
 
 func CalculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
 	if CalculateRewardsFunc == nil {
-		return nil, fmt.Errorf("Not initialized")
+		return nil, errors.New("Not initialized")
 	} else {
 		return CalculateRewardsFunc(num, blockReward, fees, addBalance)
 	}
@@ -56,9 +66,26 @@ func CalculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Ad
 
 func VerifyRewards(num *big.Int, rewards string) error {
 	if VerifyRewardsFunc == nil {
-		return fmt.Errorf("Not initialized")
+		return errors.New("Not initialized")
 	} else {
 		return VerifyRewardsFunc(num, rewards)
+	}
+}
+
+func SignBlock(hash common.Hash) (nodeId, sig []byte, err error) {
+	if SignBlockFunc == nil {
+		err = errors.New("Not initialized")
+	} else {
+		nodeId, sig, err = SignBlockFunc(hash)
+	}
+	return
+}
+
+func VerifyBlockSig(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool {
+	if VerifyBlockSigFunc == nil {
+		return false
+	} else {
+		return VerifyBlockSigFunc(height, nodeId, hash, sig)
 	}
 }
 
