@@ -234,6 +234,8 @@ function start ()
         DISCOVER=
     fi  
 
+    [ -d "$d/logs" ] || mkdir -p $d/logs
+
     cd $d
     if [ ! "$2" = "inner" ]; then
 	$GMET --datadir ${PWD} $COINBASE $DISCOVER --metrics		  \
@@ -249,12 +251,15 @@ function start ()
 function start_all ()
 {
     for i in `/bin/ls -1 ${DIR}/`; do
-        if [ ! -d "${DIR}/$i" -o ! -d "${DIR}/$i/geth" ]; then
+        if [ ! -d "${DIR}/$i" -o ! -d "${DIR}/$i/geth" -o ! -f "${DIR}/$i/bin/gmet" ]; then
             continue
         fi
         start $i
 	echo "started $i."
+        return
     done
+
+    echo "Cannot find gmet directory. Check if 'geth' directory and 'bin/gmet' are present in the data directory";
 }
 
 function get_gmet_pids ()
