@@ -666,12 +666,14 @@ func (ma *metaAdmin) run() {
 		}
 		if ma.admin != nilAddress && ma.nodeInfo != nil {
 			ma.update()
-			if !ma.etcdIsRunning() {
+			if ma.amPartner() && !ma.etcdIsRunning() {
 				EtcdStart()
 			}
 		}
 
-		ma.checkMining()
+		if ma.amPartner() {
+			ma.checkMining()
+		}
 
 		to := make(chan bool, 1)
 		go func() {
@@ -827,6 +829,14 @@ func (ma *metaAdmin) isPeerUp(id string) bool {
 	return err == nil && nodeInfo != nil
 }
 
+func (ma *metaAdmin) amPartner() bool {
+	if admin == nil {
+		return false
+	}
+	return (admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId) ||
+		(admin.self != nil && admin.self.Partner)
+}
+
 func AmPartner() bool {
 	if admin == nil {
 		return false
@@ -835,8 +845,7 @@ func AmPartner() bool {
 	admin.lock.Lock()
 	defer admin.lock.Unlock()
 
-	return (admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId) ||
-		(admin.self != nil && admin.self.Partner)
+	return admin.amPartner()
 }
 
 // id is v4 id
