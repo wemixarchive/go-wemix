@@ -238,13 +238,14 @@ function start ()
 
     cd $d
     if [ ! "$2" = "inner" ]; then
-	$GMET --datadir ${PWD} $COINBASE $DISCOVER --metrics		  \
-	      $RPCOPT $BOOT_NODES $NONCE_LIMIT 2>&1 | ${LOGROT} ${d}/logs/log 10M 5 &
+	$GMET --datadir ${PWD} --syncmode full --gcmode archive --metrics \
+            $COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT 2>&1 |   \
+            ${LOGROT} ${d}/logs/log 10M 5 &
     else
 	exec > >(${LOGROT} ${d}/logs/log 10M 5)
 	exec 2>&1
-	exec $GMET --datadir ${PWD} $COINBASE $DISCOVER --metrivcs	\
-	      $RPCOPT $NONCE_LIMIT
+	exec $GMET --datadir ${PWD} --syncmode full --gcmode archive \
+            --metrics $COINBASE $DISCOVER $RPCOPT $NONCE_LIMIT
     fi
 }
 
