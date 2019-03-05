@@ -33,25 +33,24 @@ func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, sta
 	}
 
 	l := len(cfg.Members)
-	if l > len(cfg.Nodes) {
-		l = len(cfg.Nodes)
-	}
-
 	var b1, b2 bytes.Buffer
 	for i := 0; i < l; i++ {
 		m := cfg.Members[i]
-		n := cfg.Nodes[i]
+		id := m.Id
+		if len(id) == 130 {
+			id = id[2:]
+		}
 
 		addr := big.NewInt(0)
 		addr.SetString(m.Addr, 0)
 		b1.Write(metclient.PackNum(reflect.ValueOf(addr)))
-		b1.Write(metclient.PackNum(reflect.ValueOf(len(n.Name))))
-		b1.Write([]byte(n.Name))
-		b1.Write(metclient.PackNum(reflect.ValueOf(len(n.Id[2:]))))
-		b1.Write([]byte(n.Id[2:]))
-		b1.Write(metclient.PackNum(reflect.ValueOf(len(n.Ip))))
-		b1.Write([]byte(n.Ip))
-		b1.Write(metclient.PackNum(reflect.ValueOf(n.Port)))
+		b1.Write(metclient.PackNum(reflect.ValueOf(len(m.Name))))
+		b1.Write([]byte(m.Name))
+		b1.Write(metclient.PackNum(reflect.ValueOf(len(id))))
+		b1.Write([]byte(id))
+		b1.Write(metclient.PackNum(reflect.ValueOf(len(m.Ip))))
+		b1.Write([]byte(m.Ip))
+		b1.Write(metclient.PackNum(reflect.ValueOf(m.Port)))
 
 		b2.Write(metclient.PackNum(reflect.ValueOf(addr)))
 		b2.Write(metclient.PackNum(reflect.ValueOf(m.Stake)))

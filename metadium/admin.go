@@ -135,12 +135,15 @@ func (ma *metaAdmin) getGenesisInfo() (string, common.Address, error) {
 		return "", common.Address{}, err
 	}
 
-	nodeId := hex.EncodeToString(block.Extra)
-	if len(nodeId) < 128 {
+	var nodeId string
+	if len(block.Extra) < 64 {
 		panic("Invalid bootnode id in the genesis block.")
-	} else if nodeId, err = toIdv4(nodeId[len(nodeId)-128:]); err != nil {
-		panic("Invalid bootnode id in the genesis block.")
+	} else if len(block.Extra) == 64 {
+	    nodeId = hex.EncodeToString(block.Extra)
+	} else {
+		nodeId = string(block.Extra[len(block.Extra)-128:])
 	}
+	nodeId, _ = toIdv4(nodeId)
 	return nodeId, block.Coinbase, nil
 }
 

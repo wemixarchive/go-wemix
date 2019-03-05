@@ -264,17 +264,20 @@ func nodeKey2Id(ctx *cli.Context) error {
 }
 
 type genesisConfig struct {
-	Members []*struct {
+	ExtraData string `json:"extraData"`
+	Accounts  []*struct {
 		Addr    string   `json:"addr"`
 		Balance *big.Int `json:"balance"`
-		Stake   int64    `json:"stake"`
+	} `json:"accounts"`
+	Members []*struct {
+		Addr     string `json:"addr"`
+		Stake    *big.Int  `json:"stake"`
+		Name     string `json:"name"`
+		Id       string `json:"id"`
+		Ip       string `json:"ip"`
+		Port     int    `json:"port"`
+		Bootnode bool   `json:"bootnode"`
 	} `json:"members"`
-	Nodes []*struct {
-		Name string `json:"name"`
-		Ip   string `json:"ip"`
-		Port int    `json:"port"`
-		Id   string `json:"id"`
-	} `json:"nodes"`
 }
 
 func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
@@ -285,21 +288,32 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 		return nil, err
 	}
 
-	if len(config.Members) == 0 || len(config.Nodes) == 0 {
+	if len(config.Accounts) == 0 || len(config.Members) == 0 {
 		return nil, fmt.Errorf("At least one account and node are required.")
 	}
 
-	for _, m := range config.Members {
+	for _, m := range config.Accounts {
 		// to conforming form to avoid checksum error
 		m.Addr = common.HexToAddress(m.Addr).Hex()
 	}
-	for _, n := range config.Nodes {
-		if !(len(n.Id) == 128 || len(n.Id) == 130) {
-			return nil, fmt.Errorf("Not a node id: %s\n", n.Id)
+	bootnodeExists := false
+	for _, m := range config.Members {
+		// to conforming form to avoid checksum error
+		m.Addr = common.HexToAddress(m.Addr).Hex()
+		if !(len(m.Id) == 128 || len(m.Id) == 130) {
+			return nil, fmt.Errorf("Not a node id: %s\n", m.Id)
 		}
-		if len(n.Id) == 128 {
-			n.Id = "0x" + n.Id
+		if len(m.Id) == 128 {
+			m.Id = "0x" + m.Id
 		}
+		if m.Bootnode {
+			bootnodeExists = true
+			break
+		}
+	}
+
+	if !bootnodeExists {
+		return nil, fmt.Errorf("No bootnode found")
 	}
 
 	return &config, nil
@@ -338,14 +352,23 @@ func genGenesis(ctx *cli.Context) error {
 		}
 	}
 
-	if len(config.Members) <= 0 || len(config.Nodes) <= 0 {
+	if len(config.Members) <= 0 {
 		utils.Fatalf("At least one member and node are required.")
 	}
 
-	genesis["coinbase"] = config.Members[0].Addr
-	genesis["extraData"] = config.Nodes[0].Id
+	bootacct, bootnode := "", ""
+	for _, i := range config.Members {
+		if i.Bootnode {
+			bootacct = i.Addr
+			bootnode = i.Id
+			break
+		}
+	}
+
+	genesis["coinbase"] = bootacct
+	genesis["extraData"] = hexutil.Encode([]byte(fmt.Sprintf("%s\n%s", config.ExtraData, bootnode)))
 	alloc := map[string]map[string]string{}
-	for _, m := range config.Members {
+	for _, m := range config.Accounts {
 		alloc[m.Addr] = map[string]string{
 			"balance": hexutil.EncodeBig(m.Balance),
 		}
@@ -394,9 +417,9 @@ func genAdminContract(ctx *cli.Context) error {
 		}
 	}
 
-	tokens := int64(0)
+	stakes := big.NewInt(0)
 	for _, m := range config.Members {
-		tokens += m.Stake
+		stakes.Add(stakes, m.Stake)
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -412,7 +435,7 @@ func genAdminContract(ctx *cli.Context) error {
 
 		ll := strings.TrimSpace(l)
 		if strings.Index(ll, "tokens") == 0 {
-			_, err = fmt.Fprintf(w, "        tokens = %d;\n", tokens)
+			_, err = fmt.Fprintf(w, "        tokens = %d;\n", stakes)
 		} else if strings.Index(ll, "address[") == 0 {
 			var b bytes.Buffer
 			b.WriteString(fmt.Sprintf("        address[%d] memory _members = [ ", len(config.Members)))
@@ -443,9 +466,9 @@ func genAdminContract(ctx *cli.Context) error {
 			_, err = b.WriteTo(w)
 		} else if strings.Index(ll, "Node[") == 0 {
 			var b bytes.Buffer
-			b.WriteString(fmt.Sprintf("        Node[%d] memory _nodes = [ ", len(config.Nodes)))
+			b.WriteString(fmt.Sprintf("        Node[%d] memory _nodes = [ ", len(config.Members)))
 			first := true
-			for _, n := range config.Nodes {
+			for _, n := range config.Members {
 				if first {
 					first = false
 				} else {
