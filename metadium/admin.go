@@ -636,6 +636,7 @@ func (ma *metaAdmin) checkMining() {
 }
 
 func (ma *metaAdmin) run() {
+	lt := time.Now()
 	for {
 		if ma.nodeInfo == nil {
 			nodeInfo, err := ma.getNodeInfo()
@@ -662,6 +663,17 @@ func (ma *metaAdmin) run() {
 
 		if ma.amPartner() {
 			ma.checkMining()
+
+			t := time.Now()
+			if t.Sub(lt).Seconds() >= 30 {
+				lt = t
+				nodes := ma.getNodes()
+				for _, n := range nodes {
+					if !ma.isPeerUp(n.Id) {
+						ma.addPeer(n)
+					}
+				}
+			}
 		}
 
 		to := make(chan bool, 1)
@@ -991,6 +1003,7 @@ func getMinerStatus() *metaapi.MetadiumMinerStatus {
 
 	return &metaapi.MetadiumMinerStatus{
 		Name:              admin.self.Name,
+		Enode:             admin.self.Enode,
 		Id:                admin.self.Id,
 		Addr:              fmt.Sprintf("%s:%d", admin.self.Ip, admin.self.Port),
 		Status:            "up",
@@ -1031,6 +1044,7 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 	getDownStatus := func(node *metaNode) *metaapi.MetadiumMinerStatus {
 		return &metaapi.MetadiumMinerStatus{
 			Name:   node.Name,
+			Enode:  node.Enode,
 			Id:     node.Id,
 			Addr:   fmt.Sprintf("%s:%d", node.Ip, node.Port),
 			Status: "down",
