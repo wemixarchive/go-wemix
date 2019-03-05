@@ -58,12 +58,11 @@ function init_old ()
     fi
 }
 
-# void init(String node, String config_json, int port)
+# void init(String node, String config_json)
 function init ()
 {
     NODE="$1"
     CONFIG="$2"
-    PORT=$3
 
     if [ ! -f "$CONFIG" ]; then
 	echo "Cannot find config file: $2"
@@ -78,7 +77,7 @@ function init ()
 	return 1
     fi
 
-    if [ ! -f "${d}/conf/genesis-template.json" -o ! -f "${d}/conf/MetadiumAdmin-template.sol" ]; then
+    if [ ! -f "${d}/conf/genesis-template.json" ]; then
 	echo "Cannot find template files."
 	return 1
     fi
@@ -90,14 +89,41 @@ function init ()
 
     ${GMET} metadium genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
     [ $? = 0 ] || return $?
-    ${GMET} metadium admin-contract --data "$CONFIG" --admin "$d/conf/MetadiumAdmin-template.sol" --out "$d/MetadiumAdmin.sol"
-    [ $? = 0 ] || return $?
 
-    echo "PORT=${PORT}" > $d/.rc
+    echo "PORT=8588" > $d/.rc
     ${GMET} --datadir $d init $d/genesis.json
-    echo "Generating dags for epoch 0..."
+    echo "Generating dags for epoch 0 and 1..."
     ${GMET} makedag 0     $d/.ethash &
+    ${GMET} makedag 1     $d/.ethash &
     wait
+}
+
+# void init_gov(String node, String config_json, String account_file)
+function init_gov ()
+{
+    NODE="$1"
+    CONFIG="$2"
+    ACCT="$3"
+
+    if [ ! -f "$CONFIG" ]; then
+	echo "Cannot find config file: $2"
+	return 1
+    fi
+
+    d=$(get_data_dir "${NODE}")
+    if [ -x "$d/bin/gmet" ]; then
+	GMET="$d/bin/gmet"
+    else
+	echo "Cannot find gmet"
+	return 1
+    fi
+
+    if [ ! -f "${d}/conf/MetadiumGovernance.js" ]; then
+	echo "Cannot find ${d}/conf/MetadiumGovernance.js"
+	return 1
+    fi
+
+    ${GMET} metadium deploy-governance --url http://localhost:8588 --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
 }
 
 function wipe ()
@@ -286,7 +312,8 @@ function do_nodes ()
 
 function usage ()
 {
-    echo "Usage: `basename $0` [init <node> <config.json> [<port>] |
+    echo "Usage: `basename $0` [init <node> <config.json> |
+	init-gov <node> <config.json> <account-file> |
 	clean [<node>] | wipe [<node>] | console [<node>] |
 	[re]start [<node>] | stop [<node>] | [re]start-nodes | stop-nodes]
 
@@ -296,10 +323,18 @@ function usage ()
 
 case "$1" in
 "init")
+    if [ $# -lt 3 ]; then
+	usage;
+    else
+        init "$2" "$3"
+    fi
+    ;;
+
+"init-gov")
     if [ $# -lt 4 ]; then
 	usage;
     else
-        init "$2" "$3" "$4" "$5"
+        init_gov "$2" "$3" "$4"
     fi
     ;;
 

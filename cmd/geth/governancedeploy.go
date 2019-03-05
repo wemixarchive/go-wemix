@@ -69,7 +69,6 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 	var err error
 
 	// get command line arguments
-	passwd := cliCtx.String(utils.PasswordFileFlag.Name)
 	url := cliCtx.String(urlFlag.Name)
 	gas := cliCtx.Int(gasFlag.Name)
 	gasPrice := cliCtx.Int(gasPriceFlag.Name)
@@ -81,11 +80,16 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 		gasPrice = 80000000000
 	}
 
-	if len(url) == 0 || len(passwd) == 0 || len(cliCtx.Args()) != 3 {
+	if len(url) == 0 || len(cliCtx.Args()) != 3 {
 		return fmt.Errorf("Invalid Arguments")
 	}
 
-	accountFile, contractsFile, configJsFile := cliCtx.Args()[0], cliCtx.Args()[1], cliCtx.Args()[2]
+	passwd := getPassPhrase("", false, 0, utils.MakePasswordList(cliCtx))
+	if len(passwd) == 0 {
+		return fmt.Errorf("Invalid Arguments")
+	}
+
+	contractsFile, configJsFile, accountFile := cliCtx.Args()[0], cliCtx.Args()[1], cliCtx.Args()[2]
 
 	// account
 	var from *keystore.Key

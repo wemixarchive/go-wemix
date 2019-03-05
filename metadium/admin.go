@@ -520,7 +520,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 }
 
 func (ma *metaAdmin) addPeer(node *metaNode) error {
-	if node.Id == ma.nodeInfo.ID {
+	if node.Id == ma.nodeInfo.ID || ma.self == nil {
 		return nil
 	}
 

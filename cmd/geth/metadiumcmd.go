@@ -156,9 +156,10 @@ Download a genesis file from a peer to initialize.`,
 					gasPriceFlag,
 				},
 				Description: `
-    geth metadium deploy-governance [--password value] [--url <url>] [--gas <gas>] [--gasprice <gas-price>] <account-file> <contract-js-file> <config.js>
+    geth metadium deploy-governance [--password value] [--url <url>] [--gas <gas>] [--gasprice <gas-price>] <contract-js-file> <config.js> <account-file>
 
 Deploy governance contracts.
+To give password in command line, use "--password <(echo <password>)".
 `,
 			},
 		},
