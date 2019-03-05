@@ -52,6 +52,7 @@ Metadium helper commands, create a new account, a new node id, a new genesis fil
     geth metadium new-account --out <file>
 
 Creates a new account and saves it in the given file name.
+To give password in command line, use "--password <(echo <password>)".
 `,
 			},
 			{
@@ -127,7 +128,7 @@ The first node becomes the boot miner who's allowed to generate blocks before ad
 					gasPriceFlag,
 				},
 				Description: `
-    geth metadium deploy-contract [--password data <file> --url <url> --gas <gas> --gasprice <gas-price>] <account-file> <contract-name> <contract-file.[js|json]>
+    geth metadium deploy-contract [--password value --url <url> --gas <gas> --gasprice <gas-price>] <account-file> <contract-name> <contract-file.[js|json]>
 
 Deploy a contract from a contract file in .js or .json format.`,
 			},
@@ -140,9 +141,25 @@ Deploy a contract from a contract file in .js or .json format.`,
 					outFlag,
 				},
 				Description: `
-    geth metadium download-genesis [--url <url>] [--out <file-name>
+    geth metadium download-genesis [--url <url>] [--out <file-name>]
 
 Download a genesis file from a peer to initialize.`,
+			},
+			{
+				Name:   "deploy-governance",
+				Usage:  "Deploy governance contracts",
+				Action: utils.MigrateFlags(deployGovernanceContracts),
+				Flags: []cli.Flag{
+					utils.PasswordFileFlag,
+					urlFlag,
+					gasFlag,
+					gasPriceFlag,
+				},
+				Description: `
+    geth metadium deploy-governance [--password value] [--url <url>] [--gas <gas>] [--gasprice <gas-price>] <account-file> <contract-js-file> <config.js>
+
+Deploy governance contracts.
+`,
 			},
 		},
 	}

@@ -423,4 +423,13 @@ func SendValue(ctx context.Context, cli *ethclient.Client, from *keystore.Key, t
 	return
 }
 
+func ToBytes32(b string) [32]byte {
+	var b32 [32]byte
+	if len(b) > len(b32) {
+		b = b[len(b)-len(b32):]
+	}
+	copy(b32[32-len(b):], []byte(b))
+	return b32
+}
+
 // EOF
