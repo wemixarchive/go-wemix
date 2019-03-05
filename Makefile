@@ -251,22 +251,22 @@ metadium/admin_abi.go: metadium/contracts/MetadiumAdmin-template.sol build/bin/s
 AWK_CODE_2='								     \
 BEGIN { print "package metadium"; }					     \
 /^var Registry_contract/ {						     \
-  sub("^var[^(]*\\(","",$$0); sub(");$$","",$$0);			     \
+  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
   n = "Registry";							     \
   print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
 }									     \
 /^var Staking_contract/ {						     \
-  sub("^var[^(]*\\(","",$$0); sub(");$$","",$$0);			     \
+  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
   n = "Staking";							     \
   print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
 }									     \
 /^var EnvStorage_contract/ {						     \
-  sub("^var[^(]*\\(","",$$0); sub(");$$","",$$0);			     \
+  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
   n = "EnvStorage";							     \
   print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
 }									     \
 /^var Gov_contract/ {							     \
-  sub("^var[^(]*\\(","",$$0); sub(");$$","",$$0);			     \
+  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
   n = "Gov";								     \
   print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
 }'
