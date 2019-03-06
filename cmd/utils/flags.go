@@ -680,6 +680,11 @@ var (
 		Usage: "Transaction prefetch count for faster db read",
 		Value: params.PrefetchCount,
 	}
+	LogFlag = cli.StringFlag{
+		Name:  "log",
+		Usage: "Rotating log file: <file-name>,<count>,<size>",
+		Value: "log,5,10M",
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating

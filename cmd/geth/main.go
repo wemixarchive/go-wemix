@@ -181,6 +181,7 @@ var (
 		utils.NonceLimit,
 		utils.UseRocksDb,
 		utils.PrefetchCount,
+		utils.LogFlag,
 	}
 )
 
@@ -229,6 +230,9 @@ func init() {
 	app.Flags = append(app.Flags, metadiumFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
+		// setup rotating log if specified
+		logrota(ctx)
+
 		runtime.GOMAXPROCS(runtime.NumCPU())
 
 		if ctx.GlobalIsSet(utils.DataDirFlag.Name) && !ctx.GlobalIsSet(utils.EthashDatasetDirFlag.Name) {

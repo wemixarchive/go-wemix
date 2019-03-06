@@ -8,14 +8,19 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 
+	"github.com/charlanxcc/logrot"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -270,13 +275,13 @@ type genesisConfig struct {
 		Balance *big.Int `json:"balance"`
 	} `json:"accounts"`
 	Members []*struct {
-		Addr     string `json:"addr"`
-		Stake    *big.Int  `json:"stake"`
-		Name     string `json:"name"`
-		Id       string `json:"id"`
-		Ip       string `json:"ip"`
-		Port     int    `json:"port"`
-		Bootnode bool   `json:"bootnode"`
+		Addr     string   `json:"addr"`
+		Stake    *big.Int `json:"stake"`
+		Name     string   `json:"name"`
+		Id       string   `json:"id"`
+		Ip       string   `json:"ip"`
+		Port     int      `json:"port"`
+		Bootnode bool     `json:"bootnode"`
 	} `json:"members"`
 }
 
@@ -586,6 +591,87 @@ func downloadGenesis(ctx *cli.Context) error {
 	}
 
 	w.Write([]byte(genesis.Result))
+	return nil
+}
+
+// borrowed from https://github.com/charlanxcc/logrot
+func parseSize(size string) (int, error) {
+	m := 1
+	size = strings.TrimSpace(size)
+	switch size[len(size)-1:] {
+	case "k":
+		fallthrough
+	case "K":
+		m = 1024
+		size = strings.TrimSpace(size[:len(size)-1])
+	case "m":
+		fallthrough
+	case "M":
+		m = 1024 * 1024
+		size = strings.TrimSpace(size[:len(size)-1])
+	case "g":
+		fallthrough
+	case "G":
+		m = 1024 * 1024 * 1024
+		size = strings.TrimSpace(size[:len(size)-1])
+	}
+
+	i, err := strconv.Atoi(size)
+	if err != nil {
+		return 0, err
+	} else {
+		return i * m, nil
+	}
+}
+
+// logrot frontend
+func logrota(ctx *cli.Context) error {
+	if !ctx.GlobalIsSet(utils.LogFlag.Name) {
+		return nil
+	}
+	logflag := ctx.GlobalString(utils.LogFlag.Name)
+	if logflag == "" {
+		return nil
+	}
+
+	var err error
+	logSize := 10 * 1024 * 1024
+	logCount := 5
+	logOpts := strings.Split(logflag, ",")
+	logFile := ""
+	if len(logOpts) == 0 {
+		return errors.New("No log file name")
+	}
+	if len(logOpts) >= 1 {
+		logFile = strings.TrimSpace(logOpts[0])
+	}
+	if len(logOpts) >= 2 {
+		if logSize, err = parseSize(logOpts[1]); err != nil {
+			return err
+		}
+		logCount = 1
+	}
+	if len(logOpts) >= 3 {
+		if logCount, err = parseSize(logOpts[2]); err != nil {
+			return err
+		}
+	}
+
+	if dir := filepath.Dir(logFile); dir != "" && dir != "." {
+		os.MkdirAll(filepath.Dir(logFile), 0700)
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	syscall.Close(syscall.Stdout)
+	syscall.Close(syscall.Stdout)
+	syscall.Dup2(int(w.Fd()), syscall.Stdout)
+	syscall.Dup2(int(w.Fd()), syscall.Stderr)
+
+	go logrot.LogRotate(r, logFile, logSize, logCount)
+
 	return nil
 }
 

@@ -27,37 +27,6 @@ function get_data_dir ()
     fi
 }
 
-# void init(String node, String genesis_json, int port, String account_file)
-function init_old ()
-{
-    NODE="$1"
-    GENESIS="$2"
-    PORT=$3
-    ACCOUNT_FILE="$4"
-
-    if [ ! -f "$GENESIS" ]; then
-	echo "Cannot find genesis file: $2"
-	return
-    fi
-
-    d=$(get_data_dir "$NODE")
-    if [ -x "$d/bin/gmet" ]; then
-        GMET="$d/bin/gmet"
-    fi
-
-    cd $d
-    [ -d logs ] || mkdir -p logs
-
-    echo "PORT=${PORT}" > $d/.rc
-
-    [ "${GENESIS}" = "$d/.genesis.json" ] || /bin/cp ${GENESIS} $d/.genesis.json
-    $GMET --datadir ${PWD} init $d/.genesis.json
-
-    if [ -f "$ACCOUNT_FILE" ]; then
-	cp "$ACCOUNT_FILE" $d/keystore/
-    fi
-}
-
 # void init(String node, String config_json)
 function init ()
 {
@@ -173,65 +142,6 @@ function clean_all ()
     done
 }
 
-function start_old ()
-{
-    d=$(get_data_dir "$1")
-    if [ -x "$d/bin/gmet" ]; then
-        GMET="$d/bin/gmet"
-    else
-	echo "Cannot find gmet"
-	return
-    fi
-    if [ -x "$d/bin/logrot" ]; then
-	LOGROT="$d/bin/logrot"
-    else
-	echo "Cannot find logrot"
-	return
-    fi
-
-    if [ -f "$d/.rc" ]; then
-	source "$d/.rc"
-    fi
-
-    MINE_OPT="--mine --miner.threads 1";
-    if [ "${PORT}" != "" ]; then
-	PORT_OPT="--port $(($PORT + 1))";
-	RPC_PORT_OPT="--rpc --rpcaddr 0.0.0.0 --rpcport $PORT"
-    else
-	PORT_OPT=
-	RPC_PORT_OPT=
-    fi
-    CHAIN_ID_OPT="--networkid ${CHAIN_ID}"
-
-    if [ -f "$d/rc.js" ]; then
-        RCJS="--preload $d/rc.js"
-    fi
-
-    TXPOOL_OPTS="--txpool.accountslots 100000 --txpool.globalslots 100000 --txpool.accountqueue 100000 --txpool.globalqueue 100000"
-    [ "${TARGET_GAS_LIMIT}" != "" ] && \
-	TARGET_GAS_LIMIT_OPT="--targetgaslimit ${TARGET_GAS_LIMIT}"
-
-    METADIUM_OPTS="--consensusmethod ${CONSENSUS_METHOD} --fixedgaslimit ${FIXED_GAS_LIMIT} --maxidleblockinterval ${MAX_IDLE_BLOCK_INTERVAL} --blocksperturn ${BLOCKS_PER_TURN} --metadiumabi ${METADIUM_ABI}"
-
-    cd $d
-    if [ ! "$2" = "inner" ]; then
-	$GMET --datadir ${PWD} --ethash.dagdir ${PWD}/.ethash		\
-	      --nodiscover ${CHAIN_ID_OPT} ${MINE_OPT} --metrics	\
-	      ${PORT_OPT} ${RPC_PORT_OPT} ${TXPOOL_OPTS}		\
-	      ${TARGET_GAS_LIMIT_OPT} ${METADIUM_OPTS}			\
-	      --gasprice ${GAS_PRICE} ${RCJS} 2>&1			\
-	    | ${LOGROT} ${d}/logs/log 10M 5 &
-    else
-	exec > >(${LOGROT} ${d}/logs/log 10M 5)
-	exec 2>&1
-	exec $GMET --datadir ${PWD} --ethash.dagdir ${PWD}/.ethash	\
-	      --nodiscover ${CHAIN_ID_OPT} ${MINE_OPT} --metrics	\
-	      ${PORT_OPT} ${RPC_PORT_OPT} ${TXPOOL_OPTS}		\
-	      ${TARGET_GAS_LIMIT_OPT} ${METADIUM_OPTS}			\
-	      --gasprice ${GAS_PRICE} ${RCJS}
-    fi
-}
-
 function start ()
 {
     d=$(get_data_dir "$1")
@@ -239,12 +149,6 @@ function start ()
         GMET="$d/bin/gmet"
     else
 	echo "Cannot find gmet"
-	return
-    fi
-    if [ -x "$d/bin/logrot" ]; then
-	LOGROT="$d/bin/logrot"
-    else
-	echo "Cannot find logrot"
 	return
     fi
 
@@ -265,13 +169,12 @@ function start ()
     cd $d
     if [ ! "$2" = "inner" ]; then
 	$GMET --datadir ${PWD} --syncmode full --gcmode archive --metrics \
-            $COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT 2>&1 |   \
-            ${LOGROT} ${d}/logs/log 10M 5 &
+            $COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT \
+            --log ${d}/logs/log,10M,5 &
     else
-	exec > >(${LOGROT} ${d}/logs/log 10M 5)
-	exec 2>&1
 	exec $GMET --datadir ${PWD} --syncmode full --gcmode archive \
-            --metrics $COINBASE $DISCOVER $RPCOPT $NONCE_LIMIT
+            --metrics $COINBASE $DISCOVER $RPCOPT $NONCE_LIMIT \
+            --log ${d}/logs/log,10M,5
     fi
 }
 
