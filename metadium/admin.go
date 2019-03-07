@@ -317,7 +317,7 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 			return nil, err
 		}
 
-		sid := string(enode)
+		sid := hex.EncodeToString(enode)
 		idv4, _ := toIdv4(sid)
 		nodes = append(nodes, &metaNode{
 			Name:  idv4[:8],
