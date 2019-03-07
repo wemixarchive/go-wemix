@@ -428,7 +428,8 @@ func ToBytes32(b string) [32]byte {
 	if len(b) > len(b32) {
 		b = b[len(b)-len(b32):]
 	}
-	copy(b32[32-len(b):], []byte(b))
+	//copy(b32[32-len(b):], []byte(b))
+	copy(b32[:], []byte(b))
 	return b32
 }
 
