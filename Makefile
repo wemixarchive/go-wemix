@@ -45,7 +45,7 @@ ifeq ($(USE_ROCKSDB), NO)
 	build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 else
 	CGO_CFLAGS=-I$(ROCKSDB_DIR)/include \
-		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lstdc++ -lrocksdb -lm $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
+		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lrocksdb -lm -lstdc++ $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
 		build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 endif
 	@echo "Done building."
