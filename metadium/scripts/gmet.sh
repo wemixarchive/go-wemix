@@ -169,7 +169,7 @@ function start ()
     cd $d
     if [ ! "$2" = "inner" ]; then
 	$GMET --datadir ${PWD} --syncmode full --gcmode archive --metrics \
-            $COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT | \
+            $COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT 2>&1 | \
             ${d}/bin/logrot ${d}/logs/log 10M 5 &
     else
 	exec $GMET --datadir ${PWD} --syncmode full --gcmode archive \
