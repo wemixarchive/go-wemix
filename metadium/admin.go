@@ -318,6 +318,9 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 		}
 
 		sid := hex.EncodeToString(enode)
+		if len(sid) != 128 {
+			return nil, errors.New("Invalid enode")
+		}
 		idv4, _ := toIdv4(sid)
 		nodes = append(nodes, &metaNode{
 			Name:  idv4[:8],

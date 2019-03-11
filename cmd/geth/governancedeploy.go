@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"os"
@@ -36,9 +37,19 @@ func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, sta
 	var b1, b2 bytes.Buffer
 	for i := 0; i < l; i++ {
 		m := cfg.Members[i]
-		id := m.Id
-		if len(id) == 130 {
-			id = id[2:]
+		var (
+			sid string
+			id []byte
+		)
+		if len(m.Id) == 128 {
+			sid = m.Id
+		} else if len(m.Id) == 130 {
+			sid = m.Id[2:]
+		} else {
+			return nil, nil, fmt.Errorf("Invalid enode id %s", m.Id)
+		}
+		if id, err = hex.DecodeString(sid); err != nil {
+			return nil, nil, err
 		}
 
 		addr := big.NewInt(0)
@@ -47,7 +58,7 @@ func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, sta
 		b1.Write(metclient.PackNum(reflect.ValueOf(len(m.Name))))
 		b1.Write([]byte(m.Name))
 		b1.Write(metclient.PackNum(reflect.ValueOf(len(id))))
-		b1.Write([]byte(id))
+		b1.Write(id)
 		b1.Write(metclient.PackNum(reflect.ValueOf(len(m.Ip))))
 		b1.Write([]byte(m.Ip))
 		b1.Write(metclient.PackNum(reflect.ValueOf(m.Port)))
