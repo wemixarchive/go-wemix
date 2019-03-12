@@ -7,6 +7,7 @@
 .PHONY: geth-linux-arm geth-linux-arm-5 geth-linux-arm-6 geth-linux-arm-7 geth-linux-arm64
 .PHONY: geth-darwin geth-darwin-386 geth-darwin-amd64
 .PHONY: geth-windows geth-windows-386 geth-windows-amd64
+.PHONY: gmet-linux
 
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
@@ -202,6 +203,28 @@ geth-windows-amd64:
 	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=windows/amd64 -v ./cmd/geth
 	@echo "Windows amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
+
+gmet-linux:
+ifeq ($(shell uname), Linux)
+	@docker --version > /dev/null 2>&1;				\
+	if [ ! $$? = 0 ]; then						\
+		echo "Docker not found.";				\
+	else								\
+		docker run -e HOME=/tmp -it -v /etc/passwd:/etc/passwd:ro \
+			-v /etc/group:/etc/group:ro			\
+			-v ~/src:/home/$${USER}/src			\
+			-v $(shell pwd):/data -u $$(id -u):$$(id -g)	\
+			-w /data metadium/bobthe:latest make;		\
+	fi
+else
+	@docker --version > /dev/null 2>&1;				\
+	if [ ! $$? = 0 ]; then						\
+		echo "Docker not found.";				\
+	else								\
+		docker run -e HOME=/tmp -it -v $(shell pwd):/data	\
+			-w /data metadium/bobthe:latest make;		\
+	fi
+endif
 
 vendor:
 	@build/env.sh test 1;
