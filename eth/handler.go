@@ -242,7 +242,8 @@ func (pm *ProtocolManager) Stop() {
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
 	pm.noMorePeers <- struct{}{}
-	pm.noMorePeers <- struct{}{}
+	// Sadoc: the following line is no longer needed as this is for syncPendingTxs()
+	//pm.noMorePeers <- struct{}{}
 
 	// Quit fetcher, txsyncLoop.
 	close(pm.quitSync)
