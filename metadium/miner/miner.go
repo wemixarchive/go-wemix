@@ -11,15 +11,16 @@ import (
 )
 
 var (
-	IsMinerFunc           func(int) bool
-	AmPartnerFunc         func() bool
-	IsPartnerFunc         func(string) bool
-	LogBlockFunc          func(int64)
-	CalculateRewardsFunc  func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
-	VerifyRewardsFunc     func(*big.Int, string) error
-	SignBlockFunc         func(hash common.Hash) (nodeid, sig []byte, err error)
-	VerifyBlockSigFunc    func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
-	RequirePendingTxsFunc func() bool
+	IsMinerFunc            func(int) bool
+	AmPartnerFunc          func() bool
+	IsPartnerFunc          func(string) bool
+	LogBlockFunc           func(int64)
+	CalculateRewardsFunc   func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
+	VerifyRewardsFunc      func(*big.Int, string) error
+	SignBlockFunc          func(hash common.Hash) (nodeid, sig []byte, err error)
+	VerifyBlockSigFunc     func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
+	RequirePendingTxsFunc  func() bool
+	VerifyBlockRewardsFunc func(height *big.Int) interface{}
 )
 
 func IsMiner(height int) bool {
@@ -94,6 +95,14 @@ func RequirePendingTxs() bool {
 		return false
 	} else {
 		return RequirePendingTxsFunc()
+	}
+}
+
+func VerifyBlockRewards(height *big.Int) interface{} {
+	if VerifyBlockRewardsFunc == nil {
+		return false
+	} else {
+		return VerifyBlockRewardsFunc(height)
 	}
 }
 

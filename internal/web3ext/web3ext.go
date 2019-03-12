@@ -502,6 +502,11 @@ web3._extend({
 			call: 'debug_dbStats',
 			params: 2,
 		}),
+		new web3._extend.Method({
+			name: 'verifyBlockRewards',
+			call: 'debug_verifyBlockRewards',
+			params: 1,
+		}),
 	],
 	properties: []
 });

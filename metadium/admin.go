@@ -1289,6 +1289,42 @@ func requirePendingTxs() bool {
 	return true
 }
 
+// checks
+// 1. fees total and per governance accounts are accurate
+// 2. sum(rewards) == fees + block reward
+// 3. rewards distribution is correct
+// 4. reward members, reward pool and maintenance account are correct
+// 5. balances of governance accounts are accurate.
+//   Note that it doesn't take account of internal transactions,
+//   so balance checks won't be accurate if there are contract transactions.
+func verifyBlockRewards(height *big.Int) interface{} {
+	type result struct {
+		Status bool `json:"status"`
+		// txs counts: total, contract calls and simple ether transfers
+		Txs         int `json:"txs"` // # of txs
+		ContractTxs int `json:"contractTxs"`
+		SimpleTxs   int `json:"simpleTxs"`
+		// this will be 0 for now
+		BlockReward *big.Int `json:"blockReward"`
+		// fees: total and per accounts in governance contract
+		Fees map[string]*big.Int `json:"fees"`
+		// error and messsages if any
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+
+	r := &result{
+		Status: false,
+		Error:  "Not initialized",
+	}
+
+	if admin == nil {
+		return r
+	}
+
+	return r
+}
+
 func init() {
 	metaminer.IsMinerFunc = IsMiner
 	metaminer.AmPartnerFunc = AmPartner
@@ -1299,6 +1335,7 @@ func init() {
 	metaminer.SignBlockFunc = signBlock
 	metaminer.VerifyBlockSigFunc = verifyBlockSig
 	metaminer.RequirePendingTxsFunc = requirePendingTxs
+	metaminer.VerifyBlockRewardsFunc = verifyBlockRewards
 	metaapi.Info = Info
 	metaapi.GetMiners = getMiners
 	metaapi.GetMinerStatus = getMinerStatus
