@@ -793,7 +793,7 @@ func distributeRewards(six int, rewardPoolAccount, maintenanceAccount *common.Ad
 	}
 }
 
-func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (rewards []byte, err error) {
+func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (coinbase *common.Address, rewards []byte, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -806,6 +806,13 @@ func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalanc
 	if rewardPoolAccount == nil && maintenanceAccount == nil && len(members) == 0 {
 		err = fmt.Errorf("Not initialized")
 		return
+	}
+
+	// determine coinbase
+	if len(members) > 0 {
+		mix := (int(num.Int64()) % ma.blocksPer) % len(members)
+		coinbase = &common.Address{}
+		coinbase.SetBytes(members[mix].Addr.Bytes())
 	}
 
 	n := len(members)
@@ -860,7 +867,7 @@ func (ma *metaAdmin) verifyRewards(r1, r2 []byte) error {
 	return nil
 }
 
-func calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+func calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
 	return admin.calculateRewards(num, blockReward, fees, addBalance)
 }
 

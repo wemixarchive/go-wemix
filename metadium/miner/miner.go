@@ -15,7 +15,7 @@ var (
 	AmPartnerFunc          func() bool
 	IsPartnerFunc          func(string) bool
 	LogBlockFunc           func(int64)
-	CalculateRewardsFunc   func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
+	CalculateRewardsFunc   func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
 	VerifyRewardsFunc      func(*big.Int, string) error
 	SignBlockFunc          func(hash common.Hash) (nodeid, sig []byte, err error)
 	VerifyBlockSigFunc     func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
@@ -57,9 +57,9 @@ func IsPoW() bool {
 	return params.ConsensusMethod == params.ConsensusPoW
 }
 
-func CalculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+func CalculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
 	if CalculateRewardsFunc == nil {
-		return nil, errors.New("Not initialized")
+		return nil, nil, errors.New("Not initialized")
 	} else {
 		return CalculateRewardsFunc(num, blockReward, fees, addBalance)
 	}
