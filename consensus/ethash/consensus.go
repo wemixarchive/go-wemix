@@ -650,11 +650,18 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		state.AddBalance(header.Coinbase, reward)
 	} else {
 		blockReward = MetadiumBlockReward
-		rewards, _ := metaminer.CalculateRewards(header.Number, blockReward,
+		rewards, err := metaminer.CalculateRewards(header.Number, blockReward,
 			big.NewInt(int64(header.Fees)),
 			func(addr common.Address, amt *big.Int) {
 				state.AddBalance(addr, amt)
 			})
-		header.Rewards = rewards
+		if err == nil {
+			header.Rewards = rewards
+		} else {
+			// upon error, rewards go to the coinbase
+			reward := new(big.Int)
+			reward.Add(blockReward, big.NewInt(int64(header.Fees)))
+			state.AddBalance(header.Coinbase, reward)
+		}
 	}
 }
