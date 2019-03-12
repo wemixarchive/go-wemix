@@ -16,7 +16,7 @@
     "minerNodeId" : "0x0",
     "minerNodeSig": "0x0",
     "config": {
-        "chainId": 101,
+        "chainId": 11,
         "homesteadBlock": 0,
         "byzantiumBlock": 0,
         "eip155Block": 0,
