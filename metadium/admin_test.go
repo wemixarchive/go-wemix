@@ -2,8 +2,7 @@
 
 package metadium
 
-import (
-)
+import ()
 
 func TestDistributeRewards() {
 	pool := common.HexToAddress("0x1234")
@@ -11,15 +10,15 @@ func TestDistributeRewards() {
 	var members []*metaMember
 
 	members = append(members, &metaMember{
-		Addr: common.HexToAddress("0x0001"),
+		Addr:  common.HexToAddress("0x0001"),
 		Stake: big.NewInt(100),
 	})
 	members = append(members, &metaMember{
-		Addr: common.HexToAddress("0x0002"),
+		Addr:  common.HexToAddress("0x0002"),
 		Stake: big.NewInt(200),
 	})
 	members = append(members, &metaMember{
-		Addr: common.HexToAddress("0x0003"),
+		Addr:  common.HexToAddress("0x0003"),
 		Stake: big.NewInt(300),
 	})
 

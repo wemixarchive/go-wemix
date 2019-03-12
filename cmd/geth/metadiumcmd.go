@@ -269,19 +269,21 @@ func nodeKey2Id(ctx *cli.Context) error {
 }
 
 type genesisConfig struct {
-	ExtraData string `json:"extraData"`
-	Accounts  []*struct {
-		Addr    string   `json:"addr"`
-		Balance *big.Int `json:"balance"`
+	ExtraData   string         `json:"extraData"`
+	RewardPool  common.Address `json:"pool"`
+	Maintenance common.Address `json:"maintenance"`
+	Accounts    []*struct {
+		Addr    common.Address `json:"addr"`
+		Balance *big.Int       `json:"balance"`
 	} `json:"accounts"`
 	Members []*struct {
-		Addr     string   `json:"addr"`
-		Stake    *big.Int `json:"stake"`
-		Name     string   `json:"name"`
-		Id       string   `json:"id"`
-		Ip       string   `json:"ip"`
-		Port     int      `json:"port"`
-		Bootnode bool     `json:"bootnode"`
+		Addr     common.Address `json:"addr"`
+		Stake    *big.Int       `json:"stake"`
+		Name     string         `json:"name"`
+		Id       string         `json:"id"`
+		Ip       string         `json:"ip"`
+		Port     int            `json:"port"`
+		Bootnode bool           `json:"bootnode"`
 	} `json:"members"`
 }
 
@@ -297,14 +299,9 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 		return nil, fmt.Errorf("At least one account and node are required.")
 	}
 
-	for _, m := range config.Accounts {
-		// to conforming form to avoid checksum error
-		m.Addr = common.HexToAddress(m.Addr).Hex()
-	}
 	bootnodeExists := false
 	for _, m := range config.Members {
 		// to conforming form to avoid checksum error
-		m.Addr = common.HexToAddress(m.Addr).Hex()
 		if !(len(m.Id) == 128 || len(m.Id) == 130) {
 			return nil, fmt.Errorf("Not a node id: %s\n", m.Id)
 		}
@@ -364,7 +361,7 @@ func genGenesis(ctx *cli.Context) error {
 	bootacct, bootnode := "", ""
 	for _, i := range config.Members {
 		if i.Bootnode {
-			bootacct = i.Addr
+			bootacct = i.Addr.Hex()
 			bootnode = i.Id
 			break
 		}
@@ -374,7 +371,7 @@ func genGenesis(ctx *cli.Context) error {
 	genesis["extraData"] = hexutil.Encode([]byte(fmt.Sprintf("%s\n%s", config.ExtraData, bootnode)))
 	alloc := map[string]map[string]string{}
 	for _, m := range config.Accounts {
-		alloc[m.Addr] = map[string]string{
+		alloc[m.Addr.Hex()] = map[string]string{
 			"balance": hexutil.EncodeBig(m.Balance),
 		}
 	}

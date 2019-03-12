@@ -20,7 +20,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
-func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, stakes []byte, err error) {
+func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, stakes []byte, rewardPoolAccount, maintenanceAccount *common.Address, err error) {
 	var fin *os.File
 	if fin, err = os.Open(configJsFile); err != nil {
 		return
@@ -39,22 +39,20 @@ func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, sta
 		m := cfg.Members[i]
 		var (
 			sid string
-			id []byte
+			id  []byte
 		)
 		if len(m.Id) == 128 {
 			sid = m.Id
 		} else if len(m.Id) == 130 {
 			sid = m.Id[2:]
 		} else {
-			return nil, nil, fmt.Errorf("Invalid enode id %s", m.Id)
+			return nil, nil, nil, nil, fmt.Errorf("Invalid enode id %s", m.Id)
 		}
 		if id, err = hex.DecodeString(sid); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
-		addr := big.NewInt(0)
-		addr.SetString(m.Addr, 0)
-		b1.Write(metclient.PackNum(reflect.ValueOf(addr)))
+		b1.Write(metclient.PackNum(reflect.ValueOf(m.Addr.Big())))
 		b1.Write(metclient.PackNum(reflect.ValueOf(len(m.Name))))
 		b1.Write([]byte(m.Name))
 		b1.Write(metclient.PackNum(reflect.ValueOf(len(id))))
@@ -63,11 +61,19 @@ func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, sta
 		b1.Write([]byte(m.Ip))
 		b1.Write(metclient.PackNum(reflect.ValueOf(m.Port)))
 
-		b2.Write(metclient.PackNum(reflect.ValueOf(addr)))
+		b2.Write(metclient.PackNum(reflect.ValueOf(m.Addr.Big())))
 		b2.Write(metclient.PackNum(reflect.ValueOf(m.Stake)))
 	}
 	nodes = b1.Bytes()
 	stakes = b2.Bytes()
+	nilAddr := common.Address{}
+	if cfg.RewardPool != nilAddr {
+		rewardPoolAccount = &cfg.RewardPool
+	}
+	if cfg.Maintenance != nilAddr {
+		maintenanceAccount = &cfg.Maintenance
+	}
+
 	return
 }
 
@@ -109,8 +115,12 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 	}
 
 	// initial members and nodes data
-	var membersAndNodes, stakes []byte
-	if membersAndNodes, stakes, err = getInitialGovernanceMembersAndNodes(configJsFile); err != nil {
+	var (
+		membersAndNodes, stakes               []byte
+		rewardPoolAccount, maintenanceAccount *common.Address
+	)
+	membersAndNodes, stakes, rewardPoolAccount, maintenanceAccount, err = getInitialGovernanceMembersAndNodes(configJsFile)
+	if err != nil {
 		return nil
 	}
 
@@ -257,6 +267,18 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 	ixTxs++
 	if txs[ixTxs], err = metclient.SendContract(ctx, registry, "setContractDomain", []interface{}{metclient.ToBytes32("GovernanceContract"), gov.To}); err != nil {
 		return err
+	}
+	if rewardPoolAccount != nil {
+		ixTxs++
+		if txs[ixTxs], err = metclient.SendContract(ctx, registry, "setContractDomain", []interface{}{metclient.ToBytes32("RewardPool"), rewardPoolAccount}); err != nil {
+			return err
+		}
+	}
+	if maintenanceAccount != nil {
+		ixTxs++
+		if txs[ixTxs], err = metclient.SendContract(ctx, registry, "setContractDomain", []interface{}{metclient.ToBytes32("Maintenance"), maintenanceAccount}); err != nil {
+			return err
+		}
 	}
 
 	// no need to wait for the receipts for the above

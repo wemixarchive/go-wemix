@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"path"
 	"reflect"
@@ -139,7 +138,7 @@ func (ma *metaAdmin) getGenesisInfo() (string, common.Address, error) {
 	if len(block.Extra) < 64 {
 		panic("Invalid bootnode id in the genesis block.")
 	} else if len(block.Extra) == 64 {
-	    nodeId = hex.EncodeToString(block.Extra)
+		nodeId = hex.EncodeToString(block.Extra)
 	} else {
 		nodeId = string(block.Extra[len(block.Extra)-128:])
 	}
@@ -336,33 +335,45 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 	return nodes, err
 }
 
-func (ma *metaAdmin) getMetaMembers(ctx context.Context, block *big.Int) ([]*metaMember, error) {
+func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rewardPoolAccount, maintenanceAccount *common.Address, members []*metaMember, err error) {
 	var (
-		members []*metaMember
-		addr    common.Address
-		count   int
-		stake   *big.Int
-		input   []interface{}
-		err     error
+		addr  common.Address
+		count int
+		stake *big.Int
+		input []interface{}
 	)
+
+	input = []interface{}{metclient.ToBytes32("RewardPool")}
+	err = metclient.CallContract(ctx, ma.registry, "getContractAddress", input, &addr, block)
+	if err == nil {
+		rewardPoolAccount = &common.Address{}
+		rewardPoolAccount.SetBytes(addr.Bytes())
+	}
+
+	input = []interface{}{metclient.ToBytes32("Maintenance")}
+	err = metclient.CallContract(ctx, ma.registry, "getContractAddress", input, &addr, block)
+	if err == nil {
+		maintenanceAccount = &common.Address{}
+		maintenanceAccount.SetBytes(addr.Bytes())
+	}
 
 	count, err = ma.getInt(ctx, ma.gov, block, "getMemberLength")
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	for i := 1; i <= count; i++ {
 		input = []interface{}{big.NewInt(int64(i))}
-		err = metclient.CallContract(ctx, ma.gov, "getMember", input,
+		err = metclient.CallContract(ctx, ma.gov, "getReward", input,
 			&addr, block)
 		if err != nil {
-			return nil, err
+			return
 		}
 		input = []interface{}{addr}
-		err = metclient.CallContract(ctx, ma.staking, "balanceOf", input,
+		err = metclient.CallContract(ctx, ma.staking, "lockedBalanceOf", input,
 			&stake, block)
 		if err != nil {
-			return nil, err
+			return
 		}
 
 		members = append(members, &metaMember{
@@ -371,7 +382,7 @@ func (ma *metaAdmin) getMetaMembers(ctx context.Context, block *big.Int) ([]*met
 		})
 	}
 
-	return members, nil
+	return
 }
 
 func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer, maxIdleBlockInterval int, nodes, addedNodes, updatedNodes, deletedNodes []*metaNode, err error) {
@@ -457,24 +468,6 @@ func StartAdmin(stack *node.Node, datadir string) {
 		params.ConsensusMethod == params.ConsensusPBFT) {
 		utils.Fatalf("Invalid Consensus Method: %d\n", params.ConsensusMethod)
 	}
-
-	metaminer.IsMinerFunc = IsMiner
-	metaminer.AmPartnerFunc = AmPartner
-	metaminer.IsPartnerFunc = IsPartner
-	metaminer.LogBlockFunc = LogBlock
-	metaminer.CalculateRewardsFunc = calculateRewards
-	metaminer.VerifyRewardsFunc = verifyRewards
-	metaminer.SignBlockFunc = signBlock
-	metaminer.VerifyBlockSigFunc = verifyBlockSig
-	metaminer.RequirePendingTxsFunc = requirePendingTxs
-	metaapi.Info = Info
-	metaapi.GetMiners = getMiners
-	metaapi.GetMinerStatus = getMinerStatus
-	metaapi.EtcdInit = EtcdInit
-	metaapi.EtcdAddMember = EtcdAddMember
-	metaapi.EtcdRemoveMember = EtcdRemoveMember
-	metaapi.EtcdJoin = EtcdJoin
-	metaapi.EtcdMoveLeader = EtcdMoveLeader
 
 	rpcCli, err := stack.Attach()
 	if err != nil {
@@ -696,11 +689,12 @@ func (ma *metaAdmin) run() {
 
 type reward struct {
 	Addr   common.Address `json:"addr"`
-	Reward uint64         `json:"reward"`
+	Reward *big.Int       `json:"reward"`
 }
 
+/*
 // to get around 64 bit boundary. big.Float didn't help here.
-func distributeRewards(six int, members []*metaMember, rewards []reward, amount int64) {
+func distributeRewardsOld(six int, members []*metaMember, rewards []reward, amount int64) {
 	n := len(members)
 	var u int64
 	for i := 0; i < n; i++ {
@@ -726,29 +720,109 @@ func distributeRewards(six int, members []*metaMember, rewards []reward, amount 
 		six = (six + 1) % n
 	}
 }
+*/
+
+func distributeRewards(six int, rewardPoolAccount, maintenanceAccount *common.Address, members []*metaMember, rewards []reward, amount *big.Int) {
+	n := len(members)
+
+	v0 := big.NewInt(0)
+	v1 := big.NewInt(1)
+	v10 := big.NewInt(10)
+	v45 := big.NewInt(45)
+	v100 := big.NewInt(100)
+	vn := big.NewInt(int64(n))
+
+	minerAmount := new(big.Int).Set(amount)
+	minerAmount.Mul(minerAmount, v45)
+	minerAmount.Div(minerAmount, v100)
+	maintAmount := new(big.Int).Set(amount)
+	maintAmount.Mul(maintAmount, v10)
+	maintAmount.Div(maintAmount, v100)
+	poolAmount := new(big.Int).Set(amount)
+	poolAmount.Sub(poolAmount, minerAmount)
+	poolAmount.Sub(poolAmount, maintAmount)
+
+	if n == 0 {
+		if rewardPoolAccount != nil {
+			poolAmount.Add(poolAmount, minerAmount)
+		} else if maintenanceAccount != nil {
+			maintAmount.Add(maintAmount, minerAmount)
+		}
+	}
+	if rewardPoolAccount == nil {
+		if n != 0 {
+			minerAmount.Add(minerAmount, poolAmount)
+		} else if maintenanceAccount != nil {
+			maintAmount.Add(maintAmount, poolAmount)
+		}
+	}
+	if maintenanceAccount == nil {
+		if n != 0 {
+			minerAmount.Add(minerAmount, maintAmount)
+		} else if rewardPoolAccount != nil {
+			poolAmount.Add(poolAmount, maintAmount)
+		}
+	}
+
+	if n > 0 {
+		b := new(big.Int).Set(minerAmount)
+		d := new(big.Int)
+		d.Div(b, vn)
+		for i := 0; i < n; i++ {
+			rewards[i].Addr = members[i].Addr
+			rewards[i].Reward = new(big.Int).Set(d)
+		}
+		d.Mul(d, vn)
+		b.Sub(b, d)
+		for i := 0; i < n && b.Cmp(v0) > 0; i++ {
+			rewards[six].Reward.Add(rewards[six].Reward, v1)
+			b.Sub(b, v1)
+			six = (six + 1) % n
+		}
+	}
+
+	if rewardPoolAccount != nil {
+		rewards[n].Addr = *rewardPoolAccount
+		rewards[n].Reward = poolAmount
+		n++
+	}
+	if maintenanceAccount != nil {
+		rewards[n].Addr = *maintenanceAccount
+		rewards[n].Reward = maintAmount
+		n++
+	}
+}
 
 func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (rewards []byte, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	members, err := ma.getMetaMembers(ctx, big.NewInt(num.Int64()-1))
+	rewardPoolAccount, maintenanceAccount, members, err := ma.getRewardAccounts(ctx, big.NewInt(num.Int64()-1))
 	if err != nil {
+		// all goes to the coinbase
 		return
 	}
-	if len(members) == 0 {
+
+	if rewardPoolAccount == nil && maintenanceAccount == nil && len(members) == 0 {
 		err = fmt.Errorf("Not initialized")
 		return
 	}
 
 	n := len(members)
+	if rewardPoolAccount != nil {
+		n++
+	}
+	if maintenanceAccount != nil {
+		n++
+	}
+
 	rr := make([]reward, n)
 	distributeRewards(int(new(big.Int).Set(num).Mod(num, big.NewInt(int64(len(members)))).Int64()),
-		members, rr, new(big.Int).Add(blockReward, fees).Int64())
+		rewardPoolAccount, maintenanceAccount, members, rr, new(big.Int).Add(blockReward, fees))
 
 	if addBalance != nil {
-		bi := new(big.Int)
 		for _, i := range rr {
-			addBalance(i.Addr, bi.SetUint64(i.Reward))
+			addBalance(i.Addr, i.Reward)
 		}
 	}
 
@@ -1208,6 +1282,26 @@ func requirePendingTxs() bool {
 	}
 
 	return true
+}
+
+func init() {
+	metaminer.IsMinerFunc = IsMiner
+	metaminer.AmPartnerFunc = AmPartner
+	metaminer.IsPartnerFunc = IsPartner
+	metaminer.LogBlockFunc = LogBlock
+	metaminer.CalculateRewardsFunc = calculateRewards
+	metaminer.VerifyRewardsFunc = verifyRewards
+	metaminer.SignBlockFunc = signBlock
+	metaminer.VerifyBlockSigFunc = verifyBlockSig
+	metaminer.RequirePendingTxsFunc = requirePendingTxs
+	metaapi.Info = Info
+	metaapi.GetMiners = getMiners
+	metaapi.GetMinerStatus = getMinerStatus
+	metaapi.EtcdInit = EtcdInit
+	metaapi.EtcdAddMember = EtcdAddMember
+	metaapi.EtcdRemoveMember = EtcdRemoveMember
+	metaapi.EtcdJoin = EtcdJoin
+	metaapi.EtcdMoveLeader = EtcdMoveLeader
 }
 
 /* EOF */
