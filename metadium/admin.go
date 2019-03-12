@@ -816,9 +816,14 @@ func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalanc
 		n++
 	}
 
+	six := 0
+	if len(members) > 0 {
+		six = int(new(big.Int).Mod(num, big.NewInt(int64(len(members)))).Int64())
+	}
+
 	rr := make([]reward, n)
-	distributeRewards(int(new(big.Int).Set(num).Mod(num, big.NewInt(int64(len(members)))).Int64()),
-		rewardPoolAccount, maintenanceAccount, members, rr, new(big.Int).Add(blockReward, fees))
+	distributeRewards(six, rewardPoolAccount, maintenanceAccount, members, rr,
+		new(big.Int).Add(blockReward, fees))
 
 	if addBalance != nil {
 		for _, i := range rr {
