@@ -629,6 +629,21 @@ func (ma *metaAdmin) update() {
 		if params.MaxIdleBlockInterval != uint64(data.maxIdleBlockInterval) {
 			params.MaxIdleBlockInterval = uint64(data.maxIdleBlockInterval)
 		}
+
+		// set minimum gas price
+		setGasPrice := func(gasPrice *big.Int) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var v *bool
+			err := ma.rpcCli.CallContext(ctx, &v, "miner_setGasPrice",
+				"0x"+gasPrice.Text(16))
+			if err != nil || !*v {
+				log.Info("Metadium: set minimum gas price failed", "gas price", gasPrice, "error", err)
+			} else {
+				log.Info("Metadium: Successfully set", "gas price", gasPrice)
+			}
+		}
+		setGasPrice(data.gasPrice)
 	}
 
 	if data.blockNum != 0 {
