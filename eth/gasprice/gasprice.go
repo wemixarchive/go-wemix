@@ -81,11 +81,9 @@ func (gpo *Oracle) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	lastPrice := gpo.lastPrice
 	gpo.cacheLock.RUnlock()
 
-	// Metadium TODO: in metadium, gas price is set by governance contract.
+	// In metadium, gas price is set by governance contract.
 	if !metaminer.IsPoW() {
-		if lastPrice != nil {
-			return lastPrice, nil
-		}
+		return metaminer.SuggestGasPrice(), nil
 	}
 
 	head, _ := gpo.backend.HeaderByNumber(ctx, rpc.LatestBlockNumber)

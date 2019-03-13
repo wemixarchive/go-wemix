@@ -76,6 +76,7 @@ type metaAdmin struct {
 	lastBlock     int
 	modifiedBlock int
 	blocksPer     int
+	gasPrice      *big.Int
 	self          *metaNode
 
 	lock  *sync.Mutex
@@ -528,6 +529,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 		rpcCli:      rpcCli,
 		cli:         cli,
 		blocksPer:   100,
+		gasPrice:    big.NewInt(80 * params.GWei),
 		etcdDir:     path.Join(datadir, "etcd"),
 		etcdTimeout: 30 * time.Second,
 	}
@@ -593,6 +595,7 @@ func (ma *metaAdmin) update() {
 
 		ma.modifiedBlock = data.modifiedBlock
 		ma.blocksPer = data.blocksPer
+		ma.gasPrice = data.gasPrice
 
 		_nodes := map[string]*metaNode{}
 		for _, i := range data.nodes {
@@ -626,23 +629,6 @@ func (ma *metaAdmin) update() {
 		if params.MaxIdleBlockInterval != uint64(data.maxIdleBlockInterval) {
 			params.MaxIdleBlockInterval = uint64(data.maxIdleBlockInterval)
 		}
-
-		// set gas price
-		/*
-		setGasPrice := func(gasPrice *big.Int) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			var v *bool
-			err := ma.rpcCli.CallContext(ctx, &v, "miner_setGasPrice",
-				"0x"+gasPrice.Text(16))
-			if err != nil || !*v {
-				log.Error("Metadium: set", "gas price", "0x"+gasPrice.Text(16), "error", err)
-			} else {
-				log.Info("Metadium: Successfully set", "gas price", gasPrice)
-			}
-		}
-		setGasPrice(data.gasPrice.Add(data.gasPrice, big.NewInt(1)))
-		*/
 	}
 
 	if data.blockNum != 0 {
@@ -1072,6 +1058,14 @@ func LogBlock(height int64) {
 	}
 }
 
+func suggestGasPrice() *big.Int {
+	if admin == nil || admin.gasPrice == nil {
+		return big.NewInt(80 * params.GWei)
+	} else {
+		return admin.gasPrice
+	}
+}
+
 func (ma *metaAdmin) toMiningPeers(nodes []*metaNode) string {
 	var bb bytes.Buffer
 	for _, n := range nodes {
@@ -1394,6 +1388,7 @@ func init() {
 	metaminer.AmPartnerFunc = AmPartner
 	metaminer.IsPartnerFunc = IsPartner
 	metaminer.LogBlockFunc = LogBlock
+	metaminer.SuggestGasPriceFunc = suggestGasPrice
 	metaminer.CalculateRewardsFunc = calculateRewards
 	metaminer.VerifyRewardsFunc = verifyRewards
 	metaminer.SignBlockFunc = signBlock

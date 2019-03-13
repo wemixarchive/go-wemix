@@ -21,6 +21,7 @@ var (
 	VerifyBlockSigFunc     func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
 	RequirePendingTxsFunc  func() bool
 	VerifyBlockRewardsFunc func(height *big.Int) interface{}
+	SuggestGasPriceFunc    func() *big.Int
 )
 
 func IsMiner(height int) bool {
@@ -103,6 +104,14 @@ func VerifyBlockRewards(height *big.Int) interface{} {
 		return false
 	} else {
 		return VerifyBlockRewardsFunc(height)
+	}
+}
+
+func SuggestGasPrice() *big.Int {
+	if SuggestGasPriceFunc == nil {
+		return big.NewInt(80 * params.GWei)
+	} else {
+		return SuggestGasPriceFunc()
 	}
 }
 
