@@ -62,6 +62,7 @@ type metaAdmin struct {
 	registry    *metclient.RemoteContract
 	gov         *metclient.RemoteContract
 	staking     *metclient.RemoteContract
+	envStorage  *metclient.RemoteContract
 	Updates     chan bool
 	rpcCli      *rpc.Client
 	cli         *ethclient.Client
@@ -147,11 +148,11 @@ func (ma *metaAdmin) getGenesisInfo() (string, common.Address, error) {
 }
 
 // it should be the first transaction of the coinbase of the genesis block
-func (ma *metaAdmin) getAdminAddresses() (registry, gov, staking *common.Address, err error) {
+func (ma *metaAdmin) getAdminAddresses() (registry, gov, staking, envStorage *common.Address, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	registry, gov, staking = nil, nil, nil
+	registry, gov, staking, envStorage = nil, nil, nil, nil
 	contract := &metclient.RemoteContract{
 		Cli: ma.cli,
 		Abi: ma.registry.Abi,
@@ -198,7 +199,7 @@ func (ma *metaAdmin) getAdminAddresses() (registry, gov, staking *common.Address
 		hex.EncodeToString(n2[:]), a2.Hex(),
 		hex.EncodeToString(n3[:]), a3.Hex())
 
-	gov, staking = &a1, &a2
+	gov, staking, envStorage = &a1, &a2, &a3
 	return
 }
 
@@ -385,7 +386,17 @@ func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rew
 	return
 }
 
-func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer, maxIdleBlockInterval int, nodes, addedNodes, updatedNodes, deletedNodes []*metaNode, err error) {
+// temporary internal structure to collect data from governance contracts
+type govdata struct {
+	blockNum, modifiedBlock                       int
+	blocksPer, maxIdleBlockInterval               int
+	gasPrice                                      *big.Int
+	nodes, addedNodes, updatedNodes, deletedNodes []*metaNode
+}
+
+func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
+	data = &govdata{}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -393,28 +404,38 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer, 
 	if err != nil {
 		return
 	}
-	blockNum = int(block.Number.Int64())
-	if !refresh && blockNum <= ma.lastBlock {
+	data.blockNum = int(block.Number.Int64())
+	if !refresh && data.blockNum <= ma.lastBlock {
 		return
 	}
 
-	modifiedBlock, err = ma.getInt(ctx, ma.gov, block.Number, "modifiedBlock")
+	data.modifiedBlock, err = ma.getInt(ctx, ma.gov, block.Number,
+		"modifiedBlock")
 	if err != nil {
 		return
 	}
-	if !refresh && ma.modifiedBlock == modifiedBlock {
+	if !refresh && ma.modifiedBlock == data.modifiedBlock {
 		return
 	}
 
-	maxIdleBlockInterval = 5
-
-	//blocksPer, err = ma.getInt(ctx, ma.envStorage, block.Number, "blocksPer")
-	blocksPer, err = 100, nil
+	data.blocksPer, err = ma.getInt(ctx, ma.envStorage, block.Number, "getBlocksPer")
+	if err != nil {
+		// TODO: ignore this error for now
+		data.blocksPer = ma.blocksPer
+		//return
+	}
+	data.maxIdleBlockInterval, err = ma.getInt(ctx, ma.envStorage, block.Number, "getMaxIdleBlockInterval")
+	if err != nil {
+		// TODO: ignore this error for now
+		data.maxIdleBlockInterval = int(params.MaxIdleBlockInterval)
+		//return
+	}
+	err = metclient.CallContract(ctx, ma.envStorage, "getGasPrice", nil, &data.gasPrice, block.Number)
 	if err != nil {
 		return
 	}
 
-	nodes, err = ma.getMetaNodes(ctx, block.Number)
+	data.nodes, err = ma.getMetaNodes(ctx, block.Number)
 	if err != nil {
 		return
 	}
@@ -423,39 +444,39 @@ func (ma *metaAdmin) getData(refresh bool) (blockNum, modifiedBlock, blocksPer, 
 	sort.Slice(oldNodes, func(i, j int) bool {
 		return oldNodes[i].Name < oldNodes[j].Name
 	})
-	sort.Slice(nodes, func(i, j int) bool {
-		return nodes[i].Name < nodes[j].Name
+	sort.Slice(data.nodes, func(i, j int) bool {
+		return data.nodes[i].Name < data.nodes[j].Name
 	})
 
 	i, j := 0, 0
 	for {
-		if i >= len(oldNodes) || j >= len(nodes) {
+		if i >= len(oldNodes) || j >= len(data.nodes) {
 			break
 		}
-		v := strings.Compare(oldNodes[i].Name, nodes[j].Name)
+		v := strings.Compare(oldNodes[i].Name, data.nodes[j].Name)
 		if v == 0 {
-			if !oldNodes[i].eq(nodes[j]) {
-				updatedNodes = append(updatedNodes, nodes[j])
+			if !oldNodes[i].eq(data.nodes[j]) {
+				data.updatedNodes = append(data.updatedNodes, data.nodes[j])
 			}
 			i++
 			j++
 		} else if v < 0 {
-			deletedNodes = append(deletedNodes, oldNodes[i])
+			data.deletedNodes = append(data.deletedNodes, oldNodes[i])
 			i++
 		} else if v > 0 {
-			addedNodes = append(addedNodes, nodes[j])
+			data.addedNodes = append(data.addedNodes, data.nodes[j])
 			j++
 		}
 	}
 
 	if i < len(oldNodes) {
 		for ; i < len(oldNodes); i++ {
-			deletedNodes = append(deletedNodes, oldNodes[i])
+			data.deletedNodes = append(data.deletedNodes, oldNodes[i])
 		}
 	}
-	if j < len(nodes) {
-		for ; j < len(nodes); j++ {
-			addedNodes = append(addedNodes, nodes[j])
+	if j < len(data.nodes) {
+		for ; j < len(data.nodes); j++ {
+			data.addedNodes = append(data.addedNodes, data.nodes[j])
 		}
 	}
 
@@ -486,6 +507,10 @@ func StartAdmin(stack *node.Node, datadir string) {
 	if err != nil {
 		utils.Fatalf("Loading ABI failed: %v", err)
 	}
+	envStorageImpContract, err := metclient.LoadJsonContract(strings.NewReader(EnvStorageImpAbi))
+	if err != nil {
+		utils.Fatalf("Loading ABI failed: %v", err)
+	}
 
 	cli := ethclient.NewClient(rpcCli)
 	admin = &metaAdmin{
@@ -497,9 +522,12 @@ func StartAdmin(stack *node.Node, datadir string) {
 			Cli: cli, Abi: govContract.Abi},
 		staking: &metclient.RemoteContract{
 			Cli: cli, Abi: stakingContract.Abi},
+		envStorage: &metclient.RemoteContract{
+			Cli: cli, Abi: envStorageImpContract.Abi},
 		Updates:     make(chan bool, 10),
 		rpcCli:      rpcCli,
 		cli:         cli,
+		blocksPer:   100,
 		etcdDir:     path.Join(datadir, "etcd"),
 		etcdTimeout: 30 * time.Second,
 	}
@@ -542,28 +570,32 @@ func (ma *metaAdmin) addPeer(node *metaNode) error {
 func (ma *metaAdmin) update() {
 	refresh := false
 
-	registry, gov, staking, err := ma.getAdminAddresses()
+	registry, gov, staking, envStorage, err := ma.getAdminAddresses()
 	if err != nil {
 		return
-	} else if registry != ma.registry.To || gov != ma.gov.To || staking != ma.staking.To {
+	} else if !bytes.Equal(registry[:], ma.registry.To[:]) ||
+		!bytes.Equal(gov[:], ma.gov.To[:]) ||
+		!bytes.Equal(staking[:], ma.staking.To[:]) ||
+		!bytes.Equal(envStorage[:], ma.envStorage.To[:]) {
 		ma.registry.To = registry
 		ma.gov.To = gov
 		ma.staking.To = staking
+		ma.envStorage.To = envStorage
 		refresh = true
 	}
 
-	blockNum, modifiedBlock, blocksPer, maxIdleBlockInterval, nodes, addedNodes, updatedNodes, deletedNodes, err := ma.getData(refresh)
+	data, err := ma.getGovData(refresh)
 	if err != nil {
 		log.Error(fmt.Sprintf("Failed to get nodes: %v", err))
 	} else if refresh ||
-		(modifiedBlock != 0 && ma.modifiedBlock != modifiedBlock) {
-		log.Debug(fmt.Sprintf("Modified Block: %d", modifiedBlock))
+		(data.modifiedBlock != 0 && ma.modifiedBlock != data.modifiedBlock) {
+		log.Debug(fmt.Sprintf("Modified Block: %d", data.modifiedBlock))
 
-		ma.modifiedBlock = modifiedBlock
-		ma.blocksPer = blocksPer
+		ma.modifiedBlock = data.modifiedBlock
+		ma.blocksPer = data.blocksPer
 
 		_nodes := map[string]*metaNode{}
-		for _, i := range nodes {
+		for _, i := range data.nodes {
 			_nodes[i.Id] = i
 			if i.Id == ma.nodeInfo.ID {
 				ma.self = i
@@ -571,27 +603,48 @@ func (ma *metaAdmin) update() {
 		}
 		ma.nodes = _nodes
 
-		log.Debug(fmt.Sprintf("Added:\n"))
-		for _, i := range addedNodes {
-			log.Debug(fmt.Sprintf("%v\n", i))
-			ma.addPeer(i)
+		if len(data.addedNodes) > 0 {
+			log.Debug(fmt.Sprintf("Added:\n"))
+			for _, i := range data.addedNodes {
+				log.Debug(fmt.Sprintf("%v\n", i))
+				ma.addPeer(i)
+			}
 		}
-		log.Debug(fmt.Sprintf("Updated:\n"))
-		for _, i := range updatedNodes {
-			log.Debug(fmt.Sprintf("%v\n", i))
+		if len(data.addedNodes) > 0 {
+			log.Debug(fmt.Sprintf("Updated:\n"))
+			for _, i := range data.updatedNodes {
+				log.Debug(fmt.Sprintf("%v\n", i))
+			}
 		}
-		log.Debug(fmt.Sprintf("Deleted:\n"))
-		for _, i := range deletedNodes {
-			log.Debug(fmt.Sprintf("%v\n", i))
+		if len(data.addedNodes) > 0 {
+			log.Debug(fmt.Sprintf("Deleted:\n"))
+			for _, i := range data.deletedNodes {
+				log.Debug(fmt.Sprintf("%v\n", i))
+			}
 		}
+
+		if params.MaxIdleBlockInterval != uint64(data.maxIdleBlockInterval) {
+			params.MaxIdleBlockInterval = uint64(data.maxIdleBlockInterval)
+		}
+
+		// set gas price
+		setGasPrice := func(gasPrice *big.Int) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var v *bool
+			err := ma.rpcCli.CallContext(ctx, &v, "miner_setGasPrice",
+				"0x"+gasPrice.Text(16))
+			if err != nil || !*v {
+				log.Error("Metadium: set", "gas price", "0x"+gasPrice.Text(16), "error", err)
+			} else {
+				log.Info("Metadium: Successfully set", "gas price", gasPrice)
+			}
+		}
+		//setGasPrice(data.gasPrice.Add(data.gasPrice, big.NewInt(1)))
 	}
 
-	if params.MaxIdleBlockInterval != uint64(maxIdleBlockInterval) {
-		params.MaxIdleBlockInterval = uint64(maxIdleBlockInterval)
-	}
-
-	if blockNum != 0 {
-		ma.lastBlock = blockNum
+	if data.blockNum != 0 {
+		ma.lastBlock = data.blockNum
 	}
 }
 
@@ -646,11 +699,12 @@ func (ma *metaAdmin) run() {
 			}
 		}
 		if ma.registry.To == nil {
-			registry, gov, staking, err := ma.getAdminAddresses()
+			registry, gov, staking, envStorage, err := ma.getAdminAddresses()
 			if err == nil {
 				ma.registry.To = registry
 				ma.gov.To = gov
 				ma.staking.To = staking
+				ma.envStorage.To = envStorage
 			}
 		}
 		if ma.registry.To != nil && ma.nodeInfo != nil {

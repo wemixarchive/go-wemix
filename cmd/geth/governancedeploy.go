@@ -310,6 +310,7 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 	defaultStakingMin, _ := big.NewInt(0).SetString("4980000000000000000000000", 0)
 	defaultStakingMax, _ := big.NewInt(0).SetString("39840000000000000000000000", 0)
 	defaultGasPrice := big.NewInt(80000000000)
+	defaultMaxIdleBlockInterval := big.NewInt(5)
 	envDefaults := []interface{}{
 		defaultBlocksPer,
 		defaultBallotDurationMin,
@@ -317,6 +318,7 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 		defaultStakingMin,
 		defaultStakingMax,
 		defaultGasPrice,
+		defaultMaxIdleBlockInterval,
 	}
 	fmt.Printf("Initializing environment storage.\n")
 	envStorageImp.To = envStorage.To

@@ -283,9 +283,9 @@ BEGIN { print "package metadium"; }					     \
   n = "Staking";							     \
   print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
 }									     \
-/^var EnvStorage_contract/ {						     \
+/^var EnvStorageImp_contract/ {						     \
   sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
-  n = "EnvStorage";							     \
+  n = "EnvStorageImp";							     \
   print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
 }									     \
 /^var Gov_contract/ {							     \
