@@ -628,6 +628,7 @@ func (ma *metaAdmin) update() {
 		}
 
 		// set gas price
+		/*
 		setGasPrice := func(gasPrice *big.Int) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -640,7 +641,8 @@ func (ma *metaAdmin) update() {
 				log.Info("Metadium: Successfully set", "gas price", gasPrice)
 			}
 		}
-		//setGasPrice(data.gasPrice.Add(data.gasPrice, big.NewInt(1)))
+		setGasPrice(data.gasPrice.Add(data.gasPrice, big.NewInt(1)))
+		*/
 	}
 
 	if data.blockNum != 0 {
@@ -864,7 +866,8 @@ func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalanc
 
 	// determine coinbase
 	if len(members) > 0 {
-		mix := (int(num.Int64()) % ma.blocksPer) % len(members)
+		//mix := int(num.Int64()) / ma.blocksPer % len(members)
+		mix := int(num.Int64()) % len(members)
 		coinbase = &common.Address{}
 		coinbase.SetBytes(members[mix].Addr.Bytes())
 	}
