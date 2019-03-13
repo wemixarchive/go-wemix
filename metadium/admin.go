@@ -300,18 +300,18 @@ func isArray(x interface{}) bool {
 // get nodes from the Governance contract
 func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaNode, error) {
 	var (
-		nodes         []*metaNode
-		enode, ip     []byte
-		port          *big.Int
-		count         int
-		input, output []interface{}
-		err           error
+		nodes           []*metaNode
+		name, enode, ip []byte
+		port            *big.Int
+		count           int
+		input, output   []interface{}
+		err             error
 	)
 
 	count, err = ma.getInt(ctx, ma.gov, block, "getNodeLength")
 	for i := 1; i <= count; i++ {
 		input = []interface{}{big.NewInt(int64(i))}
-		output = []interface{}{&enode, &ip, &port}
+		output = []interface{}{&name, &enode, &ip, &port}
 		if err = metclient.CallContract(ctx, ma.gov, "getNode", input, &output, block); err != nil {
 			return nil, err
 		}
@@ -322,7 +322,7 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 		}
 		idv4, _ := toIdv4(sid)
 		nodes = append(nodes, &metaNode{
-			Name:  idv4[:8],
+			Name:  string(name),
 			Enode: sid,
 			Ip:    string(ip),
 			Id:    idv4,
