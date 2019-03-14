@@ -249,7 +249,7 @@ else
 rocksdb: vendor
 	@build/env.sh test 1;
 	@cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
-		make -j24 static_lib;
+		make -j8 static_lib;
 endif
 
 AWK_CODE='								\
