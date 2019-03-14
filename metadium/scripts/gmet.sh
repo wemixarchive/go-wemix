@@ -12,10 +12,10 @@ BLOCKS_PER_TURN=10
 function get_data_dir ()
 {
     if [ ! "$1" = "" ]; then
-        d=${DIR}/$1
-        if [ -x "$d/bin/gmet" ]; then
-            echo $d
-        fi
+	d=${DIR}/$1
+	if [ -x "$d/bin/gmet" ]; then
+	    echo $d
+	fi
     else
 	for i in $(/bin/ls -1 ${DIR}); do
 	    if [ -x "${DIR}/$i/bin/gmet" ]; then
@@ -23,7 +23,7 @@ function get_data_dir ()
 		return
 	    fi
 	done
-        echo "$(cd "$(dirname "$0")" && pwd)"
+	echo "$(cd "$(dirname "$0")" && pwd)"
     fi
 }
 
@@ -54,16 +54,18 @@ function init ()
     echo "wiping out data..."
     wipe $NODE
 
+    [ -d "$d/geth" ] || mkdir -p "$d/geth"
     [ -d "$d/logs" ] || mkdir -p "$d/logs"
 
     ${GMET} metadium genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
     [ $? = 0 ] || return $?
 
-    echo "PORT=8588" > $d/.rc
+    echo "PORT=8588
+DISCOVER=0" > $d/.rc
     ${GMET} --datadir $d init $d/genesis.json
     echo "Generating dags for epoch 0 and 1..."
-    ${GMET} makedag 0     $d/.ethash &
-    ${GMET} makedag 1     $d/.ethash &
+    ${GMET} makedag 0	  $d/.ethash &
+    ${GMET} makedag 1	  $d/.ethash &
     wait
 }
 
@@ -111,10 +113,10 @@ function wipe ()
 function wipe_all ()
 {
     for i in `/bin/ls -1 ${DIR}/`; do
-        if [ ! -d "${DIR}/$i" -o ! -x "${DIR}/$i/bin/gmet" ]; then
-            continue
-        fi
-        wipe $i
+	if [ ! -d "${DIR}/$i" -o ! -x "${DIR}/$i/bin/gmet" ]; then
+	    continue
+	fi
+	wipe $i
     done
 }
 
@@ -122,7 +124,7 @@ function clean ()
 {
     d=$(get_data_dir "$1")
     if [ -x "$d/bin/gmet" ]; then
-        GMET="$d/bin/gmet"
+	GMET="$d/bin/gmet"
     else
 	echo "Cannot find gmet"
 	return
@@ -135,10 +137,10 @@ function clean ()
 function clean_all ()
 {
     for i in `/bin/ls -1 ${DIR}/`; do
-        if [ ! -d "${DIR}/$i" -o ! -d "${DIR}/$i/geth" ]; then
-            continue
-        fi
-        clean $i
+	if [ ! -d "${DIR}/$i" -o ! -d "${DIR}/$i/geth" ]; then
+	    continue
+	fi
+	clean $i
     done
 }
 
@@ -146,7 +148,7 @@ function start ()
 {
     d=$(get_data_dir "$1")
     if [ -x "$d/bin/gmet" ]; then
-        GMET="$d/bin/gmet"
+	GMET="$d/bin/gmet"
     else
 	echo "Cannot find gmet"
 	return
@@ -158,37 +160,39 @@ function start ()
     RPCOPT="--rpc --rpcaddr 0.0.0.0"
     [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
     [ "$BOOT_NODES" = "" ] || BOOT_NODES="--bootnodes $BOOT_NODES"
-    if [ ! "$DISCOVER" = "1" ]; then
-        DISCOVER=--nodiscover
+    [ "$TESTNET" = "1" ] && TESTNET=--testnet
+    if [ "$DISCOVER" = "0" ]; then
+	DISCOVER=--nodiscover
     else
-        DISCOVER=
-    fi  
+	DISCOVER=
+    fi
+
+    OPTS="$COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT $TESTNET"
 
     [ -d "$d/logs" ] || mkdir -p $d/logs
 
     cd $d
     if [ ! "$2" = "inner" ]; then
 	$GMET --datadir ${PWD} --syncmode full --gcmode archive --metrics \
-            $COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT 2>&1 | \
-            ${d}/bin/logrot ${d}/logs/log 10M 5 &
+	    $OPTS 2>&1 | ${d}/bin/logrot ${d}/logs/log 10M 5 &
     else
-	exec $GMET --datadir ${PWD} --syncmode full --gcmode archive \
-            --metrics $COINBASE $DISCOVER $RPCOPT $NONCE_LIMIT
+	exec $GMET --datadir ${PWD} --syncmode full --gcmode archive	\
+	    --metrics $OPTS
     fi
 }
 
 function start_all ()
 {
     for i in `/bin/ls -1 ${DIR}/`; do
-        if [ ! -d "${DIR}/$i" -o ! -d "${DIR}/$i/geth" -o ! -f "${DIR}/$i/bin/gmet" ]; then
-            continue
-        fi
-        start $i
+	if [ ! -d "${DIR}/$i" -o ! -f "${DIR}/$i/bin/gmet" ]; then
+	    continue
+	fi
+	start $i
 	echo "started $i."
-        return
+	return
     done
 
-    echo "Cannot find gmet directory. Check if 'geth' directory and 'bin/gmet' are present in the data directory";
+    echo "Cannot find gmet directory. Check if 'bin/gmet' is present in the data directory";
 }
 
 function get_gmet_pids ()
@@ -228,7 +232,7 @@ case "$1" in
     if [ $# -lt 3 ]; then
 	usage;
     else
-        init "$2" "$3"
+	init "$2" "$3"
     fi
     ;;
 
@@ -236,36 +240,36 @@ case "$1" in
     if [ $# -lt 4 ]; then
 	usage;
     else
-        init_gov "$2" "$3" "$4"
+	init_gov "$2" "$3" "$4"
     fi
     ;;
 
 "wipe")
     if [ ! "$3" = "" ]; then
-        wipe $2 $3
+	wipe $2 $3
     else
-        wipe_all $2
+	wipe_all $2
     fi
     ;;
 
 "clean")
     if [ ! "$2" = "" ]; then
-        clean $2
+	clean $2
     else
-        clean_all
+	clean_all
     fi
     ;;
 
 "stop")
     echo -n "stopping..."
     if [ ! "$2" = "" ]; then
-        NODE=$2
+	NODE=$2
     else
-        NODE=
+	NODE=
     fi
     PIDS=`get_gmet_pids`
     if [ ! "$PIDS" = "" ]; then
-	echo $PIDS | xargs -L1 sudo kill
+	echo $PIDS | xargs -L1 kill
     fi
     for i in {1..200}; do
 	PIDS=`get_gmet_pids`
@@ -275,17 +279,17 @@ case "$1" in
     done
     PIDS=`get_gmet_pids`
     if [ ! "$PIDS" = "" ]; then
-	echo $PIDS | xargs -L1 sudo kill -9
+	echo $PIDS | xargs -L1 kill -9
     fi
     echo "done."
     ;;
 
 "start")
     if [ ! "$2" = "" ]; then
-        start $2
+	start $2
 	echo "started $2."
     else
-        start_all
+	start_all
     fi
     ;;
 
@@ -293,17 +297,17 @@ case "$1" in
     if [ "$2" = "" ]; then
 	usage;
     else
-        start $2 inner
+	start $2 inner
     fi
     ;;
 
 "restart")
     if [ ! "$2" = "" ]; then
 	$0 stop $2
-        start $2
+	start $2
     else
 	$0 stop
-        start_all
+	start_all
     fi
     ;;
 
@@ -321,7 +325,7 @@ case "$1" in
     fi
     RCJS=
     if [ -f "$d/rc.js" ]; then
-        RCJS="--preload $d/rc.js"
+	RCJS="--preload $d/rc.js"
     fi
     exec ${d}/bin/gmet ${RCJS} attach ipc:${d}/geth.ipc
     ;;
