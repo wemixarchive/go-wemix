@@ -38,11 +38,12 @@ import (
 )
 
 type metaNode struct {
-	Name  string `json:"name"`
-	Enode string `json:"enode"`
-	Id    string `json:"id"`
-	Ip    string `json:"ip"`
-	Port  int    `json:"port"`
+	Name  string         `json:"name"`
+	Enode string         `json:"enode"`
+	Id    string         `json:"id"`
+	Ip    string         `json:"ip"`
+	Port  int            `json:"port"`
+	Addr  common.Address `json:"addr"`
 
 	Status string `json:"status"`
 	Miner  bool   `json:"miner"`
@@ -303,6 +304,7 @@ func isArray(x interface{}) bool {
 func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaNode, error) {
 	var (
 		nodes           []*metaNode
+		addr            common.Address
 		name, enode, ip []byte
 		port            *big.Int
 		count           int
@@ -318,6 +320,10 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 			return nil, err
 		}
 
+		if err = metclient.CallContract(ctx, ma.gov, "getReward", input, &addr, block); err != nil {
+			return nil, err
+		}
+
 		sid := hex.EncodeToString(enode)
 		if len(sid) != 128 {
 			return nil, errors.New("Invalid enode")
@@ -329,6 +335,7 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 			Ip:    string(ip),
 			Id:    idv4,
 			Port:  int(port.Int64()),
+			Addr:  addr,
 		})
 	}
 	sort.Slice(nodes, func(i, j int) bool {
@@ -630,20 +637,32 @@ func (ma *metaAdmin) update() {
 			params.MaxIdleBlockInterval = uint64(data.maxIdleBlockInterval)
 		}
 
-		// set minimum gas price
-		setGasPrice := func(gasPrice *big.Int) {
+		// set coinbase and minimum gas price
+		setGasCoinbase := func() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+
 			var v *bool
 			err := ma.rpcCli.CallContext(ctx, &v, "miner_setGasPrice",
-				"0x"+gasPrice.Text(16))
+				"0x"+data.gasPrice.Text(16))
 			if err != nil || !*v {
-				log.Info("Metadium: set minimum gas price failed", "gas price", gasPrice, "error", err)
+				log.Info("Metadium: set minimum gas price failed",
+					"gas price", data.gasPrice, "error", err)
 			} else {
-				log.Info("Metadium: Successfully set", "gas price", gasPrice)
+				log.Info("Metadium: Successfully set",
+					"gas price", data.gasPrice)
+			}
+
+			if ma.self != nil && !bytes.Equal(ma.self.Addr[:], nilAddress[:]) {
+				err = ma.rpcCli.CallContext(ctx, &v, "miner_setEtherbase", &ma.self.Addr)
+				if err != nil || !*v {
+					log.Info("Metadium: set the coinbase", "error", err)
+				} else {
+					log.Info("Metadium: Successfully set the coinbase")
+				}
 			}
 		}
-		setGasPrice(data.gasPrice)
+		setGasCoinbase()
 	}
 
 	if data.blockNum != 0 {
