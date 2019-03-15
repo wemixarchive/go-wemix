@@ -886,8 +886,7 @@ func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalanc
 
 	// determine coinbase
 	if len(members) > 0 {
-		//mix := int(num.Int64()) / ma.blocksPer % len(members)
-		mix := int(num.Int64()) % len(members)
+		mix := int(num.Int64()) / ma.blocksPer % len(members)
 		coinbase = &common.Address{}
 		coinbase.SetBytes(members[mix].Addr.Bytes())
 	}
