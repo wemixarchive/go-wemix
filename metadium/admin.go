@@ -256,7 +256,7 @@ func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNod
 	})
 
 	for _, n := range nodes {
-		if (ma.self != nil && n.Id == ma.self.Id) || ma.isPeerUp(n.Idv4) {
+		if (ma.self != nil && n.Id == ma.self.Id) || ma.isPeerUp(n.Id) {
 			n.Status = "up"
 		} else {
 			n.Status = "down"
@@ -1246,12 +1246,12 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 		if admin.self != nil && admin.self.Id == node.Id {
 			miners = append(miners, getMinerStatus())
 			return miners
-		} else if !admin.isPeerUp(node.Idv4) {
+		} else if !admin.isPeerUp(node.Id) {
 			miners = append(miners, getDownStatus(node))
 			return miners
 		}
 
-		err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", &node.Idv4)
+		err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", &node.Id)
 		if err != nil {
 			log.Error("Metadium RequestMinerStatus Failed", "id", node.Id, "error", err)
 			status := getDownStatus(node)
@@ -1266,12 +1266,12 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 			if admin.self != nil && admin.self.Id == n.Id {
 				miners = append(miners, getMinerStatus())
 				continue
-			} else if !admin.isPeerUp(n.Idv4) {
+			} else if !admin.isPeerUp(n.Id) {
 				miners = append(miners, getDownStatus(n))
 				continue
 			}
 
-			err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", n.Idv4)
+			err = admin.rpcCli.CallContext(ctx, nil, "admin_requestMinerStatus", n.Id)
 			if err != nil {
 				status := getDownStatus(n)
 				status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
