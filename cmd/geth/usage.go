@@ -248,6 +248,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.NonceLimit,
 			utils.UseRocksDb,
 			utils.PrefetchCount,
+			utils.LogFlag,
 		},
 	},
 	{

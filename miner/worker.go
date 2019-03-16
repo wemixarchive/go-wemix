@@ -289,6 +289,10 @@ func (w *worker) close() {
 
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
+	// In metadium, we don't do recommit, so recommit timer is just a simple timer
+	if !metaminer.IsPoW() {
+		recommit = time.Second
+	}
 	var (
 		interrupt   *int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
@@ -310,6 +314,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 	// recalcRecommit recalculates the resubmitting interval upon feedback.
 	recalcRecommit := func(target float64, inc bool) {
+		if !metaminer.IsPoW() {
+			return
+		}
 		var (
 			prev = float64(recommit.Nanoseconds())
 			next float64
@@ -646,6 +653,9 @@ func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
 
 // commitUncle adds the given block to uncle block set, returns error if failed to add.
 func (w *worker) commitUncle(env *environment, uncle *types.Header) error {
+	if !metaminer.IsPoW() {
+		return errors.New("We do not call uncles")
+	}
 	hash := uncle.Hash()
 	if env.uncles.Contains(hash) {
 		return errors.New("uncle not unique")
@@ -1014,7 +1024,7 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 	if !metaminer.IsMiner(int(num.Int64())) {
 		log.Debug("Not a miner.")
 		return true
-	} else if w.eth.TxPool().PendingEmpty() && time.Now().Unix() - w.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
+	} else if w.eth.TxPool().PendingEmpty() && time.Now().Unix()-w.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
 		log.Debug("No pending transactions.")
 		return true
 	}
@@ -1080,7 +1090,7 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 
 		// less than 500 ms elapsed, transactions are less than 500 and
 		// all handled, then try to get more transactions
-		if time.Since(tstart).Nanoseconds() / 1000000 < 500 &&
+		if time.Since(tstart).Nanoseconds()/1000000 < 500 &&
 			0 < n && n < 500 {
 			round++
 			continue
@@ -1100,7 +1110,7 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 		}
 	}
 	log.Debug("Block %d: %d ms elapsed, %d processed, %d rounds.\n",
-		num.Int64(), time.Since(tstart).Nanoseconds() / 1000000,
+		num.Int64(), time.Since(tstart).Nanoseconds()/1000000,
 		len(committedTxs), round)
 
 	return false
@@ -1112,6 +1122,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	defer w.mu.RUnlock()
 
 	tstart := time.Now()
+	timestamp = tstart.Unix()
 	parent := w.chain.CurrentBlock()
 
 	if metaminer.IsPoW() {

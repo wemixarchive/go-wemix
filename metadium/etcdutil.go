@@ -165,7 +165,7 @@ func (ma *metaAdmin) etcdAddMember(name string) (string, error) {
 	var node *metaNode
 	ma.lock.Lock()
 	for _, i := range ma.nodes {
-		if i.Name == name || i.Id == name || i.Idv4 == name ||  i.Ip == name {
+		if i.Name == name || i.Enode == name || i.Id == name || i.Ip == name {
 			node = i
 			break
 		}
@@ -326,7 +326,7 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 
 	ma.lock.Lock()
 	for _, i := range ma.nodes {
-		if i.Name == name || i.Id == name || i.Idv4 == name || i.Ip == name {
+		if i.Name == name || i.Enode == name || i.Id == name || i.Ip == name {
 			node = i
 			break
 		}

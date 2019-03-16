@@ -8,14 +8,19 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 
+	"github.com/charlanxcc/logrot"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -52,6 +57,7 @@ Metadium helper commands, create a new account, a new node id, a new genesis fil
     geth metadium new-account --out <file>
 
 Creates a new account and saves it in the given file name.
+To give password in command line, use "--password <(echo <password>)".
 `,
 			},
 			{
@@ -127,7 +133,7 @@ The first node becomes the boot miner who's allowed to generate blocks before ad
 					gasPriceFlag,
 				},
 				Description: `
-    geth metadium deploy-contract [--password data <file> --url <url> --gas <gas> --gasprice <gas-price>] <account-file> <contract-name> <contract-file.[js|json]>
+    geth metadium deploy-contract [--password value --url <url> --gas <gas> --gasprice <gas-price>] <account-file> <contract-name> <contract-file.[js|json]>
 
 Deploy a contract from a contract file in .js or .json format.`,
 			},
@@ -140,9 +146,26 @@ Deploy a contract from a contract file in .js or .json format.`,
 					outFlag,
 				},
 				Description: `
-    geth metadium download-genesis [--url <url>] [--out <file-name>
+    geth metadium download-genesis [--url <url>] [--out <file-name>]
 
 Download a genesis file from a peer to initialize.`,
+			},
+			{
+				Name:   "deploy-governance",
+				Usage:  "Deploy governance contracts",
+				Action: utils.MigrateFlags(deployGovernanceContracts),
+				Flags: []cli.Flag{
+					utils.PasswordFileFlag,
+					urlFlag,
+					gasFlag,
+					gasPriceFlag,
+				},
+				Description: `
+    geth metadium deploy-governance [--password value] [--url <url>] [--gas <gas>] [--gasprice <gas-price>] <contract-js-file> <config.js> <account-file>
+
+Deploy governance contracts.
+To give password in command line, use "--password <(echo <password>)".
+`,
 			},
 		},
 	}
@@ -246,17 +269,22 @@ func nodeKey2Id(ctx *cli.Context) error {
 }
 
 type genesisConfig struct {
+	ExtraData   string         `json:"extraData"`
+	RewardPool  common.Address `json:"pool"`
+	Maintenance common.Address `json:"maintenance"`
+	Accounts    []*struct {
+		Addr    common.Address `json:"addr"`
+		Balance *big.Int       `json:"balance"`
+	} `json:"accounts"`
 	Members []*struct {
-		Addr    string   `json:"addr"`
-		Balance *big.Int `json:"balance"`
-		Stake   int64    `json:"stake"`
+		Addr     common.Address `json:"addr"`
+		Stake    *big.Int       `json:"stake"`
+		Name     string         `json:"name"`
+		Id       string         `json:"id"`
+		Ip       string         `json:"ip"`
+		Port     int            `json:"port"`
+		Bootnode bool           `json:"bootnode"`
 	} `json:"members"`
-	Nodes []*struct {
-		Name string `json:"name"`
-		Ip   string `json:"ip"`
-		Port int    `json:"port"`
-		Id   string `json:"id"`
-	} `json:"nodes"`
 }
 
 func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
@@ -267,21 +295,27 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 		return nil, err
 	}
 
-	if len(config.Members) == 0 || len(config.Nodes) == 0 {
+	if len(config.Accounts) == 0 || len(config.Members) == 0 {
 		return nil, fmt.Errorf("At least one account and node are required.")
 	}
 
+	bootnodeExists := false
 	for _, m := range config.Members {
 		// to conforming form to avoid checksum error
-		m.Addr = common.HexToAddress(m.Addr).Hex()
+		if !(len(m.Id) == 128 || len(m.Id) == 130) {
+			return nil, fmt.Errorf("Not a node id: %s\n", m.Id)
+		}
+		if len(m.Id) == 128 {
+			m.Id = "0x" + m.Id
+		}
+		if m.Bootnode {
+			bootnodeExists = true
+			break
+		}
 	}
-	for _, n := range config.Nodes {
-		if !(len(n.Id) == 128 || len(n.Id) == 130) {
-			return nil, fmt.Errorf("Not a node id: %s\n", n.Id)
-		}
-		if len(n.Id) == 128 {
-			n.Id = "0x" + n.Id
-		}
+
+	if !bootnodeExists {
+		return nil, fmt.Errorf("No bootnode found")
 	}
 
 	return &config, nil
@@ -320,15 +354,24 @@ func genGenesis(ctx *cli.Context) error {
 		}
 	}
 
-	if len(config.Members) <= 0 || len(config.Nodes) <= 0 {
+	if len(config.Members) <= 0 {
 		utils.Fatalf("At least one member and node are required.")
 	}
 
-	genesis["coinbase"] = config.Members[0].Addr
-	genesis["extraData"] = config.Nodes[0].Id
+	bootacct, bootnode := "", ""
+	for _, i := range config.Members {
+		if i.Bootnode {
+			bootacct = i.Addr.Hex()
+			bootnode = i.Id
+			break
+		}
+	}
+
+	genesis["coinbase"] = bootacct
+	genesis["extraData"] = hexutil.Encode([]byte(fmt.Sprintf("%s\n%s", config.ExtraData, bootnode)))
 	alloc := map[string]map[string]string{}
-	for _, m := range config.Members {
-		alloc[m.Addr] = map[string]string{
+	for _, m := range config.Accounts {
+		alloc[m.Addr.Hex()] = map[string]string{
 			"balance": hexutil.EncodeBig(m.Balance),
 		}
 	}
@@ -376,9 +419,9 @@ func genAdminContract(ctx *cli.Context) error {
 		}
 	}
 
-	tokens := int64(0)
+	stakes := big.NewInt(0)
 	for _, m := range config.Members {
-		tokens += m.Stake
+		stakes.Add(stakes, m.Stake)
 	}
 
 	scanner := bufio.NewScanner(f)
@@ -394,7 +437,7 @@ func genAdminContract(ctx *cli.Context) error {
 
 		ll := strings.TrimSpace(l)
 		if strings.Index(ll, "tokens") == 0 {
-			_, err = fmt.Fprintf(w, "        tokens = %d;\n", tokens)
+			_, err = fmt.Fprintf(w, "        tokens = %d;\n", stakes)
 		} else if strings.Index(ll, "address[") == 0 {
 			var b bytes.Buffer
 			b.WriteString(fmt.Sprintf("        address[%d] memory _members = [ ", len(config.Members)))
@@ -425,9 +468,9 @@ func genAdminContract(ctx *cli.Context) error {
 			_, err = b.WriteTo(w)
 		} else if strings.Index(ll, "Node[") == 0 {
 			var b bytes.Buffer
-			b.WriteString(fmt.Sprintf("        Node[%d] memory _nodes = [ ", len(config.Nodes)))
+			b.WriteString(fmt.Sprintf("        Node[%d] memory _nodes = [ ", len(config.Members)))
 			first := true
-			for _, n := range config.Nodes {
+			for _, n := range config.Members {
 				if first {
 					first = false
 				} else {
@@ -545,6 +588,87 @@ func downloadGenesis(ctx *cli.Context) error {
 	}
 
 	w.Write([]byte(genesis.Result))
+	return nil
+}
+
+// borrowed from https://github.com/charlanxcc/logrot
+func parseSize(size string) (int, error) {
+	m := 1
+	size = strings.TrimSpace(size)
+	switch size[len(size)-1:] {
+	case "k":
+		fallthrough
+	case "K":
+		m = 1024
+		size = strings.TrimSpace(size[:len(size)-1])
+	case "m":
+		fallthrough
+	case "M":
+		m = 1024 * 1024
+		size = strings.TrimSpace(size[:len(size)-1])
+	case "g":
+		fallthrough
+	case "G":
+		m = 1024 * 1024 * 1024
+		size = strings.TrimSpace(size[:len(size)-1])
+	}
+
+	i, err := strconv.Atoi(size)
+	if err != nil {
+		return 0, err
+	} else {
+		return i * m, nil
+	}
+}
+
+// logrot frontend
+func logrota(ctx *cli.Context) error {
+	if !ctx.GlobalIsSet(utils.LogFlag.Name) {
+		return nil
+	}
+	logflag := ctx.GlobalString(utils.LogFlag.Name)
+	if logflag == "" {
+		return nil
+	}
+
+	var err error
+	logSize := 10 * 1024 * 1024
+	logCount := 5
+	logOpts := strings.Split(logflag, ",")
+	logFile := ""
+	if len(logOpts) == 0 {
+		return errors.New("No log file name")
+	}
+	if len(logOpts) >= 1 {
+		logFile = strings.TrimSpace(logOpts[0])
+	}
+	if len(logOpts) >= 2 {
+		if logSize, err = parseSize(logOpts[1]); err != nil {
+			return err
+		}
+		logCount = 1
+	}
+	if len(logOpts) >= 3 {
+		if logCount, err = parseSize(logOpts[2]); err != nil {
+			return err
+		}
+	}
+
+	if dir := filepath.Dir(logFile); dir != "" && dir != "." {
+		os.MkdirAll(filepath.Dir(logFile), 0700)
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	syscall.Close(syscall.Stdout)
+	syscall.Close(syscall.Stdout)
+	syscall.Dup2(int(w.Fd()), syscall.Stdout)
+	syscall.Dup2(int(w.Fd()), syscall.Stderr)
+
+	go logrot.LogRotate(r, logFile, logSize, logCount)
+
 	return nil
 }
 

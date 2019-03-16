@@ -51,7 +51,7 @@ const (
 
 	// txChanSize is the size of channel listening to NewTxsEvent.
 	// The number is referenced from the size of tx pool.
-	txChanSize = 4096
+	txChanSize = 40960
 
 	// minimim number of peers to broadcast new blocks to
 	minBroadcastPeers = 4
@@ -187,6 +187,8 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 	}
 	manager.fetcher = fetcher.New(blockchain.GetBlockByHash, validator, manager.BroadcastBlock, heighter, inserter, manager.removePeer)
 
+	go manager.remoteTxFeeder()
+
 	return manager, nil
 }
 
@@ -227,7 +229,8 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	go pm.txsyncLoop()
 
 	// start metadium untransported pending transaction syncer
-	go pm.syncPendingTxs()
+	// Don't do this
+	//go pm.syncPendingTxs()
 }
 
 func (pm *ProtocolManager) Stop() {
@@ -239,7 +242,8 @@ func (pm *ProtocolManager) Stop() {
 	// Quit the sync loop.
 	// After this send has completed, no new peers will be accepted.
 	pm.noMorePeers <- struct{}{}
-	pm.noMorePeers <- struct{}{}
+	// Sadoc: the following line is no longer needed as this is for syncPendingTxs()
+	//pm.noMorePeers <- struct{}{}
 
 	// Quit fetcher, txsyncLoop.
 	close(pm.quitSync)
@@ -329,6 +333,17 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		if err := pm.handleMsg(p); err != nil {
 			p.Log().Debug("Ethereum message handling failed", "err", err)
 			return err
+		}
+	}
+}
+
+var remoteTxCh = make(chan []*types.Transaction, 100000)
+
+func (pm *ProtocolManager) remoteTxFeeder() {
+	for {
+		select {
+		case txs :=<- remoteTxCh:
+			pm.txpool.AddRemotes(txs)
 		}
 	}
 }
@@ -728,7 +743,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 			p.MarkTransaction(tx.Hash())
 		}
-		pm.txpool.AddRemotes(txs)
+		//pm.txpool.AddRemotes(txs)
+		remoteTxCh <- txs
 
 	// Metadium: leader wants to get left-over transactions if any
 	case p.version >= eth63 && msg.Code == GetPendingTxsMsg:
@@ -736,6 +752,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// ignore it
 			return nil
 		}
+		// don't do this
+		/*
 		if !pm.txpool.PendingEmpty() {
 			txs, err := pm.txpool.Pending()
 			if err != nil {
@@ -744,6 +762,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				p.resendPendingTxs(txs)
 			}
 		}
+		*/
 		return nil
 
 	case p.version >= eth63 && msg.Code == GetStatusExMsg:

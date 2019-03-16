@@ -11,6 +11,7 @@ import (
 
 type MetadiumMinerStatus struct {
 	Name        string `json:"name"`
+	Enode       string `json:"enode"`
 	Id          string `json:"id"`
 	Addr        string `json:"addr"`
 	Status      string `json:"status"`

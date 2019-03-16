@@ -163,19 +163,8 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, constant
 	stored := rawdb.ReadCanonicalHash(db, 0)
 	if (stored == common.Hash{}) {
 		if genesis == nil {
-			//log.Info("Writing default main-net genesis block")
-			//genesis = DefaultGenesisBlock()
-
-			file, err := os.Open(params.MetadiumGenesisFile)
-			if err != nil {
-				return nil, common.Hash{}, fmt.Errorf("No genesis block found")
-			}
-			defer file.Close()
-
-			genesis = new(Genesis)
-			if err := json.NewDecoder(file).Decode(genesis); err != nil {
-				return nil, common.Hash{}, fmt.Errorf("Invalid genesis file")
-			}
+			log.Info("Writing default metadium main-net genesis block")
+			genesis = DefaultGenesisBlock()
 		} else {
 			log.Info("Writing custom genesis block")
 		}
@@ -316,8 +305,43 @@ func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big
 	return g.MustCommit(db)
 }
 
+func loadDefaultGenesisFile() (*Genesis, error) {
+	genesis := new(Genesis)
+	if _, err := os.Stat(params.MetadiumGenesisFile); err == nil {
+		log.Info("Loading found genesis file", "name", params.MetadiumGenesisFile)
+		file, err := os.Open(params.MetadiumGenesisFile)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+
+		if err := json.NewDecoder(file).Decode(genesis); err != nil {
+			return nil, err
+		}
+		return genesis, nil
+	}
+	return nil, nil
+}
+
 // DefaultGenesisBlock returns the Ethereum main net genesis block.
 func DefaultGenesisBlock() *Genesis {
+	var (
+		genesis *Genesis
+		err     error
+	)
+
+	if genesis, err = loadDefaultGenesisFile(); err != nil {
+		panic(fmt.Sprintf("Cannot open %s file: %v", params.MetadiumGenesisFile, err))
+	} else if genesis != nil && err == nil {
+		return genesis
+	} else {
+		genesis = new(Genesis)
+		if err := json.NewDecoder(strings.NewReader(metadiumMainnetGenesisJson)).Decode(genesis); err != nil {
+			panic("Cannot parse default metadium mainnet genesis.")
+		}
+		return genesis
+	}
+	/*
 	return &Genesis{
 		Config:     params.MainnetChainConfig,
 		Nonce:      66,
@@ -326,10 +350,28 @@ func DefaultGenesisBlock() *Genesis {
 		Difficulty: big.NewInt(17179869184),
 		Alloc:      decodePrealloc(mainnetAllocData),
 	}
+    */
 }
 
 // DefaultTestnetGenesisBlock returns the Ropsten network genesis block.
 func DefaultTestnetGenesisBlock() *Genesis {
+	var (
+		genesis *Genesis
+		err     error
+	)
+
+	if genesis, err = loadDefaultGenesisFile(); err != nil {
+		panic(fmt.Sprintf("Cannot open %s file: %v", params.MetadiumGenesisFile, err))
+	} else if genesis != nil && err == nil {
+		return genesis
+	} else {
+		genesis = new(Genesis)
+		if err := json.NewDecoder(strings.NewReader(metadiumTestnetGenesisJson)).Decode(genesis); err != nil {
+			panic("Cannot parse default metadium testnet genesis.")
+		}
+		return genesis
+	}
+	/*
 	return &Genesis{
 		Config:     params.TestnetChainConfig,
 		Nonce:      66,
@@ -338,6 +380,7 @@ func DefaultTestnetGenesisBlock() *Genesis {
 		Difficulty: big.NewInt(1048576),
 		Alloc:      decodePrealloc(testnetAllocData),
 	}
+    */
 }
 
 // DefaultRinkebyGenesisBlock returns the Rinkeby network genesis block.

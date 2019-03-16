@@ -7,6 +7,7 @@
 .PHONY: geth-linux-arm geth-linux-arm-5 geth-linux-arm-6 geth-linux-arm-7 geth-linux-arm64
 .PHONY: geth-darwin geth-darwin-386 geth-darwin-amd64
 .PHONY: geth-windows geth-windows-386 geth-windows-amd64
+.PHONY: gmet-linux
 
 GOBIN = $(shell pwd)/build/bin
 GO ?= latest
@@ -34,18 +35,18 @@ endif
 metadium: gmet logrot
 	@[ -d build/conf ] || mkdir -p build/conf
 	@cp -p metadium/scripts/gmet.sh metadium/scripts/solc.sh build/bin/
-	@cp -p metadium/scripts/config.json.example			  \
-		metadium/scripts/genesis-template.json			  \
-		metadium/contracts/MetadiumAdmin-template.sol build/conf/
+	@cp -p metadium/scripts/config.json.example			\
+		metadium/scripts/genesis-template.json			\
+		metadium/contracts/MetadiumGovernance.js build/conf/
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
 
-gmet: vendor rocksdb metadium/admin_abi.go
+gmet: vendor rocksdb metadium/governance_abi.go
 ifeq ($(USE_ROCKSDB), NO)
 	build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 else
 	CGO_CFLAGS=-I$(ROCKSDB_DIR)/include \
-		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lstdc++ -lrocksdb -lm $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
+		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lrocksdb -lm -lstdc++ $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
 		build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 endif
 	@echo "Done building."
@@ -88,7 +89,7 @@ lint: ## Run linters.
 
 clean:
 	./build/clean_go_build_cache.sh
-	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf metadium/admin_abi.go
+	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf metadium/admin_abi.go metadium/governance_abi.go
 	@ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb;		\
 	if [ -d $${ROCKSDB_DIR} ]; then			\
 		cd $${ROCKSDB_DIR};		  	\
@@ -203,6 +204,29 @@ geth-windows-amd64:
 	@echo "Windows amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
+gmet-linux:
+ifeq ($(shell uname), Linux)
+	@docker --version > /dev/null 2>&1;				\
+	if [ ! $$? = 0 ]; then						\
+		echo "Docker not found.";				\
+	else								\
+		docker run -e HOME=/tmp -it --rm			\
+			-v /etc/passwd:/etc/passwd:ro			\
+			-v /etc/group:/etc/group:ro			\
+			-v ~/src:/home/$${USER}/src			\
+			-v $(shell pwd):/data -u $$(id -u):$$(id -g)	\
+			-w /data metadium/bobthe:latest make;		\
+	fi
+else
+	@docker --version > /dev/null 2>&1;				\
+	if [ ! $$? = 0 ]; then						\
+		echo "Docker not found.";				\
+	else								\
+		docker run -e HOME=/tmp -it --rm -v $(shell pwd):/data	\
+			-w /data metadium/bobthe:latest make;		\
+	fi
+endif
+
 vendor:
 	@build/env.sh test 1;
 	@export GOPATH=$(shell pwd)/build/_workspace;			\
@@ -226,7 +250,7 @@ else
 rocksdb: vendor
 	@build/env.sh test 1;
 	@cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
-		make -j24 static_lib;
+		make -j8 static_lib;
 endif
 
 AWK_CODE='								\
@@ -247,6 +271,32 @@ metadium/admin_abi.go: metadium/contracts/MetadiumAdmin-template.sol build/bin/s
 	@PATH=${PATH}:build/bin metadium/scripts/solc.sh -f abi $< /tmp/junk.$$$$; \
 	cat /tmp/junk.$$$$ | awk $(AWK_CODE) > $@;	\
 	rm -f /tmp/junk.$$$$;
+
+AWK_CODE_2='								     \
+BEGIN { print "package metadium"; }					     \
+/^var Registry_contract/ {						     \
+  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
+  n = "Registry";							     \
+  print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
+}									     \
+/^var Staking_contract/ {						     \
+  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
+  n = "Staking";							     \
+  print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
+}									     \
+/^var EnvStorageImp_contract/ {						     \
+  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
+  n = "EnvStorageImp";							     \
+  print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
+}									     \
+/^var Gov_contract/ {							     \
+  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
+  n = "Gov";								     \
+  print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
+}'
+
+metadium/governance_abi.go: metadium/contracts/MetadiumGovernance.js
+	@cat $< | awk $(AWK_CODE_2) > $@
 
 ifneq ($(shell uname), Linux)
 
