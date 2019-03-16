@@ -1002,8 +1002,7 @@ func (ma *metaAdmin) amPartner() bool {
 	if admin == nil {
 		return false
 	}
-	return (admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId) ||
-		admin.self != nil
+	return admin.self != nil || (admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId)
 }
 
 func AmPartner() bool {

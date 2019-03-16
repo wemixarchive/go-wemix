@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 )
 
 const (
@@ -49,6 +50,33 @@ var (
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
 func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+	if !metaminer.IsPoW() {
+		// In Metadium, return immediately
+		ethash.lock.Lock()
+		if ethash.rand == nil {
+			seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
+			if err != nil {
+				ethash.lock.Unlock()
+				return err
+			}
+			ethash.rand = rand.New(rand.NewSource(seed.Int64()))
+		}
+		ethash.lock.Unlock()
+		abort := make(chan struct{})
+		found := make(chan *types.Block)
+		go ethash.mine(block, 0, uint64(ethash.rand.Int63()), abort, found)
+		var result *types.Block
+		select {
+		case result = <-found:
+			select {
+			case results <- result:
+			default:
+				log.Warn("Sealing result is not read by miner", "sealhash", ethash.SealHash(block.Header()))
+			}
+		}
+		return nil
+	}
+
 	// If we're running a fake PoW, simply return a 0 nonce immediately
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		header := block.Header()
