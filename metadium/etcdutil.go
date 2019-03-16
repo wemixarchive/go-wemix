@@ -105,8 +105,9 @@ func (ma *metaAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	cfg := embed.NewConfig()
 	cfg.Dir = ma.etcdDir
 	cfg.Name = ma.self.Name
-	u, _ := url.Parse(fmt.Sprintf("http://%s:%d", ma.self.Ip, ma.self.Port+1))
+	u, _ := url.Parse(fmt.Sprintf("http://%s:%d", "0.0.0.0", ma.self.Port+1))
 	cfg.LPUrls = []url.URL{*u}
+	u, _ = url.Parse(fmt.Sprintf("http://%s:%d", ma.self.Ip, ma.self.Port+1))
 	cfg.APUrls = []url.URL{*u}
 	u, _ = url.Parse(fmt.Sprintf("http://localhost:%d", ma.self.Port+2))
 	cfg.LCUrls = []url.URL{*u}
@@ -345,7 +346,7 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 
 	timer := time.NewTimer(30 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
-	err := admin.rpcCli.CallContext(ctx, nil, "admin_requestEtcdAddMember", &node.Id)
+	err := admin.rpcCli.CallContext(ctx, nil, "admin_requestEtcdAddMember", &node.Idv4)
 	cancel()
 	if err != nil {
 		log.Error("Metadium admin_requestEtcdAddMember failed", "id", node.Id, "error", err)
@@ -546,7 +547,7 @@ func EtcdStart() {
 		}
 		admin.lock.Unlock()
 
-		if node != nil && admin.isPeerUp(node.Id) {
+		if node != nil && admin.isPeerUp(node.Idv4) {
 			log.Info("Metadium", "Trying to join", node.Name)
 			admin.etcdJoin(node.Name)
 		}
