@@ -124,9 +124,11 @@ func IsMiner(height int) bool {
 			}
 		}
 
+		/* Sadoc: predictably caused cyclic deadlock.
 		if height != admin.lastBlock {
 			admin.update()
 		}
+		*/
 
 		admin.updateMiner(false)
 
