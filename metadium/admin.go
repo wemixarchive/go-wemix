@@ -1352,20 +1352,7 @@ func (ma *metaAdmin) getTxPoolStatus() (pending, queued uint, err error) {
 }
 
 func requirePendingTxs() bool {
-	if admin == nil {
-		return false
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	block, err := admin.cli.HeaderByNumber(ctx, nil)
-	if err != nil {
-		return false
-	}
-	height := int(block.Number.Int64())
-
-	if !IsMiner(height + 1) {
+	if !IsMiner() {
 		return false
 	}
 

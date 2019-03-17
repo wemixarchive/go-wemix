@@ -217,7 +217,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 	}
 
 	go worker.mainLoop()
-	go worker.newWorkLoop(recommit)
+	go worker.newWorkLoopEx(recommit)
 	go worker.resultLoop()
 	go worker.taskLoop()
 
@@ -289,10 +289,6 @@ func (w *worker) close() {
 
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
-	// In metadium, we don't do recommit, so recommit timer is just a simple timer
-	if !metaminer.IsPoW() {
-		recommit = time.Second
-	}
 	var (
 		interrupt   *int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
@@ -314,9 +310,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 	// recalcRecommit recalculates the resubmitting interval upon feedback.
 	recalcRecommit := func(target float64, inc bool) {
-		if !metaminer.IsPoW() {
-			return
-		}
 		var (
 			prev = float64(recommit.Nanoseconds())
 			next float64
@@ -360,13 +353,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			commit(false, commitInterruptNewHead)
 
 		case <-timer.C:
-			if !metaminer.IsPoW() {
-				// In metadium, this timer is repurposed to generate empty
-				// blocks periodically
-				commit(false, commitInterruptNone)
-				continue
-			}
-
 			// If mining is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
@@ -413,6 +399,52 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 }
 
+// newWorkLoopEx is Metadium's standalone goroutine to submit new mining work upon received events.
+func (w *worker) newWorkLoopEx(recommit time.Duration) {
+	timer := time.NewTimer(1 * time.Second)
+
+	// commitSimple just starts a new commitNewWork
+	commitSimple := func() {
+		if isBusyMining() {
+			return
+		} else {
+			w.newWorkCh <- &newWorkReq{interrupt: nil, noempty: false, timestamp: time.Now().Unix()}
+			atomic.StoreInt32(&w.newTxs, 0)
+		}
+	}
+	// clearPending cleans the stale pending tasks.
+	clearPending := func(number uint64) {
+		w.pendingMu.Lock()
+		for h, t := range w.pendingTasks {
+			if t.block.NumberU64()+staleThreshold <= number {
+				delete(w.pendingTasks, h)
+			}
+		}
+		w.pendingMu.Unlock()
+	}
+
+	for {
+		select {
+		case <-w.startCh:
+			clearPending(w.chain.CurrentBlock().NumberU64())
+			commitSimple()
+
+		case head := <-w.chainHeadCh:
+			clearPending(head.Block.NumberU64())
+			commitSimple()
+
+		case <-timer.C:
+			commitSimple()
+			timer.Reset(time.Second)
+
+		case <-w.resubmitIntervalCh:
+		case <-w.resubmitAdjustCh:
+		case <-w.exitCh:
+			return
+		}
+	}
+}
+
 // mainLoop is a standalone goroutine to regenerate the sealing task based on the received event.
 func (w *worker) mainLoop() {
 	defer w.txsSub.Unsubscribe()
@@ -422,7 +454,7 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			if metaminer.AmPartner() {
+			if !isBusyMining() && metaminer.AmPartner() {
 				// In metadium, costly interrupt / resubmit is disabled
 				//w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 				w.commitNewWork(nil, req.noempty, req.timestamp)
@@ -489,9 +521,9 @@ func (w *worker) mainLoop() {
 			} else {
 				// If we're mining, but nothing is being processed, wake on new transactions
 				if w.config.Clique != nil && w.config.Clique.Period == 0 {
-					if metaminer.AmPartner() {
-						w.commitNewWork(nil, false, time.Now().Unix())
-					}
+					w.commitNewWork(nil, false, time.Now().Unix())
+				} else if !metaminer.IsPoW() && !isBusyMining() && metaminer.AmPartner() {
+					w.commitNewWork(nil, false, time.Now().Unix())
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
@@ -1100,9 +1132,13 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 
 var busyMining int32
 
+func isBusyMining() bool {
+	return atomic.LoadInt32(&busyMining) != 0
+}
+
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
-	if !metaminer.AmPartner() {
+	if !metaminer.AmPartner() || !metaminer.IsMiner() {
 		return
 	}
 	if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
@@ -1118,15 +1154,13 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	timestamp = tstart.Unix()
 	parent := w.chain.CurrentBlock()
 
-	if !metaminer.IsMiner(int(parent.Number().Int64() + 1)) {
-		return
-	}
-
 	num := parent.Number()
 	num.Add(num, common.Big1)
 	ts := w.ancestorTimes(num)
-	if dt, pt := w.throttleMining(ts); dt > 0 && pt < int64(params.MaxIdleBlockInterval) {
+	if dt, pt := w.throttleMining(ts); dt > 0 && pt < 5 {
+		// sleep 1 second here to prevent unnecessary checks
 		log.Info("Metadium: too many blocks", "ahead", dt)
+		time.Sleep(time.Second)
 		return
 	} else if w.eth.TxPool().PendingEmpty() {
 		if pt < int64(params.MaxIdleBlockInterval) {
@@ -1268,7 +1302,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
 	panic("None should come here")
 
-	if !metaminer.IsMiner(int(w.current.header.Number.Int64())) {
+	if !metaminer.IsMiner() {
 		return errors.New("Not Miner")
 	}
 
@@ -1313,7 +1347,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 // In Metadium, uncles are not welcome and difficulty is so low,
 // there's no reason to run miners asynchronously.
 func (w *worker) commitEx(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	if !metaminer.IsMiner(int(w.current.header.Number.Int64())) {
+	if !metaminer.IsMiner() {
 		return errors.New("Not Miner")
 	}
 	// Deep copy receipts here to avoid interaction between different tasks.
