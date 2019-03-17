@@ -79,7 +79,7 @@ type Header struct {
 	Number       *big.Int        `json:"number"           gencodec:"required"`
 	GasLimit     uint64          `json:"gasLimit"         gencodec:"required"`
 	GasUsed      uint64          `json:"gasUsed"          gencodec:"required"`
-	Fees         uint64          `json:"fees"             gencodec:"required"`
+	Fees         *big.Int        `json:"fees"             gencodec:"required"`
 	Time         *big.Int        `json:"timestamp"        gencodec:"required"`
 	Extra        []byte          `json:"extraData"        gencodec:"required"`
 	Rewards	     []byte          `json:"rewards"          gencodec:"required"`
@@ -95,7 +95,7 @@ type headerMarshaling struct {
 	Number       *hexutil.Big
 	GasLimit     hexutil.Uint64
 	GasUsed      hexutil.Uint64
-	Fees         hexutil.Uint64
+	Fees         *hexutil.Big
 	Time         *hexutil.Big
 	Extra        hexutil.Bytes
 	Rewards	     hexutil.Bytes
@@ -297,7 +297,7 @@ func (b *Block) Transaction(hash common.Hash) *Transaction {
 func (b *Block) Number() *big.Int     { return new(big.Int).Set(b.header.Number) }
 func (b *Block) GasLimit() uint64     { return b.header.GasLimit }
 func (b *Block) GasUsed() uint64      { return b.header.GasUsed }
-func (b *Block) Fees() uint64         { return b.header.Fees }
+func (b *Block) Fees() *big.Int       { return b.header.Fees }
 func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficulty) }
 func (b *Block) Time() *big.Int       { return new(big.Int).Set(b.header.Time) }
 
