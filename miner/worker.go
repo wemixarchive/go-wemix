@@ -427,6 +427,7 @@ func (w *worker) newWorkLoopEx(recommit time.Duration) {
 		select {
 		case <-w.startCh:
 			clearPending(w.chain.CurrentBlock().NumberU64())
+			w.initPending()
 			commitSimple()
 
 		case head := <-w.chainHeadCh:
@@ -1295,6 +1296,38 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 	w.commit(uncles, w.fullTaskHook, true, tstart)
+}
+
+// initPending initialize pending state
+func (w *worker) initPending() {
+	if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
+		defer atomic.StoreInt32(&busyMining, 0)
+	} else {
+		return
+	}
+
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	parent := w.chain.CurrentBlock()
+
+	num := parent.Number()
+	num.Add(num, common.Big1)
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		Number:     num,
+		GasLimit:   core.CalcGasLimit(parent, w.gasFloor, w.gasCeil),
+		Extra:      w.extra,
+		Time:       big.NewInt(time.Now().Unix()),
+		Fees:       big.NewInt(0),
+	}
+	header.Coinbase = w.coinbase
+	if err := w.engine.Prepare(w.chain, header); err != nil {
+		log.Error("Failed to prepare header for mining", "err", err)
+		return
+	}
+	w.makeCurrent(parent, header)
+	w.updateSnapshot()
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
