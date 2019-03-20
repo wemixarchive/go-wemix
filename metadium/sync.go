@@ -108,7 +108,7 @@ func (ma *metaAdmin) updateMiner(locked bool) {
 	}
 }
 
-func IsMiner(height int) bool {
+func IsMiner() bool {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return true
 	} else if params.ConsensusMethod == params.ConsensusETCD {
@@ -124,15 +124,8 @@ func IsMiner(height int) bool {
 			}
 		}
 
-		/* Sadoc: predictably caused cyclic deadlock.
-		if height != admin.lastBlock {
-			admin.update()
-		}
-		*/
-
-		admin.updateMiner(false)
-
 		if admin.etcdIsLeader() {
+			admin.updateMiner(false)
 			return true
 		} else {
 			admin.blocksMined = 0

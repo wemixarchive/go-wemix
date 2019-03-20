@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	IsMinerFunc            func(int) bool
+	IsMinerFunc            func() bool
 	AmPartnerFunc          func() bool
 	IsPartnerFunc          func(string) bool
 	LogBlockFunc           func(int64)
@@ -24,11 +24,11 @@ var (
 	SuggestGasPriceFunc    func() *big.Int
 )
 
-func IsMiner(height int) bool {
+func IsMiner() bool {
 	if IsMinerFunc == nil {
 		return false
 	} else {
-		return IsMinerFunc(height)
+		return IsMinerFunc()
 	}
 }
 

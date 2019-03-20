@@ -196,7 +196,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 		txsCh:              make(chan core.NewTxsEvent, txChanSize),
 		chainHeadCh:        make(chan core.ChainHeadEvent, chainHeadChanSize),
 		chainSideCh:        make(chan core.ChainSideEvent, chainSideChanSize),
-		newWorkCh:          make(chan *newWorkReq),
+		newWorkCh:          make(chan *newWorkReq, 2),
 		taskCh:             make(chan *task),
 		resultCh:           make(chan *types.Block, resultQueueSize),
 		exitCh:             make(chan struct{}),
@@ -217,7 +217,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 	}
 
 	go worker.mainLoop()
-	go worker.newWorkLoop(recommit)
+	go worker.newWorkLoopEx(recommit)
 	go worker.resultLoop()
 	go worker.taskLoop()
 
@@ -289,10 +289,6 @@ func (w *worker) close() {
 
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
-	// In metadium, we don't do recommit, so recommit timer is just a simple timer
-	if !metaminer.IsPoW() {
-		recommit = time.Second
-	}
 	var (
 		interrupt   *int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
@@ -314,9 +310,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 	// recalcRecommit recalculates the resubmitting interval upon feedback.
 	recalcRecommit := func(target float64, inc bool) {
-		if !metaminer.IsPoW() {
-			return
-		}
 		var (
 			prev = float64(recommit.Nanoseconds())
 			next float64
@@ -365,12 +358,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
 				if atomic.LoadInt32(&w.newTxs) == 0 {
-					// Metadium: to generate an empty block after maxBlockInterval
-					if !metaminer.IsPoW() && w.eth.TxPool().PendingEmpty() {
-						commit(false, commitInterruptNone)
-					} else {
-						timer.Reset(recommit)
-					}
+					timer.Reset(recommit)
 					continue
 				}
 				commit(true, commitInterruptResubmit)
@@ -411,6 +399,53 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 }
 
+// newWorkLoopEx is Metadium's standalone goroutine to submit new mining work upon received events.
+func (w *worker) newWorkLoopEx(recommit time.Duration) {
+	timer := time.NewTimer(1 * time.Second)
+
+	// commitSimple just starts a new commitNewWork
+	commitSimple := func() {
+		if isBusyMining() {
+			return
+		} else {
+			w.newWorkCh <- &newWorkReq{interrupt: nil, noempty: false, timestamp: time.Now().Unix()}
+			atomic.StoreInt32(&w.newTxs, 0)
+		}
+	}
+	// clearPending cleans the stale pending tasks.
+	clearPending := func(number uint64) {
+		w.pendingMu.Lock()
+		for h, t := range w.pendingTasks {
+			if t.block.NumberU64()+staleThreshold <= number {
+				delete(w.pendingTasks, h)
+			}
+		}
+		w.pendingMu.Unlock()
+	}
+
+	for {
+		select {
+		case <-w.startCh:
+			clearPending(w.chain.CurrentBlock().NumberU64())
+			w.initPending()
+			commitSimple()
+
+		case head := <-w.chainHeadCh:
+			clearPending(head.Block.NumberU64())
+			commitSimple()
+
+		case <-timer.C:
+			commitSimple()
+			timer.Reset(time.Second)
+
+		case <-w.resubmitIntervalCh:
+		case <-w.resubmitAdjustCh:
+		case <-w.exitCh:
+			return
+		}
+	}
+}
+
 // mainLoop is a standalone goroutine to regenerate the sealing task based on the received event.
 func (w *worker) mainLoop() {
 	defer w.txsSub.Unsubscribe()
@@ -420,7 +455,11 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
+			if !isBusyMining() && metaminer.AmPartner() {
+				// In metadium, costly interrupt / resubmit is disabled
+				//w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
+				w.commitNewWork(nil, req.noempty, req.timestamp)
+			}
 
 		case ev := <-w.chainSideCh:
 			// Short circuit for duplicate side blocks
@@ -457,7 +496,7 @@ func (w *worker) mainLoop() {
 						uncles = append(uncles, uncle.Header())
 						return false
 					})
-					w.commit(uncles, nil, true, start)
+					w.commitEx(uncles, nil, true, start)
 				}
 			}
 
@@ -484,7 +523,7 @@ func (w *worker) mainLoop() {
 				// If we're mining, but nothing is being processed, wake on new transactions
 				if w.config.Clique != nil && w.config.Clique.Period == 0 {
 					w.commitNewWork(nil, false, time.Now().Unix())
-				} else if !metaminer.IsPoW() && w.eth.TxPool().PendingOne() && atomic.LoadInt32(&w.newTxs) == 0 {
+				} else if !metaminer.IsPoW() && !isBusyMining() && metaminer.AmPartner() {
 					w.commitNewWork(nil, false, time.Now().Unix())
 				}
 			}
@@ -709,7 +748,7 @@ func (w *worker) updateSnapshot() {
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 
-	receipt, _, err := core.ApplyTransaction(w.config, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, &w.current.header.Fees, *w.chain.GetVMConfig())
+	receipt, _, err := core.ApplyTransaction(w.config, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, w.current.header.Fees, *w.chain.GetVMConfig())
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
@@ -993,47 +1032,34 @@ func (w *worker) ancestorTimes(num *big.Int) []int64 {
 	return ts
 }
 
-// returns throttle delay if necessary in seconds
+// returns throttle delay if necessary in seconds & seconds from the parent
 // blocks  seconds  seconds per
 //     10        1  0.1
 //     50       10  0.2
 //    100       50  0.5
 //    500      500  1
 //   1000     2000  2
-func (w *worker) throttleMining(ts []int64) int64 {
+func (w *worker) throttleMining(ts []int64) (int64, int64) {
 	t := time.Now().Unix()
-	var dt int64
+	var dt, pt int64 = 0, t - ts[0]
 
 	// 1000th
 	if dt = t - ts[5]; ts[5] > 0 && dt < 2000 {
-		return 2000 - dt
+		return 2000 - dt, pt
 	}
 	if dt = t - ts[4]; ts[4] > 0 && dt < 500 {
-		return 500 - dt
+		return 500 - dt, pt
 	}
 	if dt = t - ts[3]; ts[3] > 0 && dt < 50 {
-		return 50 - dt
+		return 50 - dt, pt
 	}
 	if dt = t - ts[2]; ts[2] > 0 && dt < 10 {
-		return 10 - dt
+		return 10 - dt, pt
 	}
-	return 0
+	return 0, pt
 }
 
 func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart time.Time) bool {
-	if !metaminer.IsMiner(int(num.Int64())) {
-		log.Debug("Not a miner.")
-		return true
-	} else if w.eth.TxPool().PendingEmpty() && time.Now().Unix()-w.chain.CurrentBlock().Time().Int64() < int64(params.MaxIdleBlockInterval) {
-		log.Debug("No pending transactions.")
-		return true
-	}
-
-	log.Debug("Was the miner for", "number", num)
-
-	ts := w.ancestorTimes(num)
-	throttleCleared := false
-
 	// committed transactions in this round
 	committedTxs := map[common.Hash]*types.Transaction{}
 	round := 0
@@ -1087,25 +1113,14 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 			}
 			n = len(committedTxs) - n
 		}
+		round++
 
 		// less than 500 ms elapsed, transactions are less than 500 and
 		// all handled, then try to get more transactions
 		if time.Since(tstart).Nanoseconds()/1000000 < 500 &&
 			0 < n && n < 500 {
-			round++
-			continue
-		} else if dt := w.throttleMining(ts); !throttleCleared && dt > 0 {
-			throttleCleared = true
-			drt := dt
-			if drt > 5 {
-				drt = 5
-			}
-			log.Error("Metadium: too many blocks", "ahead", dt, "sleeping", drt, "pending", len(pending))
-			time.Sleep(time.Duration(drt) * time.Second)
-			round++
 			continue
 		} else {
-			round++
 			break
 		}
 	}
@@ -1116,14 +1131,44 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 	return false
 }
 
+var busyMining int32
+
+func isBusyMining() bool {
+	return atomic.LoadInt32(&busyMining) != 0
+}
+
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
+	if !metaminer.AmPartner() || !metaminer.IsMiner() {
+		return
+	}
+	if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
+		defer atomic.StoreInt32(&busyMining, 0)
+	} else {
+		return
+	}
+
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
 	tstart := time.Now()
 	timestamp = tstart.Unix()
 	parent := w.chain.CurrentBlock()
+
+	num := parent.Number()
+	num.Add(num, common.Big1)
+	ts := w.ancestorTimes(num)
+	if dt, pt := w.throttleMining(ts); dt > 0 && pt < 5 {
+		// sleep 1 second here to prevent unnecessary checks
+		log.Info("Metadium: too many blocks", "ahead", dt)
+		time.Sleep(time.Second)
+		return
+	} else if w.eth.TxPool().PendingEmpty() {
+		if pt < int64(params.MaxIdleBlockInterval) {
+			log.Debug("No pending transactions.")
+			return
+		}
+	}
 
 	if metaminer.IsPoW() {
 		if parent.Time().Cmp(new(big.Int).SetInt64(timestamp)) >= 0 {
@@ -1137,13 +1182,13 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
-	num := parent.Number()
 	header := &types.Header{
 		ParentHash: parent.Hash(),
-		Number:     num.Add(num, common.Big1),
+		Number:     num,
 		GasLimit:   core.CalcGasLimit(parent, w.gasFloor, w.gasCeil),
 		Extra:      w.extra,
 		Time:       big.NewInt(timestamp),
+		Fees:       big.NewInt(0),
 	}
 	// Only set the coinbase if our consensus engine is running (avoid spurious block rewards)
 	if w.isRunning() {
@@ -1206,9 +1251,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	commitUncles(w.localUncles)
 	commitUncles(w.remoteUncles)
 
-	if !metaminer.IsPoW() {
+	if !metaminer.IsPoW() { // Metadium
 		if !w.commitTransactionsEx(num, interrupt, tstart) {
-			w.commit(uncles, w.fullTaskHook, true, tstart)
+			w.commitEx(uncles, w.fullTaskHook, true, tstart)
 		}
 		return
 	}
@@ -1253,10 +1298,44 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 
+// initPending initialize pending state
+func (w *worker) initPending() {
+	if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
+		defer atomic.StoreInt32(&busyMining, 0)
+	} else {
+		return
+	}
+
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	parent := w.chain.CurrentBlock()
+
+	num := parent.Number()
+	num.Add(num, common.Big1)
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		Number:     num,
+		GasLimit:   core.CalcGasLimit(parent, w.gasFloor, w.gasCeil),
+		Extra:      w.extra,
+		Time:       big.NewInt(time.Now().Unix()),
+		Fees:       big.NewInt(0),
+	}
+	header.Coinbase = w.coinbase
+	if err := w.engine.Prepare(w.chain, header); err != nil {
+		log.Error("Failed to prepare header for mining", "err", err)
+		return
+	}
+	w.makeCurrent(parent, header)
+	w.updateSnapshot()
+}
+
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	if !metaminer.IsMiner(int(w.current.header.Number.Int64())) {
+	panic("None should come here")
+
+	if !metaminer.IsMiner() {
 		return errors.New("Not Miner")
 	}
 
@@ -1290,6 +1369,97 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 
 		case <-w.exitCh:
 			log.Info("Worker has exited")
+		}
+	}
+	if update {
+		w.updateSnapshot()
+	}
+	return nil
+}
+
+// In Metadium, uncles are not welcome and difficulty is so low,
+// there's no reason to run miners asynchronously.
+func (w *worker) commitEx(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+	if !metaminer.IsMiner() {
+		return errors.New("Not Miner")
+	}
+	// Deep copy receipts here to avoid interaction between different tasks.
+	receipts := make([]*types.Receipt, len(w.current.receipts))
+	for i, l := range w.current.receipts {
+		receipts[i] = new(types.Receipt)
+		*receipts[i] = *l
+	}
+	s := w.current.state.Copy()
+	block, err := w.engine.Finalize(w.chain, w.current.header, s, w.current.txs, uncles, w.current.receipts)
+	if err != nil {
+		return err
+	}
+	if w.isRunning() {
+		createdAt := time.Now()
+		w.unconfirmed.Shift(block.NumberU64() - 1)
+
+		feesWei := new(big.Int)
+		for i, tx := range block.Transactions() {
+			feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), tx.GasPrice()))
+		}
+		feesEth := new(big.Float).Quo(new(big.Float).SetInt(feesWei), new(big.Float).SetInt(big.NewInt(params.Ether)))
+
+		log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
+			"uncles", len(uncles), "txs", w.current.tcount, "gas", block.GasUsed(), "fees", feesEth, "elapsed", common.PrettyDuration(time.Since(start)))
+
+		var sealedBlock *types.Block
+		stopCh := make(chan struct{})
+		resultCh := make(chan *types.Block, 1)
+		if err := w.engine.Seal(w.chain, block, resultCh, stopCh); err != nil {
+			log.Warn("Block sealing failed", "err", err)
+		} else {
+			select {
+			case sealedBlock = <-resultCh:
+			}
+		}
+		close(stopCh)
+		close(resultCh)
+
+		if sealedBlock != nil && !w.chain.HasBlock(sealedBlock.Hash(), sealedBlock.NumberU64()) {
+			var (
+				sealhash = w.engine.SealHash(sealedBlock.Header())
+				hash     = sealedBlock.Hash()
+				rcpts    = make([]*types.Receipt, len(receipts))
+				logs     []*types.Log
+			)
+			for i, receipt := range receipts {
+				rcpts[i] = new(types.Receipt)
+				*rcpts[i] = *receipt
+				// Update the block hash in all logs since it is now available and not when the
+				// receipt/log of individual transactions were created.
+				for _, log := range receipt.Logs {
+					log.BlockHash = hash
+				}
+				logs = append(logs, receipt.Logs...)
+			}
+			// Commit block and state to database.
+			stat, err := w.chain.WriteBlockWithState(sealedBlock, rcpts, s)
+			if err != nil {
+				log.Error("Failed writing block to chain", "err", err)
+				return err
+			}
+			log.Info("Successfully sealed new block", "number", sealedBlock.Number(), "sealhash", sealhash, "hash", hash, "elapsed", common.PrettyDuration(time.Since(createdAt)))
+
+			// Broadcast the block and announce chain insertion event
+			w.mux.Post(core.NewMinedBlockEvent{Block: sealedBlock})
+
+			var events []interface{}
+			switch stat {
+			case core.CanonStatTy:
+				events = append(events, core.ChainEvent{Block: sealedBlock, Hash: sealedBlock.Hash(), Logs: logs})
+				events = append(events, core.ChainHeadEvent{Block: sealedBlock})
+			case core.SideStatTy:
+				events = append(events, core.ChainSideEvent{Block: sealedBlock})
+			}
+			w.chain.PostChainEvents(events, logs)
+
+			// Insert the block into the set of pending ones to resultLoop for confirmations
+			w.unconfirmed.Insert(sealedBlock.NumberU64(), sealedBlock.Hash())
 		}
 	}
 	if update {

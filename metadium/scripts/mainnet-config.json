@@ -2,77 +2,77 @@
   "extraData": "Our vision is to create a free world through self-sovereign identity. / When I discover who I am, I'll be free. -- Ralph Ellison, Invisible Man",
   "members": [
     {
-      "addr": "0x7eA34544DFA38F6614281adA30af1259c9BCA9Ec",
+      "addr": "0x880a74d68b09418136c4442d1ea0f5cc72e5325a",
       "stake": 39840000,
       "name": "meta1",
       "ip": "10.140.0.202",
       "port": 8589,
-      "id": "0xfa51cf4a0807d233025a4eddf6b469647ab7b2560a31916be5900ada5c145949b61fb550f61a24b1f427448c6b9bf8aeb682969e11643546fdb3b588441241ac",
+      "id": "0x1ec261dbce3ce00226b797e300ba56863ff65c138263b98145dcd97b4ea3a4c7a8d20414e7a0185f32cc708d0c1c995a877e6c7876f50abc13f7740b9ac307bf",
       "bootnode": true
     },
     {
-      "addr": "0xC03B19F95D409c26b64B44292827a26989D2E8d0",
+      "addr": "0xbdf9acd85b579ea271f91e292ec6e67ad78652f2",
       "stake": 4980000,
       "name": "meta2",
       "ip": "10.140.0.82",
       "port": 8589,
-      "id": "0x727c4813c68ecec028bc7323d756043257fd41ef9d13d89a4df4757020b752d1b9bc39ca764cb8560fe70164ced77fe507f9d4e5bcf2746dc2ff82a64cfd29e4"
+      "id": "0xa4925993136b84a1212244f85da9d8dc4f4e52bd06e2c79961298ee3c5da883552ce5756b5b0e8b29ac5b004793fc415117c0b36ca62e8516248e03324268b1b"
     },
     {
-      "addr": "0xcFFf678CAfa652227c7A98ec6BcBFba0E3d1da19",
+      "addr": "0xd8f5272ef21a50c5adb0fcef31eb9e91ac4eb2f5",
       "stake": 4980000,
       "name": "meta3",
       "ip": "10.140.0.185",
       "port": 8589,
-      "id": "0x51fb43d83599e03b973d7f7207bbcf890a191739ee0e62ce878e619a6951ff4696181876c7f9f5b525609d698fd65747f9b25afa7e98a1755d39e36e2ea470c6"
+      "id": "0xd90e1d46b1118fae52b6b1fb6f83a51846f22cfa639b4ba441002f68d8798abc79b19ce13868b5998a75715a8c2abc9d34594733be59961e5a2a79a42391b430"
     },
     {
-      "addr": "0x2d74530C0C196De44d3906822053bf336F18a16e",
+      "addr": "0xe7080384c22aa9b232993e2011b8c16585570524",
       "stake": 4980000,
       "name": "meta4",
       "ip": "10.141.0.143",
       "port": 8589,
-      "id": "0xff78400000e02d65f6e02f236efdfbda48f01644cfe456307f117f51e3038cbf34a63e85b77151a40271ec27691f834f670b56682bd39d61d9c7efe13c6331b4"
+      "id": "0x9ea9aa7a040d33d595ccec7ac10ead26712629dfebd85d563deb606aa0b6a0782684ae43584e4eed40635e054ca2abadd8e658fbbc760d88d7f60f48cfcf3d5d"
     },
     {
-      "addr": "0x1B892F4bf95b25375D7E83A7D2E2641A4bdf3bfB",
+      "addr": "0xa4a3a5b308d2319af64def1568cc80a82f40ea86",
       "stake": 4980000,
       "name": "meta5",
       "ip": "10.141.0.81",
       "port": 8589,
-      "id": "0xcd5367698e8ed214f02908cb0b5bb29df2a17365bb8de931881b1e2a6dd22418a09166fdd136039795cdb4bf2469690f3eb8c4e02b3146e4c1278c41cedb14e5"
+      "id": "0x54eb3f5c1016f35971a6e0e6906ac5f4927827c18b100ac1ec486d7461c31b09daa9c5319968c46997a784e0757b086c55780c7b49a9ed8fb4b4caa00b6b13d0"
     },
     {
-      "addr": "0xcD8491486c39a72F0e02E0248b5E768260a34199",
+      "addr": "0x6ce8328a6460d6fe4c17fdbbf6faa88120dd65b8",
       "stake": 4980000,
       "name": "meta6",
       "ip": "10.141.0.95",
       "port": 8589,
-      "id": "0x7471c90d2cd38bd386a4f231c48dce49fcf311169c5d4d1f7e38c2b7259d8e0333ecaa7a6ae2fbfa2e1957e24c7079ed95041ba936a6265320721b8ac483ed72"
+      "id": "0x5417d5cc1fd5d75cd15852d06a5f39e834407564543c70ea2ccebb49289a8bd9fba096aa48ff3c8696ba1cae8921166ed6370a8876dc7220525b636ced1d5504"
     },
     {
-      "addr": "0x6cB313cb0cA94FC7061075F7Cc7EBcE60d8cb113",
+      "addr": "0xfb0a7d2536b9e42b627315c5bb938f1a6524f4e3",
       "stake": 4980000,
       "name": "meta7",
       "ip": "10.142.0.26",
       "port": 8589,
-      "id": "0xb89545c704b35777c8e357435b48028c46543692db0798b8911135751a2340d915ba7f126780e0f508a8569b01d98467f260b6b86975a11900a7aede1330a1c0"
+      "id": "0xe3693591cf9cb3dd3af0da665f31d59b47335c00770bc76c930fc7cfa3f3771c094c5b94fba4784d8229c8ecf23ab4e4fdec269145b0a52da3bae3cdfe75b171"
     },
     {
-      "addr": "0xcC16B5A6e2c851D023e8654EacD9b9Fa9fe41B86",
+      "addr": "0x2dc152f7c9cacdffbfefe5774af1fdf14df0c6f6",
       "stake": 4980000,
       "name": "meta8",
       "ip": "10.142.0.63",
       "port": 8589,
-      "id": "0x71efa945303640b68040b1d17b0f49ff7eb24e80fcf0432025a4776b6def8ff956997d60ba4e83a131b016475a9e90d4d5fb226a8c04375a1dd4f73ad95a5528"
+      "id": "0x05fd80d533ad47efbd80b024c4c7778c5887f6eae6e46a6dd9b8d7c0a111881b46f1dcf4d6515d3338efc6a4e645610d01600143975a6338662c945afb24c868"
     },
     {
-      "addr": "0x71a5FFB0f3fA62D32aD9010E10284E11F392dED4",
+      "addr": "0xa996eeffe2d9d3cffdce5b7fc51c357da7abea6d",
       "stake": 4980000,
       "name": "meta9",
       "ip": "10.142.0.20",
       "port": 8589,
-      "id": "0x9765d6119aca8cae63ee2278680929ba6c4ff066da86ff5125c6aa326306bf341b34c32cc8f26b35340959d8cb3cb037829411fd9f87f579fbc69f12f18fbccc"
+      "id": "0xea8cb242d728c81843c03fda500fa67ce03d49741b36c357a43558c1a74aac039c296985feb37dc54670131f657d7d0f94f5ce87e83d87bb4e09f4f60051130e"
     }
   ],
   "accounts": [
