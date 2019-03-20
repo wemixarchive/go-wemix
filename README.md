@@ -40,7 +40,7 @@ This is default behavior in non-linux environment, e.g. in MacOS X.
 
 ## Join the Metadium Mainnet or Testnet
 
-One can use the following command lines to join the Metadium networks. Note that the default RPC port for `gmet` is 8588, and p2p port is 8589. As with geth, if `--datadir` is missing, ~/.metadium is data directory. 
+One can use the following command lines to join the Metadium networks. Note that the default RPC port for `gmet` is 8588, and p2p port is 8589. As with `geth`, if `--datadir` is missing, ~/.metadium is the data directory. 
 
 ### Metadium Mainnet
 
@@ -62,11 +62,11 @@ First create data directory in `/opt/`, say `/opt/meta`. Then, unpack metadium.t
     cd /opt/meta
     tar xvfz <dir>/metadium.tar.gz
 
-As initial members / accounts and nodes are determined (at least one member / account and node are required), create configuration file using `conf/config.json.example` as a template, say `config.json`. A member designated as `bootnode` has special meaning. Only that account can create the governance contracts, and only that node is allowed to generate blocks before governance contract is established. These are recorded in the genesis block as `coinbase` and the last 64 bytes of `extraData`.
+Once initial members / accounts and nodes are determined (at least one member / account and node are required), create a configuration file using `conf/config.json.example` as a template, say `config.json`. A member designated as `bootnode` has a special meaning. Only that account can create the governance contracts, and only that node is allowed to generate blocks before governance contracts are established. These are recorded in the genesis block as the `coinbase` and the last 64 bytes of the `extraData`.
 
 #### Account and Node IDs
 
-One can reuse existing accounts and nodes. Account files are in `keystore` directory, and `geth/nodekey` is node key / id file. Or one can use `gmet` to create accounts and node keys, and copy them to data directory.
+One can reuse existing accounts and nodes. Account files are in `keystore` directory, and `geth/nodekey` is the node key / id file. Or one can use `gmet` to create accounts and node keys, and copy them to data directory.
 
 To create a new account file, run the following.
 
@@ -105,20 +105,20 @@ e.g.
 
 Copy the newly created `genesis.json` to other nodes's data directories.
 
-Now start gmet
+Now start gmet.
 
     bin/gmet.sh start
 
-Now it's time to initialize governance contracts. Here we'll do a simple one-stop setup. Note that this is just for test, the real governance setup is a multi step process involving several proposals and votes. We'll prepare detailed governance setup documents later. Fow now, just do the following. 
+It's time to initialize governance contracts. Here we'll do a simple one-stop setup. Note that this is just for test. The real governance setup is a multi step process involving several proposals and votes. We'll prepare detailed governance setup documents later. Fow now, just do the following is enough.
 
     bin/gmet.sh init-gov meta config.json <account-file>
     
-Now start the console, and check if governance contract is setup or not.
+Now start the console, and check if governance contracts are set up or not.
 
     bin/gmet.sh console
     > admin.metadiumInfo
 
-If this shows nodes as configured in config.json, it's now time to initialize etcd.
+If this shows nodes as configured in config.json, it's time to initialize etcd.
 
     > admin.etcdInit()
 
@@ -128,7 +128,7 @@ Check if `etcd` is configured successfully.
 
 #### Other Initial Nodes
 
-Set up the data directory and copy `genesis` file as follows.
+Set up the data directory and copy the `genesis` file as follows.
 
     mkdir /opt/meta
     cd /opt/meta
@@ -141,7 +141,7 @@ Set up the data directory and copy `genesis` file as follows.
     # copy genesis.json
     bin/gmet.sh start
 
-Once these node are setup, the first node will automatically connect and chain synchronization will follow.
+Once these nodes are setup, the first node will automatically connect and chain synchronization will follow.
 
 ### Metadium Info
 
