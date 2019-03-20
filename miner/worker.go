@@ -179,6 +179,9 @@ type worker struct {
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 }
 
+// compare and swap lock for mining thread
+var busyMining int32
+
 func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, recommit time.Duration, gasFloor, gasCeil uint64, isLocalBlock func(*types.Block) bool) *worker {
 	worker := &worker{
 		config:             config,
@@ -196,7 +199,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 		txsCh:              make(chan core.NewTxsEvent, txChanSize),
 		chainHeadCh:        make(chan core.ChainHeadEvent, chainHeadChanSize),
 		chainSideCh:        make(chan core.ChainSideEvent, chainSideChanSize),
-		newWorkCh:          make(chan *newWorkReq, 2),
+		newWorkCh:          make(chan *newWorkReq, 4),
 		taskCh:             make(chan *task),
 		resultCh:           make(chan *types.Block, resultQueueSize),
 		exitCh:             make(chan struct{}),
@@ -405,11 +408,10 @@ func (w *worker) newWorkLoopEx(recommit time.Duration) {
 
 	// commitSimple just starts a new commitNewWork
 	commitSimple := func() {
-		if isBusyMining() {
-			return
-		} else {
+		if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
 			w.newWorkCh <- &newWorkReq{interrupt: nil, noempty: false, timestamp: time.Now().Unix()}
 			atomic.StoreInt32(&w.newTxs, 0)
+			atomic.StoreInt32(&busyMining, 0)
 		}
 	}
 	// clearPending cleans the stale pending tasks.
@@ -1131,8 +1133,6 @@ func (w *worker) commitTransactionsEx(num *big.Int, interrupt *int32, tstart tim
 	return false
 }
 
-var busyMining int32
-
 func isBusyMining() bool {
 	return atomic.LoadInt32(&busyMining) != 0
 }
@@ -1444,6 +1444,10 @@ func (w *worker) commitEx(uncles []*types.Header, interval func(), update bool, 
 				return err
 			}
 			log.Info("Successfully sealed new block", "number", sealedBlock.Number(), "sealhash", sealhash, "hash", hash, "elapsed", common.PrettyDuration(time.Since(createdAt)))
+
+			if !metaminer.IsMiner() {
+				return errors.New("Not Miner")
+			}
 
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: sealedBlock})
