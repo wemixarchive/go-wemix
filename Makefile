@@ -215,7 +215,8 @@ ifeq ($(shell uname), Linux)
 			-v /etc/group:/etc/group:ro			\
 			-v ~/src:/home/$${USER}/src			\
 			-v $(shell pwd):/data -u $$(id -u):$$(id -g)	\
-			-w /data metadium/bobthe:latest make;		\
+			-w /data metadium/bobthe:latest			\
+			make USE_ROCKSDB=$(USE_ROCKSDB);		\
 	fi
 else
 	@docker --version > /dev/null 2>&1;				\
@@ -223,7 +224,8 @@ else
 		echo "Docker not found.";				\
 	else								\
 		docker run -e HOME=/tmp -it --rm -v $(shell pwd):/data	\
-			-w /data metadium/bobthe:latest make;		\
+			-w /data metadium/bobthe:latest			\
+			make USE_ROCKSDB=$(USE_ROCKSDB);		\
 	fi
 endif
 
