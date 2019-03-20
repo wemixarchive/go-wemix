@@ -90,6 +90,7 @@ If you are to use existing or pre-created node key, copy the file to `geth` dire
     cp <node-key-file> geth/nodekey
 
 The same for accounts
+
     mkdir keystore
     chmod 0700 keystore
     cp <account-files> keystore/
