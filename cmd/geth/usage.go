@@ -249,6 +249,7 @@ var AppHelpFlagGroups = []flagGroup{
 			utils.UseRocksDb,
 			utils.PrefetchCount,
 			utils.LogFlag,
+			utils.MaxTxsPerBlock,
 		},
 	},
 	{

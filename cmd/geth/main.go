@@ -39,14 +39,14 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/internal/debug"
 	"github.com/ethereum/go-ethereum/log"
+	metadium "github.com/ethereum/go-ethereum/metadium"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
-	metadium "github.com/ethereum/go-ethereum/metadium"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
 const (
-	clientIdentifier = "geth" // Client identifier to advertise over the network
+	clientIdentifier = "gmet" // Client identifier to advertise over the network
 )
 
 var (
@@ -182,6 +182,7 @@ var (
 		utils.UseRocksDb,
 		utils.PrefetchCount,
 		utils.LogFlag,
+		utils.MaxTxsPerBlock,
 	}
 )
 
@@ -189,7 +190,7 @@ func init() {
 	// Initialize the CLI app and start Geth
 	app.Action = geth
 	app.HideVersion = true // we have a command to print the version
-	app.Copyright = "Copyright 2013-2018 The go-ethereum Authors"
+	app.Copyright = "Copyright 2013-2019 The go-ethereum / go-metadium Authors"
 	app.Commands = []cli.Command{
 		// See chaincmd.go:
 		initCommand,
@@ -412,7 +413,7 @@ func limitMaxRss(max int64) {
 			if err != nil {
 				log.Error("Getrusage() failed:", "reason", err)
 			} else {
-				if (rusage.Maxrss > max) {
+				if rusage.Maxrss > max {
 					log.Info("Calling FreeOSMemory()", "Max", max, "Rusage.Maxrss", rusage.Maxrss)
 					godebug.FreeOSMemory()
 				}

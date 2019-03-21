@@ -444,6 +444,51 @@ func (ma *metaAdmin) etcdLeader(locked bool) (uint64, *metaNode) {
 	return 0, nil
 }
 
+func (ma *metaAdmin) etcdPut(key, value string) error {
+	if !ma.etcdIsRunning() {
+		return ErrNotRunning
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(),
+		ma.etcd.Server.Cfg.ReqTimeout())
+	defer cancel()
+	_, err := ma.etcdCli.Put(ctx, key, value)
+	return err
+}
+
+func (ma *metaAdmin) etcdGet(key string) (string, error) {
+	if !ma.etcdIsRunning() {
+		return "", ErrNotRunning
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(),
+		time.Duration(1)*time.Second)
+	defer cancel()
+	rsp, err := ma.etcdCli.Get(ctx, key)
+	if err != nil {
+		return "", err
+	} else if rsp.Count == 0 {
+		return "", nil
+	} else {
+		var v string
+		for _, kv := range rsp.Kvs {
+			v = string(kv.Value)
+		}
+		return v, nil
+	}
+}
+
+func (ma *metaAdmin) etcdDelete(key string) error {
+	if !ma.etcdIsRunning() {
+		return ErrNotRunning
+	}
+	ctx, cancel := context.WithTimeout(context.Background(),
+		ma.etcd.Server.Cfg.ReqTimeout())
+	defer cancel()
+	_, err := ma.etcdCli.Delete(ctx, key)
+	return err
+}
+
 func (ma *metaAdmin) etcdInfo() interface{} {
 	if ma.etcd == nil {
 		return ErrNotRunning

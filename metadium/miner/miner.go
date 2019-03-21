@@ -14,7 +14,7 @@ var (
 	IsMinerFunc            func() bool
 	AmPartnerFunc          func() bool
 	IsPartnerFunc          func(string) bool
-	LogBlockFunc           func(int64)
+	LogBlockFunc           func(int64, common.Hash)
 	CalculateRewardsFunc   func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
 	VerifyRewardsFunc      func(*big.Int, string) error
 	SignBlockFunc          func(hash common.Hash) (nodeid, sig []byte, err error)
@@ -48,9 +48,9 @@ func AmPartner() bool {
 	}
 }
 
-func LogBlock(height int64) {
+func LogBlock(height int64, hash common.Hash) {
 	if LogBlockFunc != nil {
-		LogBlockFunc(height)
+		LogBlockFunc(height, hash)
 	}
 }
 

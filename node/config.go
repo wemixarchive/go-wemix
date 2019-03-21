@@ -200,7 +200,7 @@ func DefaultIPCEndpoint(clientIdentifier string) string {
 			panic("empty executable name")
 		}
 	}
-	config := &Config{DataDir: DefaultDataDir(), IPCPath: clientIdentifier + ".ipc"}
+	config := &Config{DataDir: DefaultDataDir(), IPCPath: "geth.ipc"}
 	return config.IPCEndpoint()
 }
 
@@ -238,8 +238,8 @@ func DefaultWSEndpoint() string {
 func (c *Config) NodeName() string {
 	name := c.name()
 	// Backwards compatibility: previous versions used title-cased "Geth", keep that.
-	if name == "geth" || name == "geth-testnet" {
-		name = "Geth"
+	if name == "geth" || name == "geth-testnet" || name == "gmet" || name == "gmet-testnet" {
+		name = "Gmet"
 	}
 	if c.UserIdent != "" {
 		name += "/" + c.UserIdent
@@ -258,7 +258,12 @@ func (c *Config) name() string {
 		if progname == "" {
 			panic("empty executable name, set Config.Name")
 		}
+		if strings.EqualFold(c.Name, "gmet") {
+			progname = "geth"
+		}
 		return progname
+	} else if strings.EqualFold(c.Name, "gmet") {
+		return "geth"
 	}
 	return c.Name
 }

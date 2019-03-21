@@ -87,6 +87,12 @@ type metaAdmin struct {
 	blocksMined int
 }
 
+// latest block generated
+type metaWork struct {
+	Height int64       `json:"height"`
+	Hash   common.Hash `json:"hash"`
+}
+
 var (
 	// "Metadium Registry"
 	magic, _        = big.NewInt(0).SetString("0x4d6574616469756d205265676973747279", 0)
@@ -1055,7 +1061,7 @@ func (ma *metaAdmin) pendingEmpty() bool {
 	return status.Pending == 0
 }
 
-func LogBlock(height int64) {
+func LogBlock(height int64, hash common.Hash) {
 	if admin == nil || admin.self == nil {
 		return
 	}
@@ -1063,16 +1069,29 @@ func LogBlock(height int64) {
 	admin.lock.Lock()
 	defer admin.lock.Unlock()
 
+	work, err := json.Marshal(&metaWork{
+		Height: height,
+		Hash:   hash,
+	})
+	if err != nil {
+		log.Error("marshaling failure????")
+	}
+
+	tstart := time.Now()
+	if err := admin.etcdPut("metadium-work", string(work)); err != nil {
+		log.Error("Metadium - failed to log the latest block",
+			"height", height, "hash", hash, "took", time.Since(tstart))
+	} else {
+		log.Info("Metadium - logged the latest block",
+			"height", height, "hash", hash, "took", time.Since(tstart))
+	}
+
 	admin.blocksMined++
 	height++
 	if admin.blocksMined >= admin.blocksPer &&
 		int(height)%admin.blocksPer == 0 {
 		// time to yield leader role
 
-		if !admin.pendingEmpty() {
-			log.Info("Metadium - not yielding due to pending txs...")
-			return
-		}
 		_, next, _ := admin.getMinerNodes(int(height), true)
 		if next.Id == admin.self.Id {
 			log.Info("Metadium - yield to self", "mined", admin.blocksMined,
