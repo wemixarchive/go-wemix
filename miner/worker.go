@@ -804,6 +804,10 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		if tx == nil {
 			break
 		}
+		// Break if it has to enough transactions
+		if params.MaxTxsPerBlock > 0 && w.current.tcount >= params.MaxTxsPerBlock {
+			break
+		}
 		// Break if it took too long
 		if tstart != nil && time.Since(*tstart).Seconds() >= 4 {
 			break

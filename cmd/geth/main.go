@@ -182,6 +182,7 @@ var (
 		utils.UseRocksDb,
 		utils.PrefetchCount,
 		utils.LogFlag,
+		utils.MaxTxsPerBlock,
 	}
 )
 

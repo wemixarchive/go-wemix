@@ -685,6 +685,11 @@ var (
 		Usage: "Rotating log file: <file-name>,<count>,<size>",
 		Value: "log,5,10M",
 	}
+	MaxTxsPerBlock = cli.IntFlag{
+		Name:  "maxtxsperblock",
+		Usage: "Max # of transactions in a block",
+		Value: params.MaxTxsPerBlock,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1376,6 +1381,9 @@ func SetMetadiumConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(UseRocksDb.Name) {
 		params.UseRocksDb = ctx.GlobalInt(UseRocksDb.Name)
+	}
+	if ctx.GlobalIsSet(MaxTxsPerBlock.Name) {
+		params.MaxTxsPerBlock = ctx.GlobalInt(MaxTxsPerBlock.Name)
 	}
 
 	if params.ConsensusMethod == params.ConsensusInvalid {
