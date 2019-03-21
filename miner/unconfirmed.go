@@ -85,7 +85,7 @@ func (set *unconfirmedBlocks) Insert(index uint64, hash common.Hash) {
 	}
 	// Display a log for the user to notify of a new mined block unconfirmed
 	header := set.chain.GetHeaderByNumber(index)
-	go metaminer.LogBlock(header.Number.Int64())
+	go metaminer.LogBlock(header.Number.Int64(), hash)
 	log.Info("🔨 mined potential block", "number", index, "hash", hash, "elapsed", common.PrettyDuration(time.Since(time.Unix(header.Time.Int64(), 0))))
 }
 
