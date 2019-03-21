@@ -1,6 +1,6 @@
 ## Go Metadium
 
-Golang implementation of the Metadium project. For now, this is just a forking point. We will release the code as it gets ready for public review. Stay tuned.
+Golang implementation of the Metadium project.
 
 ## Building
 
@@ -18,27 +18,55 @@ will build `logrot` (log rotator) and `metadium.tar.gz` in `build` directory, in
     bin/gmet.sh
     bin/solc.sh
     bin/logrot
-    conf/MetadiumAdmin-template.sol
+    conf/MetadiumGovernance.js
     conf/genesis-template.json
     conf/config.json.example
+    
+### Build For Ubuntu with a Docker Image
 
-## Setting Up a Network
+As we use `rocksdb` `C` implementation for better performance, library dependency becomes an issue. To mitigate that, we use a docker image to build our official image.
+
+    make gmet-linux
+
+will build gmet for ubuntu.
+
+### Build with LevelDB instead of Rocksdb
+
+To avoid library dependency issue, one can forgo `rocksdb` with
+
+    make USE_ROCKSDB=NO
+
+This is default behavior in non-linux environment, e.g. in MacOS X.
+
+## Join the Metadium Mainnet or Testnet
+
+One can use the following command lines to join the Metadium networks. Note that the default RPC port for `gmet` is 8588, and p2p port is 8589. As with `geth`, if `--datadir` is missing, ~/.metadium is the data directory. 
+
+### Metadium Mainnet
+
+    gmet --syncmode full --datadir {data_folder} --rpc --rpcaddr 0.0.0.0
+    
+### Metadium Testnet
+
+    gmet --testnet</b> --syncmode full --datadir {data_folder} --rpc --rpcaddr 0.0.0.0
+
+## Setting Up a New Network
 
 One can use `gmet.sh` script to make setup process a little easier. `gmet.sh` assumes metadium data directory to be `/opt/<node-name>`
 
 ### Initial Network
 
-First create data directory in `/opt/`, say `/opt/meta1`. Then, unpack metadium.tar.gz in the directory.
+First create data directory in `/opt/`, say `/opt/meta`. Then, unpack metadium.tar.gz in the directory.
 
-    mkdir /opt/meta1
-    cd /opt/meta1
+    mkdir /opt/meta
+    cd /opt/meta
     tar xvfz <dir>/metadium.tar.gz
 
-As initial members / accounts and nodes are determined (at least one member / account and node are required), create configuration file using `conf/config.json.example`, say `config.json`. The first account is going to be the governance contract creator, and only the first node is allowed to generate blocks before governance contract is established.
+Once initial members / accounts and nodes are determined (at least one member / account and node are required), create a configuration file using `conf/config.json.example` as a template, say `config.json`. A member designated as `bootnode` has a special meaning. Only that account can create the governance contracts, and only that node is allowed to generate blocks before governance contracts are established. These are recorded in the genesis block as the `coinbase` and the last 64 bytes of the `extraData`.
 
 #### Account and Node IDs
 
-One can reuse existing accounts and nodes. Account files are in `keystore` directory, and `geth/nodekey` is node key / id file. Or one can use `gmet` to create accounts and node keys, and copy them to data directory.
+One can reuse existing accounts and nodes. Account files are in `keystore` directory, and `geth/nodekey` is the node key / id file. Or one can use `gmet` to create accounts and node keys, and copy them to data directory.
 
 To create a new account file, run the following.
 
@@ -51,6 +79,8 @@ To create a new node key,
 To get node id, which is the public key of a `nodekey`.
 
     bin/gmet metadium nodeid <node-key-file-name>
+    
+`idv5` is the one that should be used in config.json file.
 
 #### First Node & Governance Contract Initialization
 
@@ -60,55 +90,58 @@ If you are to use existing or pre-created node key, copy the file to `geth` dire
     cp <node-key-file> geth/nodekey
 
 The same for accounts
+
     mkdir keystore
     chmod 0700 keystore
     cp <account-files> keystore/
 
-Running the following command generates `genesis.json` and `MetadiumAdmin.sol`, and initialize metadium blockchain.
+Running the following command generates `genesis.json`.
 
-    bin/gmet.sh init <node-name> config.json <port>
+    bin/gmet.sh init <node-name> config.json
 
 e.g.
 
-    bin/gmet.sh init meta1 config.json 8588
+    bin/gmet.sh init meta config.json
 
-Now it's time to compile and load governance contract
+Copy the newly created `genesis.json` to other nodes's data directories.
 
-    bin/solc.sh -p 1 MetadiumAdmin.sol MetadiumAdmin.js
-
-Start the metadium node
+Now start gmet.
 
     bin/gmet.sh start
 
-Open metadium console and create governance contract
+It's time to initialize governance contracts. Here we'll do a simple one-stop setup. Note that this is just for test. The real governance setup is a multi step process involving several proposals and votes. We'll prepare detailed governance setup documents later. Fow now, just do the following is enough.
+
+    bin/gmet.sh init-gov meta config.json <account-file>
+    
+Now start the console, and check if governance contracts are set up or not.
 
     bin/gmet.sh console
-    ...
-    > loadScript('MetadiumAdmin.js')
-    > personal.unlockAccount(<address>, <password>, <duration-in-second>)
-    > aa = AdminAnchor_new();
-    # wait for the completion, i.e. the address of AdminAnchor contract.
-    > ad = Admin_new();
-    # wait for the completion, i.e. the address of Admin contract.
-    > ad.switchAdmin(aa.address, ad.address, {from:eth.accounts[0], gas:1000000});
+    > admin.metadiumInfo
+
+If this shows nodes as configured in config.json, it's time to initialize etcd.
+
+    > admin.etcdInit()
+
+Check if `etcd` is configured successfully.
+
+    > admin.metadiumInfo.etcd
 
 #### Other Initial Nodes
 
-Copy config.json and MetadiumAdmin.js, then follow the same procedures except governance contract creation.
+Set up the data directory and copy the `genesis` file as follows.
 
-    mkdir /opt/meta2
-    cd /opt/meta2
+    mkdir /opt/meta
+    cd /opt/meta
     mkdir geth
     cp <node-key-file> geth/nodekey
     mkdir keystore
     chmod 0700 keystore
     cp <account-files> keystore/
     tar xvfz <dir>/metadium.tar.gz
-    # copy config.json and MetadiumAdmin.js from the first node
-    bin/gmet.sh init meta2 config.json <port>
+    # copy genesis.json
     bin/gmet.sh start
 
-Once these node are setup, the first node will automatically connect and chain synchronization will follow.
+Once these nodes are setup, the first node will automatically connect and chain synchronization will follow.
 
 ### Metadium Info
 
@@ -123,12 +156,6 @@ To start or stop a single node
     bin/gmet.sh start
     bin/gmet.sh stop
 
-To start or stop multiple nodes
-
-    export NODES="<host1> <dir1> <host2> <dir2>"
-    bin/gmet.sh start-nodes
-    bin/gmet.sh stop-nodes
-
 ### Starting Non-mining Nodes
 
 First download genesis.json from existing nodes to a data directory.
@@ -137,7 +164,7 @@ First download genesis.json from existing nodes to a data directory.
 
 After getting enodes of mining nodes, run gmet as follows.
 
-    bin/gmet --datadir <data-directory> --bootnodes <enodes> --rpc --rpcaddr 0.0.0.0
+    bin/gmet --syncmode full --datadir <data-directory> --bootnodes <enodes> --rpc --rpcaddr 0.0.0.0
 
 ### The original go-ethereum README follows...
 
