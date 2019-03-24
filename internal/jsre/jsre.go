@@ -78,6 +78,8 @@ func New(assetPath string, output io.Writer) *JSRE {
 	go re.runEventLoop()
 	re.Set("loadScript", re.loadScript)
 	re.Set("inspect", re.prettyPrintJS)
+	re.Set("loadFile", re.loadFile)
+	re.Set("msleep", re.msleep)
 	return re
 }
 
@@ -332,4 +334,32 @@ func compileAndRun(vm *otto.Otto, filename string, src interface{}) (otto.Value,
 		return otto.Value{}, err
 	}
 	return vm.Run(script)
+}
+
+// loadFile loads a file content as string
+func (re *JSRE) loadFile(call otto.FunctionCall) otto.Value {
+	file, err := call.Argument(0).ToString()
+	if err != nil {
+		return otto.UndefinedValue()
+	}
+	file = common.AbsolutePath(re.assetPath, file)
+	source, err := ioutil.ReadFile(file)
+	if err != nil {
+		return otto.UndefinedValue()
+	}
+	value, err := otto.ToValue(string(source))
+	if err != nil {
+		return otto.UndefinedValue()
+	}
+	return value
+}
+
+// msleep sleeps in ms resolution
+func (re *JSRE) msleep(call otto.FunctionCall) otto.Value {
+	delay, err := call.Argument(0).ToInteger()
+	if err != nil {
+		return otto.FalseValue()
+	}
+	time.Sleep(time.Duration(delay) * time.Millisecond)
+	return otto.TrueValue()
 }
