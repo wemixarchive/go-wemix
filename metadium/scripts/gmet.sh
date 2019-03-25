@@ -158,6 +158,7 @@ function start ()
     [ "$COINBASE" = "" ] && COINBASE="" || COINBASE="--miner.etherbase $COINBASE"
 
     RPCOPT="--rpc --rpcaddr 0.0.0.0"
+    [ "$PORT" = "" ] || RPCOPT="${RPCOPT} --rpcport ${PORT}"
     [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
     [ "$BOOT_NODES" = "" ] || BOOT_NODES="--bootnodes $BOOT_NODES"
     [ "$TESTNET" = "1" ] && TESTNET=--testnet
@@ -168,6 +169,7 @@ function start ()
     fi
 
     OPTS="$COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT $TESTNET"
+    [ "$PORT" = "" ] || OPTS="--port $(($PORT + 1))"
 
     [ -d "$d/logs" ] || mkdir -p $d/logs
 
