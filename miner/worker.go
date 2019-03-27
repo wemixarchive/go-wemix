@@ -1143,12 +1143,12 @@ func isBusyMining() bool {
 
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
-	if !metaminer.AmPartner() || !metaminer.IsMiner() {
-		return
-	}
 	if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
 		defer atomic.StoreInt32(&busyMining, 0)
 	} else {
+		return
+	}
+	if !metaminer.AmPartner() || !metaminer.IsMiner() {
 		return
 	}
 
