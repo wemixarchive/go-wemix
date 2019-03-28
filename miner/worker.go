@@ -428,8 +428,8 @@ func (w *worker) newWorkLoopEx(recommit time.Duration) {
 	for {
 		select {
 		case <-w.startCh:
+			w.refreshPending(false)
 			clearPending(w.chain.CurrentBlock().NumberU64())
-			w.initPending()
 			commitSimple()
 
 		case head := <-w.chainHeadCh:
@@ -457,11 +457,9 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			if !isBusyMining() && metaminer.AmPartner() {
-				// In metadium, costly interrupt / resubmit is disabled
-				//w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
-				w.commitNewWork(nil, req.noempty, req.timestamp)
-			}
+			// In metadium, costly interrupt / resubmit is disabled
+			//w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
+			w.commitNewWork(nil, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
 			// Short circuit for duplicate side blocks
@@ -1149,6 +1147,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		return
 	}
 	if !metaminer.AmPartner() || !metaminer.IsMiner() {
+		w.refreshPending(true)
 		return
 	}
 
@@ -1302,12 +1301,14 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 
-// initPending initialize pending state
-func (w *worker) initPending() {
-	if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
-		defer atomic.StoreInt32(&busyMining, 0)
-	} else {
-		return
+// refreshPending reinitialize pending state
+func (w *worker) refreshPending(locked bool) {
+	if !locked {
+		if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
+			defer atomic.StoreInt32(&busyMining, 0)
+		} else {
+			return
+		}
 	}
 
 	w.mu.RLock()
