@@ -80,6 +80,10 @@ func New(assetPath string, output io.Writer) *JSRE {
 	re.Set("inspect", re.prettyPrintJS)
 	re.Set("loadFile", re.loadFile)
 	re.Set("msleep", re.msleep)
+	re.Set("offlineWalletOpen", re.offlineWalletOpen)
+	re.Set("offlineWalletAddress", re.offlineWalletAddress)
+	re.Set("offlineWalletClose", re.offlineWalletClose)
+	re.Set("offlineWalletSignTx", re.offlineWalletSignTx)
 	return re
 }
 
@@ -298,7 +302,6 @@ func (re *JSRE) loadScript(call otto.FunctionCall) otto.Value {
 	}
 	if _, err := compileAndRun(call.Otto, file, source); err != nil {
 		// TODO: throw exception
-		fmt.Println("err:", err)
 		return otto.FalseValue()
 	}
 	// TODO: return evaluation result

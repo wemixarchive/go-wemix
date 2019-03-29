@@ -220,6 +220,8 @@ func (c *Console) init(preload []string) error {
 		}
 		c.prompter.SetWordCompleter(c.AutoCompleteInput)
 	}
+	// Metadium: set console prompter
+	jsre.PromptPassword = promptPassword
 	return nil
 }
 
