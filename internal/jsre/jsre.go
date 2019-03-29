@@ -84,6 +84,7 @@ func New(assetPath string, output io.Writer) *JSRE {
 	re.Set("offlineWalletAddress", re.offlineWalletAddress)
 	re.Set("offlineWalletClose", re.offlineWalletClose)
 	re.Set("offlineWalletSignTx", re.offlineWalletSignTx)
+	re.Set("offlineWalletList", re.offlineWalletList)
 	return re
 }
 

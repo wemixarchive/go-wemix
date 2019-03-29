@@ -17,13 +17,14 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
-	_ "github.com/ethereum/go-ethereum/accounts/usbwallet"
+	"github.com/ethereum/go-ethereum/accounts/usbwallet"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/pborman/uuid"
 	"github.com/robertkrimen/otto"
 )
 
@@ -31,6 +32,7 @@ var (
 	offlineWalletLock = &sync.Mutex{}
 	offlineWallets    = map[string]offlineWallet{}
 
+	// this comes from console.Stdin.PromptPassword
 	PromptPassword func(string) (string, error)
 )
 
@@ -58,6 +60,7 @@ type offlineWallet interface {
 	SignTx(path accounts.DerivationPath, tx *types.Transaction, chainID *big.Int) (common.Address, *types.Transaction, error)
 }
 
+// from geth's keystore style account
 type gethAccount struct {
 	id  string
 	key *keystore.Key
@@ -74,46 +77,51 @@ func throwJSException(err error) otto.Value {
 	panic(val)
 }
 
+// id is sha3 of random uuid
+func offlineWalletNewId() string {
+	return hex.EncodeToString(
+		crypto.Keccak256(
+			[]byte(uuid.NewRandom().String())))
+}
+
 // from metadium/metclient/util.go
 // if password
 // - || "": read password from stdin
 // @<file-name>: <file-name> file has password
-func loadGethAccount(password, fileName string) (string, error) {
-	id := hex.EncodeToString(crypto.Keccak256([]byte(password + fileName)))
-	if _, ok := offlineWallets[id]; ok {
-		return id, nil
-	}
-
+func loadGethAccount(password, fileName string) (string, *common.Address, error) {
 	var err error
+	id := offlineWalletNewId()
+
 	if password == "" || password == "-" {
 		if PromptPassword == nil {
-			return "", errors.New("Not Intiailized")
+			return "", nil, errors.New("Not Intiailized")
 		}
 		password, err = PromptPassword("Passphrase: ")
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 	} else if password[0] == '@' {
 		pw, err := ioutil.ReadFile(password[1:])
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		password = strings.TrimSpace(string(pw))
 	}
 
 	keyJson, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	key, err := keystore.DecryptKey(keyJson, password)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	offlineWallets[id] = &gethAccount{id: id, key: key}
-	return id, nil
+	return id, &key.Address, nil
 }
 
+// driver interface function implementations below
 func (acct *gethAccount) Status() (string, error) {
 	return "good", nil
 }
@@ -123,9 +131,6 @@ func (acct *gethAccount) Open(device io.ReadWriter, passphrase string) error {
 }
 
 func (acct *gethAccount) Close() error {
-	if _, ok := offlineWallets[acct.id]; ok {
-		delete(offlineWallets, acct.id)
-	}
 	// TODO: need to wipe the key
 	acct.id = ""
 	acct.key = nil
@@ -146,7 +151,26 @@ func (acct *gethAccount) SignTx(path accounts.DerivationPath, tx *types.Transact
 	return acct.key.Address, stx, err
 }
 
-// string offlneWalletOpen(string url, string password)
+// open hardware wallet, either ledger or trezor
+func openUsbWallet(scheme, path string) (string, *common.Address, error) {
+	id := offlineWalletNewId()
+
+	driver, err := usbwallet.OpenOffline(scheme, path)
+	if err != nil {
+		return "", nil, err
+	} else if _, ok := driver.(offlineWallet); !ok {
+		return "", nil, errors.New("Invalid Driver")
+	}
+	drv := driver.(offlineWallet)
+	offlineWallets[id] = drv
+	addr, err := drv.Derive(accounts.DefaultBaseDerivationPath)
+	if err != nil {
+		throwJSException(err)
+	}
+	return id, &addr, nil
+}
+
+// { "id": string, "address": address } offlneWalletOpen(string url, string password)
 func (re *JSRE) offlineWalletOpen(call otto.FunctionCall) otto.Value {
 	rawurl, err := call.Argument(0).ToString()
 	if err != nil {
@@ -175,11 +199,34 @@ func (re *JSRE) offlineWalletOpen(call otto.FunctionCall) otto.Value {
 	case "geth":
 		fallthrough
 	case "gmet":
-		id, err := loadGethAccount(password, path)
+		id, addr, err := loadGethAccount(password, path)
 		if err != nil {
 			throwJSException(err)
 		} else {
-			v, err := otto.ToValue(id)
+			r := map[string]string{
+				"id":      id,
+				"address": addr.Hex(),
+			}
+			env := otto.New()
+			v, err := env.ToValue(r)
+			if err != nil {
+				throwJSException(err)
+			}
+			return v
+		}
+	case "ledger":
+		fallthrough
+	case "trezor":
+		id, addr, err := openUsbWallet(u.Scheme, path)
+		if err != nil {
+			throwJSException(err)
+		} else {
+			r := map[string]string{
+				"id":      id,
+				"address": addr.Hex(),
+			}
+			env := otto.New()
+			v, err := env.ToValue(r)
 			if err != nil {
 				throwJSException(err)
 			}
@@ -192,7 +239,7 @@ func (re *JSRE) offlineWalletOpen(call otto.FunctionCall) otto.Value {
 	return otto.UndefinedValue()
 }
 
-// address offlneWalletOpen(string id)
+// address offlneWalletAddress(string id)
 func (re *JSRE) offlineWalletAddress(call otto.FunctionCall) otto.Value {
 	id, err := call.Argument(0).ToString()
 	if err != nil {
@@ -207,7 +254,11 @@ func (re *JSRE) offlineWalletAddress(call otto.FunctionCall) otto.Value {
 		throwJSException(ethereum.NotFound)
 		return otto.UndefinedValue()
 	} else {
-		v, err := otto.ToValue(w.(*gethAccount).key.Address.Hex())
+		addr, err := w.Derive(accounts.DefaultBaseDerivationPath)
+		if err != nil {
+			throwJSException(err)
+		}
+		v, err := otto.ToValue(addr.Hex())
 		if err != nil {
 			throwJSException(err)
 		}
@@ -229,6 +280,7 @@ func (re *JSRE) offlineWalletClose(call otto.FunctionCall) otto.Value {
 		throwJSException(ethereum.NotFound)
 		return otto.FalseValue()
 	} else {
+		delete(offlineWallets, id)
 		w.Close()
 		return otto.TrueValue()
 	}
@@ -334,7 +386,6 @@ func (re *JSRE) getTxArgs(jtx string) (*SendTxArgs, error) {
 }
 
 // []byte offlineWalletSignTx(string id, transaction tx, chainID int)
-// web3.toBigNumber(eth.chainId())
 func (re *JSRE) offlineWalletSignTx(call otto.FunctionCall) otto.Value {
 	id, err := call.Argument(0).ToString()
 	if err != nil {
@@ -385,7 +436,7 @@ func (re *JSRE) offlineWalletSignTx(call otto.FunctionCall) otto.Value {
 		throwJSException(ethereum.NotFound)
 		return otto.UndefinedValue()
 	} else {
-		_, stx, err := w.SignTx(accounts.DefaultRootDerivationPath, tx,
+		_, stx, err := w.SignTx(accounts.DefaultBaseDerivationPath, tx,
 			big.NewInt(int64(chainID)))
 		if err != nil {
 			throwJSException(err)
@@ -400,6 +451,23 @@ func (re *JSRE) offlineWalletSignTx(call otto.FunctionCall) otto.Value {
 		}
 		return v
 	}
+}
+
+// offlineWalletList returns the array of ledger or trezor device paths
+// for mostly informational use
+func (re *JSRE) offlineWalletList(call otto.FunctionCall) otto.Value {
+	scheme := ""
+	if call.Argument(0).IsString() {
+		scheme, _ = call.Argument(0).ToString()
+	}
+
+	paths := usbwallet.ListDevices(scheme)
+	env := otto.New()
+	v, err := env.ToValue(paths)
+	if err != nil {
+		throwJSException(err)
+	}
+	return v
 }
 
 // EOF
