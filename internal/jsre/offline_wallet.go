@@ -196,9 +196,7 @@ func (re *JSRE) offlineWalletOpen(call otto.FunctionCall) otto.Value {
 	}
 
 	switch u.Scheme {
-	case "geth":
-		fallthrough
-	case "gmet":
+	case "", "geth", "gmet":
 		id, addr, err := loadGethAccount(password, path)
 		if err != nil {
 			throwJSException(err)
@@ -214,9 +212,7 @@ func (re *JSRE) offlineWalletOpen(call otto.FunctionCall) otto.Value {
 			}
 			return v
 		}
-	case "ledger":
-		fallthrough
-	case "trezor":
+	case "ledger", "trezor":
 		id, addr, err := openUsbWallet(u.Scheme, path)
 		if err != nil {
 			throwJSException(err)
