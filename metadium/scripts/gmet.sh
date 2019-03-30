@@ -70,6 +70,10 @@ DISCOVER=0" > $d/.rc
 }
 
 # void init_gov(String node, String config_json, String account_file)
+# account_file can be
+#   1. keystore file: "<path>"
+#   2. nano ledger: "ledger:"
+#   3. trezor: "trezor:"
 function init_gov ()
 {
     NODE="$1"
@@ -94,7 +98,8 @@ function init_gov ()
 	return 1
     fi
 
-    exec ${GMET} metadium deploy-governance --url http://localhost:8588 --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
+    exec ${GMET} attach http://localhost:8588 --preload "$d/conf/MetadiumGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "'${CONFIG}'")'
+#    ${GMET} metadium deploy-governance --url http://localhost:8588 --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
 }
 
 function wipe ()

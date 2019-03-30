@@ -1,12 +1,12 @@
 // deploy-governance.js
 
-// web3.padLeft("123", 5, "0") -> "00123"
-// web3.padRight("123", 5, ".") -> "123.."
-
+// uses offline wallet
 var GovernanceDeployer = new function() {
-    this.from = eth.accounts[0]
+    this.wallet = null
+    this.from = null
     this.gas = "0xE000000";
     this.gasPrice = eth.gasPrice
+    this._nonce = 0
     this.receiptCheckParams = { "interval": 100, "count": 300 }
 
     // bool log(var args...)
@@ -90,31 +90,49 @@ var GovernanceDeployer = new function() {
         }
     }
 
-    // returns contract object, or throws error
-    // 1. <object>.transactionHash is what it says it is
-    // 2. <object>.address needs to be set by <receipt>.contractAddress later
-    this.deployContract = function(abi, data) {
-        return abi.new({
+    this.nonce = function() {
+        return this._nonce++
+    }
+
+    // returns transaction hash, or throws error
+    this.deployContract = function(data) {
+        var tx = {
             from: this.from,
             data: data,
             gas: this.gas,
             gasPrice: this.gasPrice
-        })
+            nonce: this.nonce()
+        }
+        var stx = offlineWalletSignTx(this.wallet.id, tx, eth.chainId())
+        return eth.sendRawTransaction(stx)
     }
 
-    // TODO: needs to explain why a contract gets reloaded here
-    this.getContractAddress = function(ctr) {
-        var tx = ctr.transactionHash
+    // wait for transaction receipt for contract address, then
+    // load a contract
+    // Contract resolveContract(ABI abi, hash txh)
+    this.resolveContract = function(abi, txh) {
         for (var i = 0; i < this.receiptCheckParams.count; i++ ) {
-            var r = eth.getTransactionReceipt(tx)
+            var r = eth.getTransactionReceipt(txh)
             if (r != null && r.contractAddress != null) {
-                ctr = web3.eth.contract(ctr.abi).at(r.contractAddress)
-                ctr.transactionHash = tx
+                var ctr = web3.eth.contract(abi).at(r.contractAddress)
+                ctr.transactionHash = txh
                 return ctr
             }
             msleep(this.receiptCheckParams.interval)
         }
-        throw "Cannot get contract address for " + ctr.transactionHash
+        throw "Cannot get contract address for " + txh
+    }
+
+    // sends a simple or method transaction, returns transaction hash
+    this.sendTx = function(to, value, data) {
+        var tx = {from:this.from, to:to, gas:this.gas,
+                  gasPrice:this.gasPrice, nonce:this.nonce()}
+        if (value)
+            tx.value = value
+        if (data)
+            tx.data = data
+        var stx = offlineWalletSignTx(this.wallet.id, tx, eth.chainId())
+        return eth.sendRawTransaction(stx)
     }
 
     this.checkReceipt = function(tx) {
@@ -127,11 +145,18 @@ var GovernanceDeployer = new function() {
         throw "Cannot get a transaction receipt for " + tx
     }
 
-    // bool deploy(string datadir, string cfg)
-    this.deploy = function(datadir, cfg) {
+    // bool deploy(string walletUrl, string cfg)
+    this.deploy = function(walletUrl, cfg) {
+        w = offlineWalletOpen(walletUrl)
+        if (!w || !w.id || !w.address) {
+            throw "Offline wallet is not loaded"
+        }
+        this.wallet = w
+        this.from = this.wallet.address
+        this._nonce = eth.getTransactionCount(this.from, 'pending')
+
         var data
-        if (!loadScript(datadir + "/conf/MetadiumGovernance.js") ||
-            !(data = loadFile(cfg)))
+        if (!(data = loadFile(cfg)))
             throw "cannot load governance contract .js or config .json file"
 
         // check if contracts exist
@@ -157,49 +182,55 @@ var GovernanceDeployer = new function() {
 
         // 1. deploy Registry and EnvStorageImp contracts
         this.log("Deploying Registry and EnvStorageImp...")
-        registry = this.deployContract(Registry_contract, Registry_data)
-        envStorageImp = this.deployContract(EnvStorageImp_contract, EnvStorageImp_data)
+        registry = this.deployContract(Registry_data)
+        envStorageImp = this.deployContract(EnvStorageImp_data)
 
         this.log("Waiting for receipts...")
-        envStorageImp = this.getContractAddress(envStorageImp)
-        registry = this.getContractAddress(registry)
+        envStorageImp = this.resolveContract(EnvStorageImp_contract.abi, envStorageImp)
+        registry = this.resolveContract(Registry_contract.abi, registry)
 
         // 2. deploy Staking, BallotStorage, EnvStorage, GovImp, Gov
         this.log("Deploying Staking, BallotStorage, EnvStorage, GovImp & Gov...")
         var code = Staking_contract.getData(registry.address, initData.stakes,
                                             {data: Staking_data})
-        staking = this.deployContract(Staking_contract, code)
-        ballotStorage = this.deployContract(BallotStorage_contract, BallotStorage_data)
+        staking = this.deployContract(code)
+        ballotStorage = this.deployContract(BallotStorage_data)
         code = EnvStorage_contract.getData(registry.address, envStorageImp.address,
                                            {data: EnvStorage_data})
-        envStorage = this.deployContract(EnvStorage_contract, code)
-        govImp = this.deployContract(GovImp_contract, GovImp_data)
-        gov = this.deployContract(Gov_contract, Gov_data)
+        envStorage = this.deployContract(code)
+        govImp = this.deployContract(GovImp_data)
+        gov = this.deployContract(Gov_data)
 
         this.log("Waiting for receipts...")
-        gov = this.getContractAddress(gov)
-        govImp = this.getContractAddress(govImp)
-        envStorage = this.getContractAddress(envStorage)
-        ballotStorage = this.getContractAddress(ballotStorage)
-        staking = this.getContractAddress(staking)
+        gov = this.resolveContract(Gov_contract.abi, gov)
+        govImp = this.resolveContract(GovImp_contract.abi, govImp)
+        envStorage = this.resolveContract(EnvStorage_contract.abi, envStorage)
+        ballotStorage = this.resolveContract(BallotStorage_contract.abi, ballotStorage)
+        staking = this.resolveContract(Staking_contract.abi, staking)
 
         // 3. setup registry
         this.log("Setting registry...")
         txs.length = 0
-        txs[txs.length] = registry.setContractDomain(
-            "Staking", staking.address, {from:this.from, gas:this.gas})
-        txs[txs.length] = registry.setContractDomain(
-            "BallotStorage", ballotStorage.address, {from:this.from, gas:this.gas})
-        txs[txs.length] = registry.setContractDomain(
-            "EnvStorage", envStorage.address, {from:this.from, gas:this.gas})
-        txs[txs.length] = registry.setContractDomain(
-            "GovernanceContract", gov.address, {from:this.from, gas:this.gas})
+        txs[txs.length] = this.sendTx(registry.address, null,
+            registry.setContractDomain.getData(
+                "Staking", staking.address))
+        txs[txs.length] = this.sendTx(registry.address, null,
+            registry.setContractDomain.getData(
+                "BallotStorage", ballotStorage.address))
+        txs[txs.length] = this.sendTx(registry.address, null,
+            registry.setContractDomain.getData(
+                "EnvStorage", envStorage.address))
+        txs[txs.length] = this.sendTx(registry.address, null,
+            registry.setContractDomain.getData(
+                "GovernanceContract", gov.address))
         if (initData.pool)
-            txs[txs.length] = registry.setContractDomain(
-                "RewardPool", initData.pool, {from:this.from, gas:this.gas})
+            txs[txs.length] = this.sendTx(registry.address, null,
+                registry.setContractDomain.getData(
+                    "RewardPool", initData.pool))
         if (initData.maintenance)
-            txs[txs.length] = registry.setContractDomain(
-                "Maintenance", initData.pool, {from:this.from, gas:this.gas})
+            txs[txs.length] = this.sendTx(registry.address, null,
+                registry.setContractDomain.getData(
+                    "Maintenance", initData.maintenance))
 
         // no need to wait for the receipts for the above
 
@@ -208,24 +239,29 @@ var GovernanceDeployer = new function() {
         // 5. Gov.initOnce()
         this.log("Initializing governance members and nodes...")
         txs.length = 0
-        txs[txs.length] = gov.initOnce(registry.address, govImp.address,
-                                       initData.nodes, {from:this.from, gas:this.gas})
+        txs[txs.length] = this.sendTx(gov.address, null,
+            gov.initOnce.getData(
+                registry.address, govImp.address, initData.nodes))
 
         // 6. initialize environment storage data:
-        // blocksPer, ballotDurationMin, ballotDurationMax, stakingMin, stakingMax,
-        // gasPrice
+        // blocksPer, ballotDurationMin, ballotDurationMax,
+        // stakingMin, stakingMax, gasPrice
         this.log("Initializing environment storage...")
-        // Just changing address doesn't work here. Address is embeded in
-        // the methods. Have to re-construct here.
+        // Just changing address doesn't work here. Address is embedded in
+        // the methods. Have to re-construct temporary EnvStorageImp here.
         var tmpEnvStorageImp = web3.eth.contract(envStorageImp.abi).at(envStorage.address)
-        txs[txs.length] = tmpEnvStorageImp.initialize(
-            100, // blocksPer
-            86400, 604800, // ballotDurationMin, ...Max
-            // stakingMin, ...Max
-            4980000000000000000000000, 39840000000000000000000000,
-            80000000000, // gasPrice
-            5, // maxIdleBlockInterval
-            {from:this.from, gas:this.gas})
+        txs[txs.length] = this.sendTx(envStorage.address, null,
+            tmpEnvStorageImp.initialize.getData(
+                // blocksPer
+                100,
+                // ballotDurationMin, ...Max
+                86400, 604800,
+                // stakingMin, ...Max
+                4980000000000000000000000, 39840000000000000000000000,
+                // gasPrice
+                80000000000,
+                // maxIdleBlockInterval
+                5))
 
         if (!this.checkReceipt(txs[0]))
             throw "Failed to initialize with initOnce. Tx is " + txs[0]
