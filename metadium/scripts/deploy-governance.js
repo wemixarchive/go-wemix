@@ -145,9 +145,9 @@ var GovernanceDeployer = new function() {
         throw "Cannot get a transaction receipt for " + tx
     }
 
-    // bool deploy(string walletUrl, string cfg)
-    this.deploy = function(walletUrl, cfg) {
-        w = offlineWalletOpen(walletUrl)
+    // bool deploy(string walletUrl, string password, string cfg)
+    this.deploy = function(walletUrl, password, cfg) {
+        w = offlineWalletOpen(walletUrl, password)
         if (!w || !w.id || !w.address) {
             throw "Offline wallet is not loaded"
         }
