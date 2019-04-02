@@ -64,8 +64,8 @@ function init ()
 DISCOVER=0" > $d/.rc
     ${GMET} --datadir $d init $d/genesis.json
     echo "Generating dags for epoch 0 and 1..."
-    ${GMET} makedag 0	  $d/.ethash &
-    ${GMET} makedag 1	  $d/.ethash &
+    ${GMET} makedag 0     $d/.ethash &
+    ${GMET} makedag 30000 $d/.ethash &
     wait
 }
 
@@ -94,7 +94,7 @@ function init_gov ()
 	return 1
     fi
 
-    ${GMET} metadium deploy-governance --url http://localhost:8588 --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
+    exec ${GMET} metadium deploy-governance --url http://localhost:8588 --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
 }
 
 function wipe ()
@@ -178,6 +178,10 @@ function start ()
 	$GMET --datadir ${PWD} --syncmode full --gcmode archive --metrics \
 	    $OPTS 2>&1 | ${d}/bin/logrot ${d}/logs/log 10M 5 &
     else
+	if [ -x "$d/bin/logrot" ]; then
+	    exec > >($d/bin/logrot $d/logs/log 10M 5)
+	    exec 2>&1
+	fi
 	exec $GMET --datadir ${PWD} --syncmode full --gcmode archive	\
 	    --metrics $OPTS
     fi
