@@ -1,6 +1,6 @@
 #!/bin/bash
 
-[ "$DIR" = "" ] && DIR=/opt
+[ "$META_DIR" = "" ] && META_DIR=/opt
 
 CHAIN_ID=101
 CONSENSUS_METHOD=2
@@ -12,14 +12,14 @@ BLOCKS_PER_TURN=10
 function get_data_dir ()
 {
     if [ ! "$1" = "" ]; then
-	d=${DIR}/$1
+	d=${META_DIR}/$1
 	if [ -x "$d/bin/gmet" ]; then
 	    echo $d
 	fi
     else
-	for i in $(/bin/ls -1 ${DIR}); do
-	    if [ -x "${DIR}/$i/bin/gmet" ]; then
-		echo ${DIR}/$i
+	for i in $(/bin/ls -1 ${META_DIR}); do
+	    if [ -x "${META_DIR}/$i/bin/gmet" ]; then
+		echo ${META_DIR}/$i
 		return
 	    fi
 	done
@@ -64,12 +64,16 @@ function init ()
 DISCOVER=0" > $d/.rc
     ${GMET} --datadir $d init $d/genesis.json
     echo "Generating dags for epoch 0 and 1..."
-    ${GMET} makedag 0	  $d/.ethash &
-    ${GMET} makedag 1	  $d/.ethash &
+    ${GMET} makedag 0     $d/.ethash &
+    ${GMET} makedag 30000 $d/.ethash &
     wait
 }
 
 # void init_gov(String node, String config_json, String account_file)
+# account_file can be
+#   1. keystore file: "<path>"
+#   2. nano ledger: "ledger:"
+#   3. trezor: "trezor:"
 function init_gov ()
 {
     NODE="$1"
@@ -94,7 +98,8 @@ function init_gov ()
 	return 1
     fi
 
-    ${GMET} metadium deploy-governance --url http://localhost:8588 --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
+    exec ${GMET} attach http://localhost:8588 --preload "$d/conf/MetadiumGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'")'
+#    ${GMET} metadium deploy-governance --url http://localhost:8588 --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
 }
 
 function wipe ()
@@ -112,8 +117,8 @@ function wipe ()
 
 function wipe_all ()
 {
-    for i in `/bin/ls -1 ${DIR}/`; do
-	if [ ! -d "${DIR}/$i" -o ! -x "${DIR}/$i/bin/gmet" ]; then
+    for i in `/bin/ls -1 ${META_DIR}/`; do
+	if [ ! -d "${META_DIR}/$i" -o ! -x "${META_DIR}/$i/bin/gmet" ]; then
 	    continue
 	fi
 	wipe $i
@@ -136,8 +141,8 @@ function clean ()
 
 function clean_all ()
 {
-    for i in `/bin/ls -1 ${DIR}/`; do
-	if [ ! -d "${DIR}/$i" -o ! -d "${DIR}/$i/geth" ]; then
+    for i in `/bin/ls -1 ${META_DIR}/`; do
+	if [ ! -d "${META_DIR}/$i" -o ! -d "${META_DIR}/$i/geth" ]; then
 	    continue
 	fi
 	clean $i
@@ -158,6 +163,7 @@ function start ()
     [ "$COINBASE" = "" ] && COINBASE="" || COINBASE="--miner.etherbase $COINBASE"
 
     RPCOPT="--rpc --rpcaddr 0.0.0.0"
+    [ "$PORT" = "" ] || RPCOPT="${RPCOPT} --rpcport ${PORT}"
     [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
     [ "$BOOT_NODES" = "" ] || BOOT_NODES="--bootnodes $BOOT_NODES"
     [ "$TESTNET" = "1" ] && TESTNET=--testnet
@@ -167,7 +173,8 @@ function start ()
 	DISCOVER=
     fi
 
-    OPTS="$COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT $TESTNET"
+    OPTS="$COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT $TESTNET ${GMET_OPTS}"
+    [ "$PORT" = "" ] || OPTS="${OPTS} --port $(($PORT + 1))"
 
     [ -d "$d/logs" ] || mkdir -p $d/logs
 
@@ -176,6 +183,10 @@ function start ()
 	$GMET --datadir ${PWD} --syncmode full --gcmode archive --metrics \
 	    $OPTS 2>&1 | ${d}/bin/logrot ${d}/logs/log 10M 5 &
     else
+	if [ -x "$d/bin/logrot" ]; then
+	    exec > >($d/bin/logrot $d/logs/log 10M 5)
+	    exec 2>&1
+	fi
 	exec $GMET --datadir ${PWD} --syncmode full --gcmode archive	\
 	    --metrics $OPTS
     fi
@@ -183,8 +194,8 @@ function start ()
 
 function start_all ()
 {
-    for i in `/bin/ls -1 ${DIR}/`; do
-	if [ ! -d "${DIR}/$i" -o ! -f "${DIR}/$i/bin/gmet" ]; then
+    for i in `/bin/ls -1 ${META_DIR}/`; do
+	if [ ! -d "${META_DIR}/$i" -o ! -f "${META_DIR}/$i/bin/gmet" ]; then
 	    continue
 	fi
 	start $i
@@ -209,7 +220,7 @@ function do_nodes ()
 	if [ "$1" = "$LHN" -o "$1" = "${LHN/.*/}" ]; then
 	    $0 ${CMD} $2
 	else
-	    ssh -f $1 ${DIR}/$2/bin/gmet.sh ${CMD} $2
+	    ssh -f $1 ${META_DIR}/$2/bin/gmet.sh ${CMD} $2
 	fi
 	shift
 	shift

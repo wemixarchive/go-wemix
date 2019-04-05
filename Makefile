@@ -35,9 +35,11 @@ endif
 metadium: gmet logrot
 	@[ -d build/conf ] || mkdir -p build/conf
 	@cp -p metadium/scripts/gmet.sh metadium/scripts/solc.sh build/bin/
-	@cp -p metadium/scripts/config.json.example			\
-		metadium/scripts/genesis-template.json			\
-		metadium/contracts/MetadiumGovernance.js build/conf/
+	@cp -p metadium/scripts/config.json.example		\
+		metadium/scripts/genesis-template.json		\
+		metadium/contracts/MetadiumGovernance.js	\
+		metadium/scripts/deploy-governance.js		\
+		build/conf/
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
 
@@ -210,7 +212,7 @@ ifeq ($(shell uname), Linux)
 	if [ ! $$? = 0 ]; then						\
 		echo "Docker not found.";				\
 	else								\
-		docker run -e HOME=/tmp -it --rm			\
+		docker run -e HOME=/tmp --rm				\
 			-v /etc/passwd:/etc/passwd:ro			\
 			-v /etc/group:/etc/group:ro			\
 			-v ~/src:/home/$${USER}/src			\
@@ -223,7 +225,7 @@ else
 	if [ ! $$? = 0 ]; then						\
 		echo "Docker not found.";				\
 	else								\
-		docker run -e HOME=/tmp -it --rm -v $(shell pwd):/data	\
+		docker run -e HOME=/tmp --rm -v $(shell pwd):/data	\
 			-w /data metadium/bobthe:latest			\
 			make USE_ROCKSDB=$(USE_ROCKSDB);		\
 	fi

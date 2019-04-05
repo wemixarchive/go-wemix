@@ -5365,6 +5365,13 @@ var methods = function () {
         inputFormatter: [null]
     });
 
+    var sendRawTransactions = new Method({
+        name: 'sendRawTransactions',
+        call: 'eth_sendRawTransactions',
+        params: 1,
+        inputFormatter: [null]
+    });
+
     var sendTransaction = new Method({
         name: 'sendTransaction',
         call: 'eth_sendTransaction',
@@ -5447,6 +5454,7 @@ var methods = function () {
         call,
         estimateGas,
         sendRawTransaction,
+        sendRawTransactions,
         signTransaction,
         sendTransaction,
         sign,
