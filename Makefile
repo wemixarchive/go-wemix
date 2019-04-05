@@ -212,7 +212,7 @@ ifeq ($(shell uname), Linux)
 	if [ ! $$? = 0 ]; then						\
 		echo "Docker not found.";				\
 	else								\
-		docker run -e HOME=/tmp -it --rm			\
+		docker run -e HOME=/tmp --rm				\
 			-v /etc/passwd:/etc/passwd:ro			\
 			-v /etc/group:/etc/group:ro			\
 			-v ~/src:/home/$${USER}/src			\
@@ -225,7 +225,7 @@ else
 	if [ ! $$? = 0 ]; then						\
 		echo "Docker not found.";				\
 	else								\
-		docker run -e HOME=/tmp -it --rm -v $(shell pwd):/data	\
+		docker run -e HOME=/tmp --rm -v $(shell pwd):/data	\
 			-w /data metadium/bobthe:latest			\
 			make USE_ROCKSDB=$(USE_ROCKSDB);		\
 	fi
