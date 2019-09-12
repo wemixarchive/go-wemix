@@ -1441,6 +1441,8 @@ func init() {
 	metaapi.EtcdRemoveMember = EtcdRemoveMember
 	metaapi.EtcdJoin = EtcdJoin
 	metaapi.EtcdMoveLeader = EtcdMoveLeader
+	metaapi.EtcdGetWork = EtcdGetWork
+	metaapi.EtcdDeleteWork = EtcdDeleteWork
 }
 
 /* EOF */

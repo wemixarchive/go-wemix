@@ -249,6 +249,16 @@ web3._extend({
 			params: 1,
 			inputFormatter: [null]
 		}),
+		new web3._extend.Method({
+			name: 'etcdGetWork',
+			call: 'admin_etcdGetWork',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'etcdDeleteWork',
+			call: 'admin_etcdDeleteWork',
+			params: 0
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

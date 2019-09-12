@@ -639,4 +639,18 @@ func EtcdJoin(name string) error {
 	return admin.etcdJoin(name)
 }
 
+func EtcdGetWork() (string, error) {
+	if admin == nil {
+		return "", ErrNotRunning
+	}
+	return admin.etcdGet("metadium-work")
+}
+
+func EtcdDeleteWork() error {
+	if admin == nil {
+		return ErrNotRunning
+	}
+	return admin.etcdDelete("metadium-work")
+}
+
 /* EOF */

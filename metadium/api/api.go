@@ -39,6 +39,8 @@ var (
 	EtcdRemoveMember func(name string) (string, error)
 	EtcdJoin         func(cluster string) error
 	EtcdMoveLeader   func(name string) error
+	EtcdGetWork      func() (string, error)
+	EtcdDeleteWork   func() error
 )
 
 func SetMsgChannel(ch chan interface{}) {
