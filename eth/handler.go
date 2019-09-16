@@ -597,6 +597,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if filter {
 				transactions, uncles = pm.fetcher.FilterBodies(p.id, transactions, uncles, time.Now())
 			}
+			if len(transactions) > 0 {
+				signer := types.MakeSigner(pm.chainconfig, pm.blockchain.CurrentBlock().Number())
+				for _, txs := range transactions {
+					pm.txpool.ResolveSenders(signer, txs, true)
+				}
+			}
 			if len(transactions) > 0 || len(uncles) > 0 || !filter {
 				err := pm.downloader.DeliverBodies(p.id, transactions, uncles)
 				if err != nil {

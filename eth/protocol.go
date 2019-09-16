@@ -115,6 +115,9 @@ type txPool interface {
 	// SubscribeNewTxsEvent should return an event subscription of
 	// NewTxsEvent and send events to the given channel.
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
+
+	// Resolve senders from transaction pool
+	ResolveSenders(types.Signer, []*types.Transaction, bool) []*common.Address
 }
 
 // statusData is the network packet for the status message.
