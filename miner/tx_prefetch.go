@@ -7,15 +7,15 @@ import (
 	"math"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 )
 
 var (
-	doneTxs = metaminer.NewLruCache(5000)
+	doneTxs = lru.NewLruCache(5000, false)
 )
 
 func tx_prefetch(w *worker, to *TxOrderer, numWorkers int) {
