@@ -51,7 +51,7 @@ const (
 
 	// txChanSize is the size of channel listening to NewTxsEvent.
 	// The number is referenced from the size of tx pool.
-	txChanSize = 40960
+	txChanSize = 102400
 
 	// minimim number of peers to broadcast new blocks to
 	minBroadcastPeers = 4
@@ -600,7 +600,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if len(transactions) > 0 {
 				signer := types.MakeSigner(pm.chainconfig, pm.blockchain.CurrentBlock().Number())
 				for _, txs := range transactions {
-					pm.txpool.ResolveSenders(signer, txs, true)
+					pm.txpool.ResolveSenders(signer, txs)
 				}
 			}
 			if len(transactions) > 0 || len(uncles) > 0 || !filter {

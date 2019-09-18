@@ -3,27 +3,37 @@
 package core
 
 import (
-	_ "fmt"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core/types"
 )
+
+// job structure is needed because param is necessary due to evaluation order
+// uncertainty with closure and channel.
+type job struct {
+	f     func(interface{})
+	param interface{}
+}
 
 // SenderResolver resolves sender accounts from transactions concurrently
 // with worker threads
 type SenderResolver struct {
-	jobs chan func()
-	busy chan interface{}
+	tx2addr *lru.LruCache
+	jobs    chan *job
+	busy    chan interface{}
 }
 
 // NewSenderResolver creates a new sender resolver worker pool
-func NewSenderResolver(count int) *SenderResolver {
+func NewSenderResolver(concurrency, cacheSize int) *SenderResolver {
 	return &SenderResolver{
-		jobs: make(chan func(), count),
-		busy: make(chan interface{}, count),
+		tx2addr: lru.NewLruCache(cacheSize, true),
+		jobs:    make(chan *job, concurrency),
+		busy:    make(chan interface{}, concurrency),
 	}
 }
 
@@ -32,8 +42,8 @@ func (s *SenderResolver) Run() {
 	eor := false
 	for {
 		select {
-		case f := <-s.jobs:
-			if f == nil {
+		case j := <-s.jobs:
+			if j == nil {
 				eor = true
 			} else {
 				go func() {
@@ -41,7 +51,7 @@ func (s *SenderResolver) Run() {
 					defer func() {
 						<-s.busy
 					}()
-					f()
+					j.f(j.param)
 				}()
 			}
 		}
@@ -57,59 +67,63 @@ func (s *SenderResolver) Stop() {
 }
 
 // Post a new sender resolver task
-func (s *SenderResolver) Post(f func()) {
-	s.jobs <- f
+func (s *SenderResolver) Post(f func(interface{}), p interface{}) {
+	s.jobs <- &job{f: f, param: p}
 }
 
 // ResolveSenders resolves sender accounts from given transactions
-// concurrently using SenderResolver worker pool. If 'checkPool' is true,
-// it checks the pending pool first
-func (pool *TxPool) ResolveSenders(signer types.Signer, txs []*types.Transaction, checkPool bool) []*common.Address {
-	var total, by_ecrecover, failed int64
-	total = int64(len(txs))
+// concurrently using SenderResolver worker pool.
+func (pool *TxPool) ResolveSenders(signer types.Signer, txs []*types.Transaction) {
 	ot := time.Now()
-
-	var addrs []*common.Address
-	if checkPool {
-		addrs = pool.all.ResolveSenders(signer, txs)
-	} else {
-		addrs = make([]*common.Address, len(txs))
-	}
+	s := pool.senderResolver
+	var total, by_ecrecover, failed int64 = int64(len(txs)), 0, 0
 
 	var wg sync.WaitGroup
-	for i, addr := range addrs {
-		if addr != nil {
-			types.SetSender(signer, txs[i], *addr)
+	for _, tx := range txs {
+		hash := tx.Hash()
+		if addr := types.GetSender(signer, tx); addr != nil {
+			s.tx2addr.Put(hash, *addr)
 			continue
 		}
-		atomic.AddInt64(&by_ecrecover, 1)
+
+		data := s.tx2addr.Get(hash)
+		if data != nil {
+			types.SetSender(signer, tx, data.(common.Address))
+			continue
+		}
 
 		wg.Add(1)
-
-		f := func(ix int) {
-			if from, err := types.Sender(signer, txs[ix]); err == nil {
-				addrs[ix] = &from
+		atomic.AddInt64(&by_ecrecover, 1)
+		s.Post(func(param interface{}) {
+			t := param.(*types.Transaction)
+			if from, err := types.Sender(signer, t); err == nil {
+				s.tx2addr.Put(t.Hash(), from)
 			} else {
 				atomic.AddInt64(&failed, 1)
 			}
 			wg.Done()
-		}
-		pool.senderResolver.Post(func() { f(i) })
+		}, tx)
 	}
 
 	wg.Wait()
 
-	if total > 1 {
+	if false && total > 1 {
 		dt := float64(time.Now().Sub(ot) / time.Millisecond)
 		if dt <= 0 {
 			dt = 1
 		}
 		ps := float64(total) * 1000.0 / dt
-		_ = ps
-		//fmt.Printf("=== %d/%d/%d : took %.3f ms %.3f/sec\n", total, total-by_ecrecover, failed, dt, ps)
+		fmt.Printf("=== %d/%d/%d : took %.3f ms %.3f/sec %d\n", total, total-by_ecrecover, failed, dt, ps, s.tx2addr.Count())
 	}
 
-	return addrs
+	return
+}
+
+// ResolveSender resolves sender address from a transaction
+func (pool *TxPool) ResolveSender(signer types.Signer, tx *types.Transaction) {
+	var txs []*types.Transaction
+	txs = append(txs, tx)
+	pool.ResolveSenders(signer, txs)
 }
 
 // EOF

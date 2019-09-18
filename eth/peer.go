@@ -25,6 +25,7 @@ import (
 
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/batch"
 	"github.com/ethereum/go-ethereum/core/types"
 	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -38,13 +39,13 @@ var (
 )
 
 const (
-	maxKnownTxs    = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
+	maxKnownTxs    = 1024000 // Maximum transactions hashes to keep in the known list (prevent DOS)
 	maxKnownBlocks = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
 
 	// maxQueuedTxs is the maximum number of transaction lists to queue up before
 	// dropping broadcasts. This is a sensitive number as a transaction list might
 	// contain a single transaction, or thousands.
-	maxQueuedTxs = 128
+	maxQueuedTxs = 40960
 
 	// maxQueuedProps is the maximum number of block propagations to queue up before
 	// dropping broadcasts. There's not much point in queueing stale blocks, so a few
@@ -113,13 +114,28 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 // and transaction broadcasts into the remote peer. The goal is to have an async
 // writer that does not lock up node internals.
 func (p *peer) broadcast() {
+	b := batch.NewBatch(time.Millisecond * 10, time.Millisecond * 30, 1000,
+		func(data interface{}, count int) error {
+			var txs []*types.Transaction
+			for _, i := range data.([]interface{}) {
+				txs = append(txs, i.(*types.Transaction))
+			}
+
+			if err := p.SendTransactions(txs); err != nil {
+				return err
+			}
+			p.Log().Trace("Broadcast transactions", "count", len(txs))
+			return nil
+		})
+	defer b.Stop()
+	go b.Run()
+
 	for {
 		select {
 		case txs := <-p.queuedTxs:
-			if err := p.SendTransactions(txs); err != nil {
-				return
+			for _, i := range txs {
+				b.Put(i)
 			}
-			p.Log().Trace("Broadcast transactions", "count", len(txs))
 
 		case prop := <-p.queuedProps:
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {

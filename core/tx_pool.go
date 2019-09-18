@@ -39,6 +39,9 @@ import (
 const (
 	// chainHeadChanSize is the size of channel listening to ChainHeadEvent.
 	chainHeadChanSize = 10
+
+	// tx -> address cache size
+	tx2addrCacheSize = 1024000
 )
 
 var (
@@ -253,7 +256,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		all:            newTxLookup(),
 		chainHeadCh:    make(chan ChainHeadEvent, chainHeadChanSize),
 		gasPrice:       new(big.Int).SetUint64(config.PriceLimit),
-		senderResolver: NewSenderResolver(runtime.NumCPU()*2),
+		senderResolver: NewSenderResolver(runtime.NumCPU()*2, tx2addrCacheSize ),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -849,9 +852,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 // the sender as a local one in the mean time, ensuring it goes around the local
 // pricing constraints.
 func (pool *TxPool) AddLocal(tx *types.Transaction) error {
-	var txs []*types.Transaction
-	txs = append(txs, tx)
-	pool.ResolveSenders(pool.signer, txs, false)
+	pool.ResolveSender(pool.signer, tx)
 	return pool.addTx(tx, !pool.config.NoLocals)
 }
 
@@ -859,6 +860,7 @@ func (pool *TxPool) AddLocal(tx *types.Transaction) error {
 // sender is not among the locally tracked ones, full pricing constraints will
 // apply.
 func (pool *TxPool) AddRemote(tx *types.Transaction) error {
+	pool.ResolveSender(pool.signer, tx)
 	return pool.addTx(tx, false)
 }
 
@@ -866,7 +868,7 @@ func (pool *TxPool) AddRemote(tx *types.Transaction) error {
 // marking the senders as a local ones in the mean time, ensuring they go around
 // the local pricing constraints.
 func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
-	pool.ResolveSenders(pool.signer, txs, false)
+	pool.ResolveSenders(pool.signer, txs)
 	return pool.addTxs(txs, !pool.config.NoLocals)
 }
 
@@ -874,7 +876,7 @@ func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
 // If the senders are not among the locally tracked ones, full pricing constraints
 // will apply.
 func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
-	pool.ResolveSenders(pool.signer, txs, false)
+	pool.ResolveSenders(pool.signer, txs)
 	return pool.addTxs(txs, false)
 }
 
@@ -1364,20 +1366,4 @@ func (t *txLookup) Remove(hash common.Hash) {
 	defer t.lock.Unlock()
 
 	delete(t.all, hash)
-}
-
-// Resolve senders
-func (t *txLookup) ResolveSenders(signer types.Signer, txs []*types.Transaction) []*common.Address {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	addrs := make([]*common.Address, len(txs))
-	for i, d := range txs {
-		if tx, ok := t.all[d.Hash()]; ok {
-			if addr, err := types.Sender(signer, tx); err == nil {
-				addrs[i] = &addr
-			}
-		}
-	}
-	return addrs
 }
