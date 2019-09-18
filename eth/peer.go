@@ -210,7 +210,11 @@ func (p *peer) SendTransactions(txs types.Transactions) error {
 	for _, tx := range txs {
 		p.knownTxs.Put(tx.Hash(), true)
 	}
-	return p2p.Send(p.rw, TxMsg, txs)
+	if p.version >= eth64 {
+		return p2p.Send(p.rw, TxExMsg, types.Txs2TxExs(txs))
+	} else {
+		return p2p.Send(p.rw, TxMsg, txs)
+	}
 }
 
 // AsyncSendTransactions queues list of transactions propagation to a remote

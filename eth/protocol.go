@@ -32,16 +32,17 @@ import (
 const (
 	eth62 = 62
 	eth63 = 63
+	eth64 = 64
 )
 
 // ProtocolName is the official short name of the protocol used during capability negotiation.
 var ProtocolName = "meta"
 
 // ProtocolVersions are the supported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{eth63, eth62}
+var ProtocolVersions = []uint{eth64, eth63, eth62}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
-var ProtocolLengths = []uint64{22, 8}
+var ProtocolLengths = []uint64{23, 22, 8}
 
 const ProtocolMaxMsgSize = 100 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -69,6 +70,7 @@ const (
 	StatusExMsg      = 0x13
 	EtcdAddMemberMsg = 0x14
 	EtcdClusterMsg   = 0x15
+	TxExMsg          = 0x16
 )
 
 type errCode int
