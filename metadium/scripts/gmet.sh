@@ -176,6 +176,7 @@ function start ()
     OPTS="$COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT $TESTNET ${GMET_OPTS}"
     [ "$PORT" = "" ] || OPTS="${OPTS} --port $(($PORT + 1))"
     [ "$HUB" = "" ] || OPTS="${OPTS} --hub ${HUB}"
+    [ "MAX_TXS_PER_BLOCK" = "" ] || OPTS="${OPTS} --maxtxsperblock ${MAX_TXS_PER_BLOCK}"
 
     [ -d "$d/logs" ] || mkdir -p $d/logs
 
