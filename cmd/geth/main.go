@@ -183,6 +183,7 @@ var (
 		utils.PrefetchCount,
 		utils.LogFlag,
 		utils.MaxTxsPerBlock,
+		utils.Hub,
 	}
 )
 

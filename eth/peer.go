@@ -28,7 +28,9 @@ import (
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core/types"
 	metaapi "github.com/ethereum/go-ethereum/metadium/api"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -540,6 +542,42 @@ func (ps *peerSet) PeersWithoutTx(hash common.Hash) []*peer {
 		}
 	}
 	return list
+}
+
+// hub subsystem
+var (
+	isHub int = -1 //  -1: unset, 1: hub, 0: not hub
+)
+
+// PeersWithoutTx2 retrieves a list of peers that do not have a given transaction
+// in their set of known hashes.
+func (ps *peerSet) PeersWithoutTx2(hash common.Hash) []*peer {
+	if !metaminer.AmPartner() {
+		return ps.PeersWithoutTx(hash)
+	}
+
+	if isHub == -1 {
+		isHub = metaminer.AmHub(params.Hub)
+	}
+
+	if isHub == 0 {
+		// send it to the hub if it did not come from there
+		ps.lock.RLock()
+		for _, p := range ps.peers {
+			if p.id == params.Hub {
+				var list []*peer
+				if !p.knownTxs.Exists(hash) {
+					list = append(list, p)
+				}
+				ps.lock.RUnlock()
+				return list
+			}
+		}
+		ps.lock.RUnlock()
+	}
+
+	// fall back
+	return ps.PeersWithoutTx(hash)
 }
 
 // BestPeer retrieves the known peer with the currently highest total difficulty.

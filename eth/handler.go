@@ -998,7 +998,7 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 
 	// Broadcast transactions to a batch of peers not knowing about it
 	for _, tx := range txs {
-		peers := pm.peers.PeersWithoutTx(tx.Hash())
+		peers := pm.peers.PeersWithoutTx2(tx.Hash())
 		for _, peer := range peers {
 			txset[peer] = append(txset[peer], tx)
 		}

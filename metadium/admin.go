@@ -1043,6 +1043,21 @@ func IsPartner(id string) bool {
 	return true
 }
 
+// id is v4 id
+func AmHub(id string) int {
+	if admin == nil || admin.self == nil {
+		return -1
+	}
+
+	admin.lock.Lock()
+	defer admin.lock.Unlock()
+	if strings.HasPrefix(strings.ToUpper(admin.self.Id), strings.ToUpper(id)) {
+		return 1
+	} else {
+		return 0
+	}
+}
+
 func (ma *metaAdmin) pendingEmpty() bool {
 	type txpool_status struct {
 		Pending hexutil.Uint `json:"pending"`
@@ -1425,6 +1440,7 @@ func init() {
 	metaminer.IsMinerFunc = IsMiner
 	metaminer.AmPartnerFunc = AmPartner
 	metaminer.IsPartnerFunc = IsPartner
+	metaminer.AmHubFunc = AmHub
 	metaminer.LogBlockFunc = LogBlock
 	metaminer.SuggestGasPriceFunc = suggestGasPrice
 	metaminer.CalculateRewardsFunc = calculateRewards
