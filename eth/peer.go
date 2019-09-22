@@ -52,12 +52,12 @@ const (
 	// maxQueuedProps is the maximum number of block propagations to queue up before
 	// dropping broadcasts. There's not much point in queueing stale blocks, so a few
 	// that might cover uncles should be enough.
-	maxQueuedProps = 4
+	maxQueuedProps = 1024
 
 	// maxQueuedAnns is the maximum number of block announcements to queue up before
 	// dropping broadcasts. Similarly to block propagations, there's no point to queue
 	// above some healthy uncle limit, so use that.
-	maxQueuedAnns = 4
+	maxQueuedAnns = 1024
 
 	handshakeTimeout = 5 * time.Second
 )
@@ -134,11 +134,6 @@ func (p *peer) broadcast() {
 
 	for {
 		select {
-		case txs := <-p.queuedTxs:
-			for _, i := range txs {
-				b.Put(i)
-			}
-
 		case prop := <-p.queuedProps:
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
 				return
@@ -150,6 +145,11 @@ func (p *peer) broadcast() {
 				return
 			}
 			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
+
+		case txs := <-p.queuedTxs:
+			for _, i := range txs {
+				b.Put(i)
+			}
 
 		case <-p.term:
 			return
