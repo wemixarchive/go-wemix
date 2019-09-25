@@ -43,7 +43,7 @@ const (
 
 	// txChanSize is the size of channel listening to NewTxsEvent.
 	// The number is referenced from the size of tx pool.
-	txChanSize = 4096
+	txChanSize = 102400
 
 	// chainHeadChanSize is the size of channel listening to ChainHeadEvent.
 	chainHeadChanSize = 10
@@ -793,7 +793,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
 		}
 		// If we don't have enough gas for any further transactions then we're done
-		if w.current.gasPool.Gas() < params.TxGas {
+		if w.current.gasPool == nil || w.current.gasPool.Gas() < params.TxGas {
 			log.Trace("Not enough gas for further transactions", "have", w.current.gasPool, "want", params.TxGas)
 			break
 		}
@@ -1161,7 +1161,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	num := parent.Number()
 	num.Add(num, common.Big1)
 	ts := w.ancestorTimes(num)
-	if dt, pt := w.throttleMining(ts); dt > 0 && pt < 5 {
+	if dt, pt := w.throttleMining(ts); dt > 0 && pt < 1 {
 		// sleep 1 second here to prevent unnecessary checks
 		log.Info("Metadium: too many blocks", "ahead", dt)
 		time.Sleep(time.Second)

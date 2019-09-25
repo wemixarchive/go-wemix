@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -38,6 +39,9 @@ import (
 const (
 	// chainHeadChanSize is the size of channel listening to ChainHeadEvent.
 	chainHeadChanSize = 10
+
+	// tx -> address cache size
+	tx2addrCacheSize = 1024000
 )
 
 var (
@@ -227,6 +231,8 @@ type TxPool struct {
 	all     *txLookup                    // All transactions to allow lookups
 	priced  *txPricedList                // All transactions sorted by price
 
+	senderResolver *SenderResolver       // ecrecover helper
+
 	wg sync.WaitGroup // for shutdown sync
 
 	homestead bool
@@ -240,16 +246,17 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 
 	// Create the transaction pool with its initial settings
 	pool := &TxPool{
-		config:      config,
-		chainconfig: chainconfig,
-		chain:       chain,
-		signer:      types.NewEIP155Signer(chainconfig.ChainID),
-		pending:     make(map[common.Address]*txList),
-		queue:       make(map[common.Address]*txList),
-		beats:       make(map[common.Address]time.Time),
-		all:         newTxLookup(),
-		chainHeadCh: make(chan ChainHeadEvent, chainHeadChanSize),
-		gasPrice:    new(big.Int).SetUint64(config.PriceLimit),
+		config:         config,
+		chainconfig:    chainconfig,
+		chain:          chain,
+		signer:         types.NewEIP155Signer(chainconfig.ChainID),
+		pending:        make(map[common.Address]*txList),
+		queue:          make(map[common.Address]*txList),
+		beats:          make(map[common.Address]time.Time),
+		all:            newTxLookup(),
+		chainHeadCh:    make(chan ChainHeadEvent, chainHeadChanSize),
+		gasPrice:       new(big.Int).SetUint64(config.PriceLimit),
+		senderResolver: NewSenderResolver(runtime.NumCPU()*2, tx2addrCacheSize ),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
@@ -258,6 +265,9 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	}
 	pool.priced = newTxPricedList(pool.all)
 	pool.reset(nil, chain.CurrentBlock().Header())
+
+	// Start the ecrecover helper
+	go pool.senderResolver.Run()
 
 	// If local transactions and journaling is enabled, load from disk
 	if !config.NoLocals && config.Journal != "" {
@@ -437,7 +447,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
 	senderCacher.recover(pool.signer, reinject)
-	pool.addTxsLocked(reinject, false)
+	pool.addTxsLocked(reinject, false, nil)
 
 	// validate the pool of pending transactions, this will remove
 	// any transactions that have been included in the block or
@@ -467,6 +477,10 @@ func (pool *TxPool) Stop() {
 	if pool.journal != nil {
 		pool.journal.close()
 	}
+
+	// Stop ecrecover helper
+	pool.senderResolver.Stop()
+
 	log.Info("Transaction pool stopped")
 }
 
@@ -611,9 +625,12 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 	return txs
 }
 
-// validateTx checks whether a transaction is valid according to the consensus
-// rules and adheres to some heuristic limits of the local node (price and size).
-func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
+// Do the most of validation outside of mutex
+func preValidateTx(tx *types.Transaction, signer types.Signer, maxGas uint64, homestead bool) error {
+	// Check nonce limit
+	if params.NonceLimit != 0 && tx.Nonce() > params.NonceLimit {
+		return fmt.Errorf("Too many transactions (%d) for an account", params.NonceLimit)
+	}
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
 	if tx.Size() > params.MaxTransactionSize {
 		return ErrOversizedData
@@ -624,9 +641,27 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrNegativeValue
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
-	if pool.currentMaxGas < tx.Gas() {
+	if maxGas < tx.Gas() {
 		return ErrGasLimit
 	}
+	// Make sure the transaction is signed properly
+	_, err := types.Sender(signer, tx)
+	if err != nil {
+		return ErrInvalidSender
+	}
+	intrGas, err := IntrinsicGas(tx.Data(), tx.To() == nil, homestead)
+	if err != nil {
+		return err
+	}
+	if tx.Gas() < intrGas {
+		return ErrIntrinsicGas
+	}
+	return nil
+}
+
+// validateTx checks whether a transaction is valid according to the consensus
+// rules and adheres to some heuristic limits of the local node (price and size).
+func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// Make sure the transaction is signed properly
 	from, err := types.Sender(pool.signer, tx)
 	if err != nil {
@@ -645,13 +680,6 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// cost == V + GP * GL
 	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
 		return ErrInsufficientFunds
-	}
-	intrGas, err := IntrinsicGas(tx.Data(), tx.To() == nil, pool.homestead)
-	if err != nil {
-		return err
-	}
-	if tx.Gas() < intrGas {
-		return ErrIntrinsicGas
 	}
 	return nil
 }
@@ -824,6 +852,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 // the sender as a local one in the mean time, ensuring it goes around the local
 // pricing constraints.
 func (pool *TxPool) AddLocal(tx *types.Transaction) error {
+	pool.ResolveSender(pool.signer, tx)
 	return pool.addTx(tx, !pool.config.NoLocals)
 }
 
@@ -831,6 +860,7 @@ func (pool *TxPool) AddLocal(tx *types.Transaction) error {
 // sender is not among the locally tracked ones, full pricing constraints will
 // apply.
 func (pool *TxPool) AddRemote(tx *types.Transaction) error {
+	pool.ResolveSender(pool.signer, tx)
 	return pool.addTx(tx, false)
 }
 
@@ -838,6 +868,7 @@ func (pool *TxPool) AddRemote(tx *types.Transaction) error {
 // marking the senders as a local ones in the mean time, ensuring they go around
 // the local pricing constraints.
 func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
+	pool.ResolveSenders(pool.signer, txs)
 	return pool.addTxs(txs, !pool.config.NoLocals)
 }
 
@@ -845,11 +876,16 @@ func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
 // If the senders are not among the locally tracked ones, full pricing constraints
 // will apply.
 func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
+	pool.ResolveSenders(pool.signer, txs)
 	return pool.addTxs(txs, false)
 }
 
 // addTx enqueues a single transaction into the pool if it is valid.
 func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
+	if err := preValidateTx(tx, pool.signer, pool.currentMaxGas, pool.homestead); err != nil {
+		return err
+	}
+
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
@@ -868,20 +904,35 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 
 // addTxs attempts to queue a batch of transactions if they are valid.
 func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) []error {
+	errs := make([]error, len(txs))
+	for i, tx := range txs {
+		if err := preValidateTx(tx, pool.signer, pool.currentMaxGas, pool.homestead); err != nil {
+			errs[i] = err
+		}
+	}
+
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	return pool.addTxsLocked(txs, local)
+	pool.addTxsLocked(txs, local, errs)
+	return errs
 }
 
 // addTxsLocked attempts to queue a batch of transactions if they are valid,
 // whilst assuming the transaction pool lock is already held.
-func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
+func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool, errs []error) {
 	// Add the batch of transactions, tracking the accepted ones
 	dirty := make(map[common.Address]struct{})
-	errs := make([]error, len(txs))
+	if errs == nil {
+		errs = make([]error, len(txs))
+	}
 
 	for i, tx := range txs {
+		if errs[i] != nil {
+			// already rejected
+			continue
+		}
+
 		var replace bool
 		if replace, errs[i] = pool.add(tx, local); errs[i] == nil && !replace {
 			from, _ := types.Sender(pool.signer, tx) // already validated
@@ -896,7 +947,7 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) []error {
 		}
 		pool.promoteExecutables(addrs)
 	}
-	return errs
+	return
 }
 
 // Status returns the status (unknown/pending/queued) of a batch of transactions

@@ -116,4 +116,5 @@ var (
 	UseRocksDb              int    = 1          // LevelDB (0) or RocksDB (1)
 	PrefetchCount           int    = 0          // Transaction Prefetch count for faster db read
 	MaxTxsPerBlock          int    = 5000       // Max # of transactions in a block
+	Hub                     string = ""         // Hub's id
 )

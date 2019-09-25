@@ -690,6 +690,11 @@ var (
 		Usage: "Max # of transactions in a block",
 		Value: params.MaxTxsPerBlock,
 	}
+	Hub = cli.StringFlag{
+		Name:  "hub",
+		Usage: "Id of message hub",
+		Value: params.Hub,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1384,6 +1389,9 @@ func SetMetadiumConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(MaxTxsPerBlock.Name) {
 		params.MaxTxsPerBlock = ctx.GlobalInt(MaxTxsPerBlock.Name)
+	}
+	if ctx.GlobalIsSet(Hub.Name) {
+		params.Hub = ctx.GlobalString(Hub.Name)
 	}
 
 	if params.ConsensusMethod == params.ConsensusInvalid {

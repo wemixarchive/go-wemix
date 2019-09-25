@@ -14,6 +14,7 @@ var (
 	IsMinerFunc            func() bool
 	AmPartnerFunc          func() bool
 	IsPartnerFunc          func(string) bool
+	AmHubFunc              func(string) int
 	LogBlockFunc           func(int64, common.Hash)
 	CalculateRewardsFunc   func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
 	VerifyRewardsFunc      func(*big.Int, string) error
@@ -45,6 +46,14 @@ func AmPartner() bool {
 		return false
 	} else {
 		return AmPartnerFunc()
+	}
+}
+
+func AmHub(id string) int {
+	if AmHubFunc == nil {
+		return -1
+	} else {
+		return AmHubFunc(id)
 	}
 }
 

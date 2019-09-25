@@ -43,6 +43,11 @@ type Transaction struct {
 	from atomic.Value
 }
 
+type TransactionEx struct {
+	Tx   *Transaction
+	From common.Address `json:"from" rlp:"nil"`
+}
+
 type txdata struct {
 	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
 	Price        *big.Int        `json:"gasPrice" gencodec:"required"`
@@ -210,6 +215,60 @@ func (tx *Transaction) Size() common.StorageSize {
 	rlp.Encode(&c, &tx.data)
 	tx.size.Store(common.StorageSize(c))
 	return common.StorageSize(c)
+}
+
+// Convert []*Transaction to []*TransactionEx
+func Txs2TxExs(txs []*Transaction) []*TransactionEx {
+	var out []*TransactionEx
+	for _, i := range txs {
+		var from common.Address
+		if sc := i.from.Load(); sc != nil {
+			from = sc.(sigCache).from
+		}
+		j := &TransactionEx{
+			Tx:   i,
+			From: from,
+		}
+		out = append(out, j)
+	}
+	return out
+}
+
+// Convert []*TransactionEx to []*Transaction
+func TxExs2Txs(signer Signer, txs []*TransactionEx, trustIt bool) []*Transaction {
+	var out []*Transaction
+	for _, i := range txs {
+		if trustIt {
+			i.Tx.from.Store(sigCache{signer: signer, from: i.From})
+		}
+		out = append(out, i.Tx)
+	}
+	return out
+}
+
+// EncodeRLP implements rlp.Encoder
+func (tx *TransactionEx) EncodeRLP(w io.Writer) error {
+	if err := rlp.Encode(w, &tx.Tx.data); err != nil {
+		return err
+	}
+	var from common.Address
+	if sc := tx.Tx.from.Load(); sc != nil {
+		from = sc.(sigCache).from
+	}
+	return rlp.Encode(w, &from)
+}
+
+// DecodeRLP implements rlp.Decoder
+func (tx *TransactionEx) DecodeRLP(s *rlp.Stream) error {
+	tx.Tx = &Transaction{}
+	_, size, _ := s.Kind()
+	err := s.Decode(&tx.Tx.data)
+	if err != nil {
+		return err
+	} else {
+		tx.Tx.size.Store(common.StorageSize(rlp.ListSize(size)))
+	}
+	return s.Decode(&tx.From)
 }
 
 // AsMessage returns the transaction as a core.Message.

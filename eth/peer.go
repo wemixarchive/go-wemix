@@ -23,11 +23,14 @@ import (
 	"sync"
 	"time"
 
-	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/batch"
+	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core/types"
 	metaapi "github.com/ethereum/go-ethereum/metadium/api"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -38,23 +41,23 @@ var (
 )
 
 const (
-	maxKnownTxs    = 32768 // Maximum transactions hashes to keep in the known list (prevent DOS)
+	maxKnownTxs    = 102400 // Maximum transactions hashes to keep in the known list (prevent DOS)
 	maxKnownBlocks = 1024  // Maximum block hashes to keep in the known list (prevent DOS)
 
 	// maxQueuedTxs is the maximum number of transaction lists to queue up before
 	// dropping broadcasts. This is a sensitive number as a transaction list might
 	// contain a single transaction, or thousands.
-	maxQueuedTxs = 128
+	maxQueuedTxs = 40960
 
 	// maxQueuedProps is the maximum number of block propagations to queue up before
 	// dropping broadcasts. There's not much point in queueing stale blocks, so a few
 	// that might cover uncles should be enough.
-	maxQueuedProps = 4
+	maxQueuedProps = 1024
 
 	// maxQueuedAnns is the maximum number of block announcements to queue up before
 	// dropping broadcasts. Similarly to block propagations, there's no point to queue
 	// above some healthy uncle limit, so use that.
-	maxQueuedAnns = 4
+	maxQueuedAnns = 1024
 
 	handshakeTimeout = 5 * time.Second
 )
@@ -86,8 +89,8 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer
-	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer
+	knownTxs    *lru.LruCache             // Set of transaction hashes known to be known by this peer
+	knownBlocks *lru.LruCache             // Set of block hashes known to be known by this peer
 	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
 	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
@@ -100,8 +103,8 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 		rw:          rw,
 		version:     version,
 		id:          fmt.Sprintf("%x", p.ID().Bytes()[:8]),
-		knownTxs:    mapset.NewSet(),
-		knownBlocks: mapset.NewSet(),
+		knownTxs:    lru.NewLruCache(maxKnownTxs, true),
+		knownBlocks: lru.NewLruCache(maxKnownBlocks, true),
 		queuedTxs:   make(chan []*types.Transaction, maxQueuedTxs),
 		queuedProps: make(chan *propEvent, maxQueuedProps),
 		queuedAnns:  make(chan *types.Block, maxQueuedAnns),
@@ -113,14 +116,24 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 // and transaction broadcasts into the remote peer. The goal is to have an async
 // writer that does not lock up node internals.
 func (p *peer) broadcast() {
-	for {
-		select {
-		case txs := <-p.queuedTxs:
+	b := batch.NewBatch(time.Millisecond * 10, time.Millisecond * 30, 1000,
+		func(data interface{}, count int) error {
+			var txs []*types.Transaction
+			for _, i := range data.([]interface{}) {
+				txs = append(txs, i.(*types.Transaction))
+			}
+
 			if err := p.SendTransactions(txs); err != nil {
-				return
+				return err
 			}
 			p.Log().Trace("Broadcast transactions", "count", len(txs))
+			return nil
+		})
+	defer b.Stop()
+	go b.Run()
 
+	for {
+		select {
 		case prop := <-p.queuedProps:
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
 				return
@@ -132,6 +145,11 @@ func (p *peer) broadcast() {
 				return
 			}
 			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
+
+		case txs := <-p.queuedTxs:
+			for _, i := range txs {
+				b.Put(i)
+			}
 
 		case <-p.term:
 			return
@@ -178,29 +196,27 @@ func (p *peer) SetHead(hash common.Hash, td *big.Int) {
 // never be propagated to this particular peer.
 func (p *peer) MarkBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
-	for p.knownBlocks.Cardinality() >= maxKnownBlocks {
-		p.knownBlocks.Pop()
-	}
-	p.knownBlocks.Add(hash)
+	p.knownBlocks.Put(hash, true)
 }
 
 // MarkTransaction marks a transaction as known for the peer, ensuring that it
 // will never be propagated to this particular peer.
 func (p *peer) MarkTransaction(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known transaction hash
-	for p.knownTxs.Cardinality() >= maxKnownTxs {
-		p.knownTxs.Pop()
-	}
-	p.knownTxs.Add(hash)
+	p.knownTxs.Put(hash, true)
 }
 
 // SendTransactions sends transactions to the peer and includes the hashes
 // in its transaction hash set for future reference.
 func (p *peer) SendTransactions(txs types.Transactions) error {
 	for _, tx := range txs {
-		p.knownTxs.Add(tx.Hash())
+		p.knownTxs.Put(tx.Hash(), true)
 	}
-	return p2p.Send(p.rw, TxMsg, txs)
+	if p.version >= eth64 {
+		return p2p.Send(p.rw, TxExMsg, types.Txs2TxExs(txs))
+	} else {
+		return p2p.Send(p.rw, TxMsg, txs)
+	}
 }
 
 // AsyncSendTransactions queues list of transactions propagation to a remote
@@ -209,7 +225,7 @@ func (p *peer) AsyncSendTransactions(txs []*types.Transaction) {
 	select {
 	case p.queuedTxs <- txs:
 		for _, tx := range txs {
-			p.knownTxs.Add(tx.Hash())
+			p.knownTxs.Put(tx.Hash(), true)
 		}
 	default:
 		p.Log().Debug("Dropping transaction propagation", "count", len(txs))
@@ -227,7 +243,7 @@ func (p *peer) resendPendingTxs(txs map[common.Address]types.Transactions) {
 // a hash notification.
 func (p *peer) SendNewBlockHashes(hashes []common.Hash, numbers []uint64) error {
 	for _, hash := range hashes {
-		p.knownBlocks.Add(hash)
+		p.knownBlocks.Put(hash, true)
 	}
 	request := make(newBlockHashesData, len(hashes))
 	for i := 0; i < len(hashes); i++ {
@@ -243,7 +259,7 @@ func (p *peer) SendNewBlockHashes(hashes []common.Hash, numbers []uint64) error 
 func (p *peer) AsyncSendNewBlockHash(block *types.Block) {
 	select {
 	case p.queuedAnns <- block:
-		p.knownBlocks.Add(block.Hash())
+		p.knownBlocks.Put(block.Hash(), true)
 	default:
 		p.Log().Debug("Dropping block announcement", "number", block.NumberU64(), "hash", block.Hash())
 	}
@@ -251,7 +267,7 @@ func (p *peer) AsyncSendNewBlockHash(block *types.Block) {
 
 // SendNewBlock propagates an entire block to a remote peer.
 func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
-	p.knownBlocks.Add(block.Hash())
+	p.knownBlocks.Put(block.Hash(), true)
 	return p2p.Send(p.rw, NewBlockMsg, []interface{}{block, td})
 }
 
@@ -260,7 +276,7 @@ func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
 func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 	select {
 	case p.queuedProps <- &propEvent{block: block, td: td}:
-		p.knownBlocks.Add(block.Hash())
+		p.knownBlocks.Put(block.Hash(), true)
 	default:
 		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
 	}
@@ -506,7 +522,7 @@ func (ps *peerSet) PeersWithoutBlock(hash common.Hash) []*peer {
 
 	list := make([]*peer, 0, len(ps.peers))
 	for _, p := range ps.peers {
-		if !p.knownBlocks.Contains(hash) {
+		if !p.knownBlocks.Exists(hash) {
 			list = append(list, p)
 		}
 	}
@@ -521,11 +537,47 @@ func (ps *peerSet) PeersWithoutTx(hash common.Hash) []*peer {
 
 	list := make([]*peer, 0, len(ps.peers))
 	for _, p := range ps.peers {
-		if !p.knownTxs.Contains(hash) {
+		if !p.knownTxs.Exists(hash) {
 			list = append(list, p)
 		}
 	}
 	return list
+}
+
+// hub subsystem
+var (
+	isHub int = -1 //  -1: unset, 1: hub, 0: not hub
+)
+
+// PeersWithoutTx2 retrieves a list of peers that do not have a given transaction
+// in their set of known hashes.
+func (ps *peerSet) PeersWithoutTx2(hash common.Hash) []*peer {
+	if !metaminer.AmPartner() {
+		return ps.PeersWithoutTx(hash)
+	}
+
+	if isHub == -1 {
+		isHub = metaminer.AmHub(params.Hub)
+	}
+
+	if isHub == 0 {
+		// send it to the hub if it did not come from there
+		ps.lock.RLock()
+		for _, p := range ps.peers {
+			if p.id == params.Hub {
+				var list []*peer
+				if !p.knownTxs.Exists(hash) {
+					list = append(list, p)
+				}
+				ps.lock.RUnlock()
+				return list
+			}
+		}
+		ps.lock.RUnlock()
+	}
+
+	// fall back
+	return ps.PeersWithoutTx(hash)
 }
 
 // BestPeer retrieves the known peer with the currently highest total difficulty.

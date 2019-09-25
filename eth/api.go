@@ -299,6 +299,16 @@ func (api *PrivateAdminAPI) EtcdMoveLeader(name string) error {
 	return metaapi.EtcdMoveLeader(name)
 }
 
+// Get the latest logged work
+func (api *PrivateAdminAPI) EtcdGetWork() (string, error) {
+	return metaapi.EtcdGetWork()
+}
+
+// Remove the latest logged work
+func (api *PrivateAdminAPI) EtcdDeleteWork() error {
+	return metaapi.EtcdDeleteWork()
+}
+
 // Synchronize with the peer
 func (api *PrivateAdminAPI) SynchroniseWith(id enode.ID) error {
 	return api.eth.protocolManager.SynchroniseWith(id)

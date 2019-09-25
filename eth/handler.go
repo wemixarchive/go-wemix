@@ -51,7 +51,7 @@ const (
 
 	// txChanSize is the size of channel listening to NewTxsEvent.
 	// The number is referenced from the size of tx pool.
-	txChanSize = 40960
+	txChanSize = 102400
 
 	// minimim number of peers to broadcast new blocks to
 	minBroadcastPeers = 4
@@ -597,6 +597,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if filter {
 				transactions, uncles = pm.fetcher.FilterBodies(p.id, transactions, uncles, time.Now())
 			}
+			if len(transactions) > 0 {
+				signer := types.MakeSigner(pm.chainconfig, pm.blockchain.CurrentBlock().Number())
+				for _, txs := range transactions {
+					pm.txpool.ResolveSenders(signer, txs)
+				}
+			}
 			if len(transactions) > 0 || len(uncles) > 0 || !filter {
 				err := pm.downloader.DeliverBodies(p.id, transactions, uncles)
 				if err != nil {
@@ -826,6 +832,34 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}()
 		return nil
 
+	case p.version >= eth64 && msg.Code == TxExMsg:
+		// Transactions arrived, make sure we have a valid and fresh chain to handle them
+		if atomic.LoadUint32(&pm.acceptTxs) == 0 {
+			break
+		}
+		// Transactions can be processed, parse all of them and deliver to the pool
+		var txexs []*types.TransactionEx
+		if err := msg.Decode(&txexs); err != nil {
+			return errResp(ErrDecode, "msg %v: %v", msg, err)
+		}
+
+		// Metadium: it's non-blocking now
+		go func() error {
+			signer := types.MakeSigner(pm.chainconfig, pm.blockchain.CurrentBlock().Number())
+			txs := types.TxExs2Txs(signer, txexs, metaminer.IsPartner(p.ID().String()))
+			for i, tx := range txs {
+				// Validate and mark the remote transaction
+				if tx == nil {
+					return errResp(ErrDecode, "transaction %d is nil", i)
+				}
+				p.MarkTransaction(tx.Hash())
+			}
+			//pm.txpool.AddRemotes(txs)
+			remoteTxCh <- txs
+			return nil
+		}()
+		return nil
+
 	// Metadium: leader wants to get left-over transactions if any
 	case p.version >= eth63 && msg.Code == GetPendingTxsMsg:
 		if !metaminer.IsPartner(p.ID().String()) {
@@ -964,7 +998,7 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 
 	// Broadcast transactions to a batch of peers not knowing about it
 	for _, tx := range txs {
-		peers := pm.peers.PeersWithoutTx(tx.Hash())
+		peers := pm.peers.PeersWithoutTx2(tx.Hash())
 		for _, peer := range peers {
 			txset[peer] = append(txset[peer], tx)
 		}
