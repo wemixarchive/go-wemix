@@ -30,8 +30,8 @@ import (
 )
 
 const (
-	arriveTimeout = 5000 * time.Millisecond // Time allowance before an announced block is explicitly requested
-	gatherSlack   = 1000 * time.Millisecond // Interval used to collate almost-expired announces with fetches
+	arriveTimeout = 0 * time.Millisecond // Time allowance before an announced block is explicitly requested
+	gatherSlack   = 0 * time.Millisecond // Interval used to collate almost-expired announces with fetches
 	fetchTimeout  = 120 * time.Second      // Maximum allotted time to return an explicitly requested block
 	maxUncleDist  = 700                    // Maximum allowed backward distance from the chain head
 	maxQueueDist  = 3200                   // Maximum allowed distance from the chain head to queue
