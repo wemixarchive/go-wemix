@@ -41,7 +41,7 @@ func tx_prefetch(w *worker, to *TxOrderer, numWorkers int) {
 				}
 
 				from, err := types.Sender(
-					types.MakeSigner(w.config, header.Number), tx)
+					types.MakeSigner(w.chainConfig, header.Number), tx)
 				if err != nil {
 					log.Error("Prefetch", "tx -> sender", err)
 					continue
@@ -52,7 +52,7 @@ func tx_prefetch(w *worker, to *TxOrderer, numWorkers int) {
 					tx.GasPrice(), tx.Data(), false)
 				ictx, cancel := context.WithTimeout(ctx, time.Second)
 				vmCtx := core.NewEVMContext(msg, header, w.chain, nil)
-				evm := vm.NewEVM(vmCtx, state, w.config, vmCfg)
+				evm := vm.NewEVM(vmCtx, state, w.chainConfig, vmCfg)
 
 				go func() {
 					<-ictx.Done()

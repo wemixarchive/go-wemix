@@ -36,15 +36,15 @@ const (
 )
 
 // ProtocolName is the official short name of the protocol used during capability negotiation.
-var ProtocolName = "meta"
+var protocolName = "meta"
 
 // ProtocolVersions are the supported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{eth64, eth63, eth62}
+var ProtocolVersions = []uint{eth64, eth63}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
-var ProtocolLengths = []uint64{23, 22, 8}
+var protocolLengths = map[uint]uint64{eth64: 23, eth63: 22, eth62: 8}
 
-const ProtocolMaxMsgSize = 100 * 1024 * 1024 // Maximum cap on the size of a protocol message
+const protocolMaxMsgSize = 100 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
 // eth protocol message codes
 const (
@@ -185,6 +185,19 @@ func (hn *hashOrNumber) DecodeRLP(s *rlp.Stream) error {
 type newBlockData struct {
 	Block *types.Block
 	TD    *big.Int
+}
+
+// sanityCheck verifies that the values are reasonable, as a DoS protection
+func (request *newBlockData) sanityCheck() error {
+	if err := request.Block.SanityCheck(); err != nil {
+		return err
+	}
+	//TD at mainnet block #7753254 is 76 bits. If it becomes 100 million times
+	// larger, it will still fit within 100 bits
+	if tdlen := request.TD.BitLen(); tdlen > 100 {
+		return fmt.Errorf("too large block TD: bitlen %d", tdlen)
+	}
+	return nil
 }
 
 // blockBody represents the data content of a single block.

@@ -25,14 +25,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/karalabe/hid"
+	"github.com/karalabe/usb"
 )
 
 // a simple wrapper for offline use, mainly for Close()
 type offlineWallet struct {
 	driver driver
-	info   hid.DeviceInfo
-	device *hid.Device
+	info   usb.DeviceInfo
+	device usb.Device
 	log    log.Logger
 }
 
@@ -108,7 +108,11 @@ func ListDevices(scheme string) []string {
 		if len(scheme) > 0 && hub.scheme != scheme {
 			continue
 		}
-		for _, info := range hid.Enumerate(hub.vendorID, 0) {
+		infos, err := usb.Enumerate(hub.vendorID, 0)
+		if err != nil {
+			break
+		}
+		for _, info := range infos {
 			for _, id := range hub.productIDs {
 				if info.ProductID == id && (info.UsagePage == hub.usageID || info.Interface == hub.endpointID) {
 					devices = append(devices, info.Path)
@@ -139,7 +143,11 @@ func OpenOffline(scheme, path string) (interface{}, error) {
 		if hub.scheme != scheme {
 			continue
 		}
-		for _, info := range hid.Enumerate(hub.vendorID, 0) {
+		infos, err := usb.Enumerate(hub.vendorID, 0)
+		if err != nil {
+			break
+		}
+		for _, info := range infos {
 			if info.Path == path {
 				if scheme == TrezorScheme && info.Interface == -1 {
 					// Trezor 2. It's going to hang. Stop here.

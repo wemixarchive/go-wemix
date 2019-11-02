@@ -52,7 +52,8 @@ func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, sta
 			return nil, nil, nil, nil, err
 		}
 
-		b1.Write(metclient.PackNum(reflect.ValueOf(m.Addr.Big())))
+		addr := new(big.Int).SetBytes(m.Addr[:])
+		b1.Write(metclient.PackNum(reflect.ValueOf(addr)))
 		b1.Write(metclient.PackNum(reflect.ValueOf(len(m.Name))))
 		b1.Write([]byte(m.Name))
 		b1.Write(metclient.PackNum(reflect.ValueOf(len(id))))
@@ -61,7 +62,7 @@ func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, sta
 		b1.Write([]byte(m.Ip))
 		b1.Write(metclient.PackNum(reflect.ValueOf(m.Port)))
 
-		b2.Write(metclient.PackNum(reflect.ValueOf(m.Addr.Big())))
+		b2.Write(metclient.PackNum(reflect.ValueOf(addr)))
 		b2.Write(metclient.PackNum(reflect.ValueOf(m.Stake)))
 	}
 	nodes = b1.Bytes()
