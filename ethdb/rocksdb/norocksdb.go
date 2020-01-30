@@ -1,8 +1,10 @@
 // rocksdb_database.go
 // +build !rocksdb
 
-package ethdb
+package rocksdb
 
-func NewRDBDatabase(file string, cache int, handles int) (Database, error) {
-	return NewLDBDatabase(file, cache, handles)
+import "github.com/ethereum/go-ethereum/ethdb/leveldb"
+
+func New(file string, cache int, handles int, namespace string) (*leveldb.Database, error) {
+	return leveldb.New(file, cache, handles, namespace)
 }

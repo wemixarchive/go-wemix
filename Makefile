@@ -2,7 +2,7 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: geth android ios geth-cross evm all test clean vendor
+.PHONY: geth android ios geth-cross evm all test clean rocksdb vendor
 .PHONY: geth-linux geth-linux-386 geth-linux-amd64 geth-linux-mips64 geth-linux-mips64le
 .PHONY: geth-linux-arm geth-linux-arm-5 geth-linux-arm-6 geth-linux-arm-7 geth-linux-arm64
 .PHONY: geth-darwin geth-darwin-386 geth-darwin-amd64
@@ -11,6 +11,7 @@
 
 GOBIN = ./build/bin
 GO ?= latest
+GORUN = env GO111MODULE=on go run
 
 # USE_ROCKSDB
 # - undefined | "NO": Do not use
@@ -28,7 +29,8 @@ ifneq ($(shell uname), Linux)
 endif
 
 ifneq ($(USE_ROCKSDB), NO)
-ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb
+#ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb
+ROCKSDB_DIR=$(shell pwd)/rocksdb
 ROCKSDB_TAG=-tags rocksdb
 endif
 
@@ -43,54 +45,54 @@ metadium: gmet logrot
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
 
-gmet: vendor rocksdb metadium/governance_abi.go
+gmet: rocksdb metadium/governance_abi.go
 ifeq ($(USE_ROCKSDB), NO)
-	build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
+	$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 else
 	CGO_CFLAGS=-I$(ROCKSDB_DIR)/include \
 		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lrocksdb -lm -lstdc++ $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
-		build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
+		$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 endif
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
 
 logrot:
-	build/env.sh go run build/ci.go install ./cmd/logrot
+	$(GORUN) build/ci.go install ./cmd/logrot
 
 geth:
-	build/env.sh go run build/ci.go install ./cmd/geth
+	$(GORUN) build/ci.go install ./cmd/geth
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
 
 dbbench:
-	$(ROCKSDB_ENV) build/env.sh go run build/ci.go install $(ROCKSDB_TAG) ./cmd/dbbench
+	$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/dbbench
 
 all:
-	build/env.sh go run build/ci.go install
+	$(GORUN) build/ci.go install
 
 android:
-	build/env.sh go run build/ci.go aar --local
+	$(GORUN) build/ci.go aar --local
 	@echo "Done building."
 	@echo "Import \"$(GOBIN)/geth.aar\" to use the library."
 
 ios:
-	build/env.sh go run build/ci.go xcode --local
+	$(GORUN) build/ci.go xcode --local
 	@echo "Done building."
 	@echo "Import \"$(GOBIN)/Geth.framework\" to use the library."
 
 test: all
-	build/env.sh go run build/ci.go test
+	$(GORUN) build/ci.go test
 
 lint: ## Run linters.
-	build/env.sh go run build/ci.go lint
+	$(GORUN) build/ci.go lint
 
 clean:
-	./build/clean_go_build_cache.sh
+	env GO111MODULE=on go clean -cache
 	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf metadium/admin_abi.go metadium/governance_abi.go
-	@ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb;		\
-	if [ -d $${ROCKSDB_DIR} ]; then			\
-		cd $${ROCKSDB_DIR};		  	\
-		make clean;				\
+	@ROCKSDB_DIR=$(ROCKSDB_DIR);		\
+	if [ -d $${ROCKSDB_DIR} ]; then		\
+		cd $${ROCKSDB_DIR};		\
+		make clean;			\
 	fi
 
 # The devtools target installs tools required for 'go generate'.
@@ -117,12 +119,12 @@ geth-linux: geth-linux-386 geth-linux-amd64 geth-linux-arm geth-linux-mips64 get
 	@ls -ld $(GOBIN)/geth-linux-*
 
 geth-linux-386:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/386 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/386 -v ./cmd/geth
 	@echo "Linux 386 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep 386
 
 geth-linux-amd64:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/amd64 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/amd64 -v ./cmd/geth
 	@echo "Linux amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep amd64
 
@@ -131,42 +133,42 @@ geth-linux-arm: geth-linux-arm-5 geth-linux-arm-6 geth-linux-arm-7 geth-linux-ar
 	@ls -ld $(GOBIN)/geth-linux-* | grep arm
 
 geth-linux-arm-5:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/arm-5 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/arm-5 -v ./cmd/geth
 	@echo "Linux ARMv5 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep arm-5
 
 geth-linux-arm-6:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/arm-6 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/arm-6 -v ./cmd/geth
 	@echo "Linux ARMv6 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep arm-6
 
 geth-linux-arm-7:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/arm-7 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/arm-7 -v ./cmd/geth
 	@echo "Linux ARMv7 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep arm-7
 
 geth-linux-arm64:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/arm64 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/arm64 -v ./cmd/geth
 	@echo "Linux ARM64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep arm64
 
 geth-linux-mips:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips --ldflags '-extldflags "-static"' -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/mips --ldflags '-extldflags "-static"' -v ./cmd/geth
 	@echo "Linux MIPS cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep mips
 
 geth-linux-mipsle:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mipsle --ldflags '-extldflags "-static"' -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/mipsle --ldflags '-extldflags "-static"' -v ./cmd/geth
 	@echo "Linux MIPSle cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep mipsle
 
 geth-linux-mips64:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips64 --ldflags '-extldflags "-static"' -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/mips64 --ldflags '-extldflags "-static"' -v ./cmd/geth
 	@echo "Linux MIPS64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep mips64
 
 geth-linux-mips64le:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=linux/mips64le --ldflags '-extldflags "-static"' -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/mips64le --ldflags '-extldflags "-static"' -v ./cmd/geth
 	@echo "Linux MIPS64le cross compilation done:"
 	@ls -ld $(GOBIN)/geth-linux-* | grep mips64le
 
@@ -175,12 +177,12 @@ geth-darwin: geth-darwin-386 geth-darwin-amd64
 	@ls -ld $(GOBIN)/geth-darwin-*
 
 geth-darwin-386:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=darwin/386 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=darwin/386 -v ./cmd/geth
 	@echo "Darwin 386 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-darwin-* | grep 386
 
 geth-darwin-amd64:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=darwin/amd64 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=darwin/amd64 -v ./cmd/geth
 	@echo "Darwin amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-darwin-* | grep amd64
 
@@ -189,12 +191,12 @@ geth-windows: geth-windows-386 geth-windows-amd64
 	@ls -ld $(GOBIN)/geth-windows-*
 
 geth-windows-386:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=windows/386 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=windows/386 -v ./cmd/geth
 	@echo "Windows 386 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-windows-* | grep 386
 
 geth-windows-amd64:
-	build/env.sh go run build/ci.go xgo -- --go=$(GO) --targets=windows/amd64 -v ./cmd/geth
+	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=windows/amd64 -v ./cmd/geth
 	@echo "Windows amd64 cross compilation done:"
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
@@ -224,7 +226,6 @@ else
 endif
 
 vendor:
-	@build/env.sh test 1;
 	@export GOPATH=$(shell pwd)/build/_workspace;			\
 	[ -d build/_workspace/bin ] || mkdir -p build/_workspace/bin;	\
 	if [ ! -x build/_workspace/bin/govendor ]; then			\
@@ -238,15 +239,11 @@ vendor:
 		$${GOPATH}/bin/govendor sync -v;			\
 	fi
 
-#		$${GOPATH}/bin/govendor migrate;			\
-
 ifneq ($(USE_ROCKSDB), YES)
 rocksdb:
 else
-rocksdb: vendor
-	@build/env.sh test 1;
-	@cd $(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb; \
-		make -j8 static_lib;
+rocksdb:
+	@cd $(ROCKSDB_DIR) && make -j8 static_lib;
 endif
 
 AWK_CODE='								\

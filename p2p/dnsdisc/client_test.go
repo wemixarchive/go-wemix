@@ -41,12 +41,12 @@ const (
 
 func TestClientSyncTree(t *testing.T) {
 	r := mapResolver{
-		"3CA2MBMUQ55ZCT74YEEQLANJDI.n": "enr=-HW4QAggRauloj2SDLtIHN1XBkvhFZ1vtf1raYQp9TBW2RD5EEawDzbtSmlXUfnaHcvwOizhVYLtr7e6vw7NAf6mTuoCgmlkgnY0iXNlY3AyNTZrMaECjrXI8TLNXU0f8cthpAMxEshUyQlK-AM0PW2wfrnacNI=",
-		"53HBTPGGZ4I76UEPCNQGZWIPTQ.n": "enr=-HW4QOFzoVLaFJnNhbgMoDXPnOvcdVuj7pDpqRvh6BRDO68aVi5ZcjB3vzQRZH2IcLBGHzo8uUN3snqmgTiE56CH3AMBgmlkgnY0iXNlY3AyNTZrMaECC2_24YYkYHEgdzxlSNKQEnHhuNAbNlMlWJxrJxbAFvA=",
-		"BG7SVUBUAJ3UAWD2ATEBLMRNEE.n": "enrtree=53HBTPGGZ4I76UEPCNQGZWIPTQ,3CA2MBMUQ55ZCT74YEEQLANJDI,HNHR6UTVZF5TJKK3FV27ZI76P4",
-		"HNHR6UTVZF5TJKK3FV27ZI76P4.n": "enr=-HW4QLAYqmrwllBEnzWWs7I5Ev2IAs7x_dZlbYdRdMUx5EyKHDXp7AV5CkuPGUPdvbv1_Ms1CPfhcGCvSElSosZmyoqAgmlkgnY0iXNlY3AyNTZrMaECriawHKWdDRk2xeZkrOXBQ0dfMFLHY4eENZwdufn1S1o=",
-		"JGUFMSAGI7KZYB3P7IZW4S5Y3A.n": "enrtree-link=AM5FCQLWIZX2QFPNJAP7VUERCCRNGRHWZG3YYHIUV7BVDQ5FDPRT2@morenodes.example.org",
-		"n":                            "enrtree-root=v1 e=BG7SVUBUAJ3UAWD2ATEBLMRNEE l=JGUFMSAGI7KZYB3P7IZW4S5Y3A seq=1 sig=gacuU0nTy9duIdu1IFDyF5Lv9CFHqHiNcj91n0frw70tZo3tZZsCVkE3j1ILYyVOHRLWGBmawo_SEkThZ9PgcQE=",
+		"n":                            "enrtree-root:v1 e=JWXYDBPXYWG6FX3GMDIBFA6CJ4 l=C7HRFPF3BLGF3YR4DY5KX3SMBE seq=1 sig=o908WmNp7LibOfPsr4btQwatZJ5URBr2ZAuxvK4UWHlsB9sUOTJQaGAlLPVAhM__XJesCHxLISo94z5Z2a463gA",
+		"C7HRFPF3BLGF3YR4DY5KX3SMBE.n": "enrtree://AM5FCQLWIZX2QFPNJAP7VUERCCRNGRHWZG3YYHIUV7BVDQ5FDPRT2@morenodes.example.org",
+		"JWXYDBPXYWG6FX3GMDIBFA6CJ4.n": "enrtree-branch:2XS2367YHAXJFGLZHVAWLQD4ZY,H4FHT4B454P6UXFD7JCYQ5PWDY,MHTDO6TMUBRIA2XWG5LUDACK24",
+		"2XS2367YHAXJFGLZHVAWLQD4ZY.n": "enr:-HW4QOFzoVLaFJnNhbgMoDXPnOvcdVuj7pDpqRvh6BRDO68aVi5ZcjB3vzQRZH2IcLBGHzo8uUN3snqmgTiE56CH3AMBgmlkgnY0iXNlY3AyNTZrMaECC2_24YYkYHEgdzxlSNKQEnHhuNAbNlMlWJxrJxbAFvA",
+		"H4FHT4B454P6UXFD7JCYQ5PWDY.n": "enr:-HW4QAggRauloj2SDLtIHN1XBkvhFZ1vtf1raYQp9TBW2RD5EEawDzbtSmlXUfnaHcvwOizhVYLtr7e6vw7NAf6mTuoCgmlkgnY0iXNlY3AyNTZrMaECjrXI8TLNXU0f8cthpAMxEshUyQlK-AM0PW2wfrnacNI",
+		"MHTDO6TMUBRIA2XWG5LUDACK24.n": "enr:-HW4QLAYqmrwllBEnzWWs7I5Ev2IAs7x_dZlbYdRdMUx5EyKHDXp7AV5CkuPGUPdvbv1_Ms1CPfhcGCvSElSosZmyoqAgmlkgnY0iXNlY3AyNTZrMaECriawHKWdDRk2xeZkrOXBQ0dfMFLHY4eENZwdufn1S1o",
 	}
 	var (
 		wantNodes = testNodes(0x29452, 3)
@@ -54,7 +54,7 @@ func TestClientSyncTree(t *testing.T) {
 		wantSeq   = uint(1)
 	)
 
-	c, _ := NewClient(Config{Resolver: r, Logger: testlog.Logger(t, log.LvlTrace)})
+	c := NewClient(Config{Resolver: r, Logger: testlog.Logger(t, log.LvlTrace)})
 	stree, err := c.SyncTree("enrtree://AKPYQIUQIL7PSIACI32J7FGZW56E5FKHEFCCOFHILBIMW3M6LWXS2@n")
 	if err != nil {
 		t.Fatal("sync error:", err)
@@ -68,78 +68,117 @@ func TestClientSyncTree(t *testing.T) {
 	if stree.Seq() != wantSeq {
 		t.Errorf("synced tree has wrong seq: %d", stree.Seq())
 	}
-	if len(c.trees) > 0 {
-		t.Errorf("tree from SyncTree added to client")
-	}
 }
 
 // In this test, syncing the tree fails because it contains an invalid ENR entry.
 func TestClientSyncTreeBadNode(t *testing.T) {
-	r := mapResolver{
-		"n":                            "enrtree-root=v1 e=ZFJZDQKSOMJRYYQSZKJZC54HCF l=JGUFMSAGI7KZYB3P7IZW4S5Y3A seq=3 sig=WEy8JTZ2dHmXM2qeBZ7D2ECK7SGbnurl1ge_S_5GQBAqnADk0gLTcg8Lm5QNqLHZjJKGAb443p996idlMcBqEQA=",
-		"JGUFMSAGI7KZYB3P7IZW4S5Y3A.n": "enrtree-link=AM5FCQLWIZX2QFPNJAP7VUERCCRNGRHWZG3YYHIUV7BVDQ5FDPRT2@morenodes.example.org",
-		"ZFJZDQKSOMJRYYQSZKJZC54HCF.n": "enr=gggggggggggggg=",
-	}
+	// var b strings.Builder
+	// b.WriteString(enrPrefix)
+	// b.WriteString("-----")
+	// badHash := subdomain(&b)
+	// tree, _ := MakeTree(3, nil, []string{"enrtree://AM5FCQLWIZX2QFPNJAP7VUERCCRNGRHWZG3YYHIUV7BVDQ5FDPRT2@morenodes.example.org"})
+	// tree.entries[badHash] = &b
+	// tree.root.eroot = badHash
+	// url, _ := tree.Sign(testKey(signingKeySeed), "n")
+	// fmt.Println(url)
+	// fmt.Printf("%#v\n", tree.ToTXT("n"))
 
-	c, _ := NewClient(Config{Resolver: r, Logger: testlog.Logger(t, log.LvlTrace)})
-	_, err := c.SyncTree("enrtree://APFGGTFOBVE2ZNAB3CSMNNX6RRK3ODIRLP2AA5U4YFAA6MSYZUYTQ@n")
-	wantErr := nameError{name: "ZFJZDQKSOMJRYYQSZKJZC54HCF.n", err: entryError{typ: "enr", err: errInvalidENR}}
+	r := mapResolver{
+		"n":                            "enrtree-root:v1 e=INDMVBZEEQ4ESVYAKGIYU74EAA l=C7HRFPF3BLGF3YR4DY5KX3SMBE seq=3 sig=Vl3AmunLur0JZ3sIyJPSH6A3Vvdp4F40jWQeCmkIhmcgwE4VC5U9wpK8C_uL_CMY29fd6FAhspRvq2z_VysTLAA",
+		"C7HRFPF3BLGF3YR4DY5KX3SMBE.n": "enrtree://AM5FCQLWIZX2QFPNJAP7VUERCCRNGRHWZG3YYHIUV7BVDQ5FDPRT2@morenodes.example.org",
+		"INDMVBZEEQ4ESVYAKGIYU74EAA.n": "enr:-----",
+	}
+	c := NewClient(Config{Resolver: r, Logger: testlog.Logger(t, log.LvlTrace)})
+	_, err := c.SyncTree("enrtree://AKPYQIUQIL7PSIACI32J7FGZW56E5FKHEFCCOFHILBIMW3M6LWXS2@n")
+	wantErr := nameError{name: "INDMVBZEEQ4ESVYAKGIYU74EAA.n", err: entryError{typ: "enr", err: errInvalidENR}}
 	if err != wantErr {
 		t.Fatalf("expected sync error %q, got %q", wantErr, err)
 	}
 }
 
-// This test checks that RandomNode hits all entries.
-func TestClientRandomNode(t *testing.T) {
+// This test checks that randomIterator finds all entries.
+func TestIterator(t *testing.T) {
 	nodes := testNodes(nodesSeed1, 30)
 	tree, url := makeTestTree("n", nodes, nil)
 	r := mapResolver(tree.ToTXT("n"))
-	c, _ := NewClient(Config{Resolver: r, Logger: testlog.Logger(t, log.LvlTrace)})
-	if err := c.AddTree(url); err != nil {
+	c := NewClient(Config{
+		Resolver:  r,
+		Logger:    testlog.Logger(t, log.LvlTrace),
+		RateLimit: 500,
+	})
+	it, err := c.NewIterator(url)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	checkRandomNode(t, c, nodes)
+	checkIterator(t, it, nodes)
 }
 
-// This test checks that RandomNode traverses linked trees as well as explicitly added trees.
-func TestClientRandomNodeLinks(t *testing.T) {
+// This test checks if closing randomIterator races.
+func TestIteratorClose(t *testing.T) {
+	nodes := testNodes(nodesSeed1, 500)
+	tree1, url1 := makeTestTree("t1", nodes, nil)
+	c := NewClient(Config{Resolver: newMapResolver(tree1.ToTXT("t1"))})
+	it, err := c.NewIterator(url1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		for it.Next() {
+			_ = it.Node()
+		}
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	it.Close()
+	<-done
+}
+
+// This test checks that randomIterator traverses linked trees as well as explicitly added trees.
+func TestIteratorLinks(t *testing.T) {
 	nodes := testNodes(nodesSeed1, 40)
 	tree1, url1 := makeTestTree("t1", nodes[:10], nil)
 	tree2, url2 := makeTestTree("t2", nodes[10:], []string{url1})
-	cfg := Config{
-		Resolver: newMapResolver(tree1.ToTXT("t1"), tree2.ToTXT("t2")),
-		Logger:   testlog.Logger(t, log.LvlTrace),
-	}
-	c, _ := NewClient(cfg)
-	if err := c.AddTree(url2); err != nil {
+	c := NewClient(Config{
+		Resolver:  newMapResolver(tree1.ToTXT("t1"), tree2.ToTXT("t2")),
+		Logger:    testlog.Logger(t, log.LvlTrace),
+		RateLimit: 500,
+	})
+	it, err := c.NewIterator(url2)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	checkRandomNode(t, c, nodes)
+	checkIterator(t, it, nodes)
 }
 
-// This test verifies that RandomNode re-checks the root of the tree to catch
+// This test verifies that randomIterator re-checks the root of the tree to catch
 // updates to nodes.
-func TestClientRandomNodeUpdates(t *testing.T) {
+func TestIteratorNodeUpdates(t *testing.T) {
 	var (
 		clock    = new(mclock.Simulated)
 		nodes    = testNodes(nodesSeed1, 30)
 		resolver = newMapResolver()
-		cfg      = Config{
+		c        = NewClient(Config{
 			Resolver:        resolver,
 			Logger:          testlog.Logger(t, log.LvlTrace),
 			RecheckInterval: 20 * time.Minute,
-		}
-		c, _ = NewClient(cfg)
+			RateLimit:       500,
+		})
 	)
 	c.clock = clock
 	tree1, url := makeTestTree("n", nodes[:25], nil)
+	it, err := c.NewIterator(url)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// Sync the original tree.
+	// sync the original tree.
 	resolver.add(tree1.ToTXT("n"))
-	c.AddTree(url)
-	checkRandomNode(t, c, nodes[:25])
+	checkIterator(t, it, nodes[:25])
 
 	// Update some nodes and ensure RandomNode returns the new nodes as well.
 	keys := testKeys(nodesSeed1, len(nodes))
@@ -152,25 +191,25 @@ func TestClientRandomNodeUpdates(t *testing.T) {
 		nodes[i] = n2
 	}
 	tree2, _ := makeTestTree("n", nodes, nil)
-	clock.Run(cfg.RecheckInterval + 1*time.Second)
+	clock.Run(c.cfg.RecheckInterval + 1*time.Second)
 	resolver.clear()
 	resolver.add(tree2.ToTXT("n"))
-	checkRandomNode(t, c, nodes)
+	checkIterator(t, it, nodes)
 }
 
-// This test verifies that RandomNode re-checks the root of the tree to catch
+// This test verifies that randomIterator re-checks the root of the tree to catch
 // updates to links.
-func TestClientRandomNodeLinkUpdates(t *testing.T) {
+func TestIteratorLinkUpdates(t *testing.T) {
 	var (
 		clock    = new(mclock.Simulated)
 		nodes    = testNodes(nodesSeed1, 30)
 		resolver = newMapResolver()
-		cfg      = Config{
+		c        = NewClient(Config{
 			Resolver:        resolver,
 			Logger:          testlog.Logger(t, log.LvlTrace),
 			RecheckInterval: 20 * time.Minute,
-		}
-		c, _ = NewClient(cfg)
+			RateLimit:       500,
+		})
 	)
 	c.clock = clock
 	tree3, url3 := makeTestTree("t3", nodes[20:30], nil)
@@ -180,49 +219,53 @@ func TestClientRandomNodeLinkUpdates(t *testing.T) {
 	resolver.add(tree2.ToTXT("t2"))
 	resolver.add(tree3.ToTXT("t3"))
 
+	it, err := c.NewIterator(url1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Sync tree1 using RandomNode.
-	c.AddTree(url1)
-	checkRandomNode(t, c, nodes[:20])
+	checkIterator(t, it, nodes[:20])
 
 	// Add link to tree3, remove link to tree2.
 	tree1, _ = makeTestTree("t1", nodes[:10], []string{url3})
 	resolver.add(tree1.ToTXT("t1"))
-	clock.Run(cfg.RecheckInterval + 1*time.Second)
+	clock.Run(c.cfg.RecheckInterval + 1*time.Second)
 	t.Log("tree1 updated")
 
 	var wantNodes []*enode.Node
 	wantNodes = append(wantNodes, tree1.Nodes()...)
 	wantNodes = append(wantNodes, tree3.Nodes()...)
-	checkRandomNode(t, c, wantNodes)
+	checkIterator(t, it, wantNodes)
 
 	// Check that linked trees are GCed when they're no longer referenced.
-	if len(c.trees) != 2 {
-		t.Errorf("client knows %d trees, want 2", len(c.trees))
+	knownTrees := it.(*randomIterator).trees
+	if len(knownTrees) != 2 {
+		t.Errorf("client knows %d trees, want 2", len(knownTrees))
 	}
 }
 
-func checkRandomNode(t *testing.T, c *Client, wantNodes []*enode.Node) {
+func checkIterator(t *testing.T, it enode.Iterator, wantNodes []*enode.Node) {
 	t.Helper()
 
 	var (
 		want     = make(map[enode.ID]*enode.Node)
-		maxCalls = len(wantNodes) * 2
+		maxCalls = len(wantNodes) * 3
 		calls    = 0
-		ctx      = context.Background()
 	)
 	for _, n := range wantNodes {
 		want[n.ID()] = n
 	}
 	for ; len(want) > 0 && calls < maxCalls; calls++ {
-		n := c.RandomNode(ctx)
-		if n == nil {
-			t.Fatalf("RandomNode returned nil (call %d)", calls)
+		if !it.Next() {
+			t.Fatalf("Next returned false (call %d)", calls)
 		}
+		n := it.Node()
 		delete(want, n.ID())
 	}
-	t.Logf("checkRandomNode called RandomNode %d times to find %d nodes", calls, len(wantNodes))
+	t.Logf("checkIterator called Next %d times to find %d nodes", calls, len(wantNodes))
 	for _, n := range want {
-		t.Errorf("RandomNode didn't discover node %v", n.ID())
+		t.Errorf("iterator didn't discover node %v", n.ID())
 	}
 }
 

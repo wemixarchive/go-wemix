@@ -42,6 +42,7 @@ var (
 			dnsSignCommand,
 			dnsTXTCommand,
 			dnsCloudflareCommand,
+			dnsRoute53Command,
 		},
 	}
 	dnsSyncCommand = cli.Command{
@@ -66,10 +67,17 @@ var (
 	}
 	dnsCloudflareCommand = cli.Command{
 		Name:      "to-cloudflare",
-		Usage:     "Deploy DNS TXT records to cloudflare",
+		Usage:     "Deploy DNS TXT records to CloudFlare",
 		ArgsUsage: "<tree-directory>",
 		Action:    dnsToCloudflare,
 		Flags:     []cli.Flag{cloudflareTokenFlag, cloudflareZoneIDFlag},
+	}
+	dnsRoute53Command = cli.Command{
+		Name:      "to-route53",
+		Usage:     "Deploy DNS TXT records to Amazon Route53",
+		ArgsUsage: "<tree-directory>",
+		Action:    dnsToRoute53,
+		Flags:     []cli.Flag{route53AccessKeyFlag, route53AccessSecretFlag, route53ZoneIDFlag},
 	}
 )
 
@@ -86,6 +94,11 @@ var (
 		Name:  "seq",
 		Usage: "New sequence number of the tree",
 	}
+)
+
+const (
+	rootTTL     = 1
+	treeNodeTTL = 2147483647
 )
 
 // dnsSync performs dnsSyncCommand.
@@ -109,7 +122,8 @@ func dnsSync(ctx *cli.Context) error {
 	}
 	def := treeToDefinition(url, t)
 	def.Meta.LastModified = time.Now()
-	writeTreeDefinition(outdir, def)
+	writeTreeMetadata(outdir, def)
+	writeTreeNodes(outdir, def)
 	return nil
 }
 
@@ -151,7 +165,7 @@ func dnsSign(ctx *cli.Context) error {
 
 	def = treeToDefinition(url, t)
 	def.Meta.LastModified = time.Now()
-	writeTreeDefinition(defdir, def)
+	writeTreeMetadata(defdir, def)
 	return nil
 }
 
@@ -193,6 +207,19 @@ func dnsToCloudflare(ctx *cli.Context) error {
 	return client.deploy(domain, t)
 }
 
+// dnsToRoute53 peforms dnsRoute53Command.
+func dnsToRoute53(ctx *cli.Context) error {
+	if ctx.NArg() < 1 {
+		return fmt.Errorf("need tree definition directory as argument")
+	}
+	domain, t, err := loadTreeDefinitionForExport(ctx.Args().Get(0))
+	if err != nil {
+		return err
+	}
+	client := newRoute53Client(ctx)
+	return client.deploy(domain, t)
+}
+
 // loadSigningKey loads a private key in Ethereum keystore format.
 func loadSigningKey(keyfile string) *ecdsa.PrivateKey {
 	keyjson, err := ioutil.ReadFile(keyfile)
@@ -213,8 +240,7 @@ func dnsClient(ctx *cli.Context) *dnsdisc.Client {
 	if commandHasFlag(ctx, dnsTimeoutFlag) {
 		cfg.Timeout = ctx.Duration(dnsTimeoutFlag.Name)
 	}
-	c, _ := dnsdisc.NewClient(cfg) // cannot fail because no URLs given
-	return c
+	return dnsdisc.NewClient(cfg)
 }
 
 // There are two file formats for DNS node trees on disk:
@@ -315,24 +341,26 @@ func ensureValidTreeSignature(t *dnsdisc.Tree, pubkey *ecdsa.PublicKey, sig stri
 	return nil
 }
 
-// writeTreeDefinition writes a DNS node tree definition to the given directory.
-func writeTreeDefinition(directory string, def *dnsDefinition) {
+// writeTreeMetadata writes a DNS node tree metadata file to the given directory.
+func writeTreeMetadata(directory string, def *dnsDefinition) {
 	metaJSON, err := json.MarshalIndent(&def.Meta, "", jsonIndent)
 	if err != nil {
 		exit(err)
 	}
-	// Convert nodes.
-	nodes := make(nodeSet, len(def.Nodes))
-	nodes.add(def.Nodes...)
-	// Write.
 	if err := os.Mkdir(directory, 0744); err != nil && !os.IsExist(err) {
 		exit(err)
 	}
-	metaFile, nodesFile := treeDefinitionFiles(directory)
-	writeNodesJSON(nodesFile, nodes)
+	metaFile, _ := treeDefinitionFiles(directory)
 	if err := ioutil.WriteFile(metaFile, metaJSON, 0644); err != nil {
 		exit(err)
 	}
+}
+
+func writeTreeNodes(directory string, def *dnsDefinition) {
+	ns := make(nodeSet, len(def.Nodes))
+	ns.add(def.Nodes...)
+	_, nodesFile := treeDefinitionFiles(directory)
+	writeNodesJSON(nodesFile, ns)
 }
 
 func treeDefinitionFiles(directory string) (string, string) {
