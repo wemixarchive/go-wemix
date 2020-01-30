@@ -2,7 +2,7 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: geth android ios geth-cross evm all test clean rocksdb vendor
+.PHONY: geth android ios geth-cross evm all test clean rocksdb
 .PHONY: geth-linux geth-linux-386 geth-linux-amd64 geth-linux-mips64 geth-linux-mips64le
 .PHONY: geth-linux-arm geth-linux-arm-5 geth-linux-arm-6 geth-linux-arm-7 geth-linux-arm64
 .PHONY: geth-darwin geth-darwin-386 geth-darwin-amd64
@@ -15,7 +15,7 @@ GORUN = env GO111MODULE=on go run
 
 # USE_ROCKSDB
 # - undefined | "NO": Do not use
-# - "YES": build a static lib from vendor directory, and use that one
+# - "YES": build a static lib from rocksdb directory, and use that one
 # - "EXISTING": use existing rocksdb shared lib.
 ifndef USE_ROCKSDB
   ifeq ($(shell uname), Linux)
@@ -29,7 +29,6 @@ ifneq ($(shell uname), Linux)
 endif
 
 ifneq ($(USE_ROCKSDB), NO)
-#ROCKSDB_DIR=$(shell pwd)/build/_workspace/src/github.com/ethereum/go-ethereum/vendor/github.com/facebook/rocksdb
 ROCKSDB_DIR=$(shell pwd)/rocksdb
 ROCKSDB_TAG=-tags rocksdb
 endif
@@ -225,25 +224,12 @@ else
 	fi
 endif
 
-vendor:
-	@export GOPATH=$(shell pwd)/build/_workspace;			\
-	[ -d build/_workspace/bin ] || mkdir -p build/_workspace/bin;	\
-	if [ ! -x build/_workspace/bin/govendor ]; then			\
-		echo "Installing govendor...";				\
-		go get -v -u github.com/kardianos/govendor;		\
-	fi;								\
-	if [ ! -f vendor/github.com/coreos/etcd/README.md -o 		\
-	     ! -f vendor/github.com/facebook/rocksdb/README.md ]; then	\
-		echo "Syncing vendor directory...";			\
-		cd $${GOPATH}/src/github.com/ethereum/go-ethereum/vendor; \
-		$${GOPATH}/bin/govendor sync -v;			\
-	fi
-
 ifneq ($(USE_ROCKSDB), YES)
 rocksdb:
 else
 rocksdb:
-	@cd $(ROCKSDB_DIR) && make -j8 static_lib;
+	@git submodule update rocksdb &&		\
+	cd $(ROCKSDB_DIR) && make -j8 static_lib;
 endif
 
 AWK_CODE='								\
