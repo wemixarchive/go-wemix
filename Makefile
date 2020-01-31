@@ -88,10 +88,10 @@ lint: ## Run linters.
 clean:
 	env GO111MODULE=on go clean -cache
 	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf metadium/admin_abi.go metadium/governance_abi.go
-	@ROCKSDB_DIR=$(ROCKSDB_DIR);		\
-	if [ -d $${ROCKSDB_DIR} ]; then		\
-		cd $${ROCKSDB_DIR};		\
-		make clean;			\
+	@ROCKSDB_DIR=$(ROCKSDB_DIR);			\
+	if [ -e $${ROCKSDB_DIR}/Makefile ]; then	\
+		cd $${ROCKSDB_DIR};			\
+		make clean;				\
 	fi
 
 # The devtools target installs tools required for 'go generate'.
