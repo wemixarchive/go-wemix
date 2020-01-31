@@ -33,16 +33,17 @@ import (
 const (
 	eth63 = 63
 	eth64 = 64
+	eth65 = 65
 )
 
 // ProtocolName is the official short name of the protocol used during capability negotiation.
 var protocolName = "meta"
 
 // ProtocolVersions are the supported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{eth64, eth63}
+var ProtocolVersions = []uint{eth65, eth64, eth63}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
-var protocolLengths = map[uint]uint64{eth64: 23, eth63: 22}
+var protocolLengths = map[uint]uint64{eth65: 23, eth64: 23, eth63: 22}
 
 const protocolMaxMsgSize = 100 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -61,7 +62,7 @@ const (
 	GetReceiptsMsg     = 0x0f
 	ReceiptsMsg        = 0x10
 
-	// Added by Metadium, meta/71
+	// Added by Metadium, meta/64
 	GetPendingTxsMsg = 0x11
 	GetStatusExMsg   = 0x12
 	StatusExMsg      = 0x13
