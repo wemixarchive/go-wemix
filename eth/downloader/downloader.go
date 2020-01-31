@@ -49,7 +49,7 @@ var (
 	rttMinEstimate   = 2 * time.Second   // Minimum round-trip time to target for download requests
 	rttMaxEstimate   = 120 * time.Second // Maximum round-trip time to target for download requests
 	rttMinConfidence = 0.1               // Worse confidence factor in our estimated RTT value
-	ttlScaling       = 3                 // Constant scaling factor for RTT -> TTL conversion
+	ttlScaling       = 30                // Constant scaling factor for RTT -> TTL conversion
 	ttlLimit         = 10 * time.Minute  // Maximum TTL allowance to prevent reaching crazy timeouts
 
 	qosTuningPeers   = 5    // Number of peers to tune based on (best peers)
