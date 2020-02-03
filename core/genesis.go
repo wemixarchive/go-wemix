@@ -244,6 +244,10 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 
 func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	switch {
+	case ghash == params.MetadiumMainnetGenesisHash:
+		return params.MetadiumMainnetChainConfig
+	case ghash == params.MetadiumTestnetGenesisHash:
+		return params.MetadiumTestnetChainConfig
 	case g != nil:
 		return g.Config
 	case ghash == params.MainnetGenesisHash:
