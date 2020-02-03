@@ -98,8 +98,11 @@ function init_gov ()
 	return 1
     fi
 
-    exec ${GMET} attach http://localhost:8588 --preload "$d/conf/MetadiumGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'")'
-#    ${GMET} metadium deploy-governance --url http://localhost:8588 --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
+    PORT=$(grep PORT ${d}/.rc | sed -e 's/PORT=//')
+    [ "$PORT" = "" ] && PORT=8588
+
+    exec ${GMET} attach http://localhost:${PORT} --preload "$d/conf/MetadiumGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'")'
+#    ${GMET} metadium deploy-governance --url http://localhost:${PORT} --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
 }
 
 function wipe ()
@@ -258,10 +261,10 @@ case "$1" in
     ;;
 
 "wipe")
-    if [ ! "$3" = "" ]; then
-	wipe $2 $3
+    if [ ! "$2" = "" ]; then
+	wipe $2
     else
-	wipe_all $2
+	wipe_all
     fi
     ;;
 
