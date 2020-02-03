@@ -3,14 +3,8 @@
 
 package rocksdb
 
-/*
-#include <stdlib.h>
-#include "rocksdb/c.h"
-
-typedef int * intp;
-
-extern void replay_iterate(int *wp, void *bp);
-*/
+// #include <stdlib.h>
+// #include "rocksdb/c.h"
 import "C"
 
 import (
@@ -192,7 +186,7 @@ func (db *RDBDatabase) Meter(prefix string) {
 
 func (db *RDBDatabase) NewBatch() ethdb.Batch {
 	b := C.rocksdb_writebatch_create()
-	bb := &rdbBatch{db: db.db, b: b, wopts: db.wopts}
+	bb := &rdbBatch{db: db.db, b: b, wopts: db.wopts, data: nil}
 	runtime.SetFinalizer(bb, func(bb *rdbBatch) {
 		if bb.b != nil {
 			C.rocksdb_writebatch_destroy(bb.b)
@@ -202,10 +196,17 @@ func (db *RDBDatabase) NewBatch() ethdb.Batch {
 	return bb
 }
 
+type rdbBatchOp struct {
+	del   bool
+	key   []byte
+	value []byte
+}
+
 type rdbBatch struct {
 	db    *C.rocksdb_t
 	b     *C.rocksdb_writebatch_t
 	wopts *C.rocksdb_writeoptions_t
+	data  []*rdbBatchOp
 	size  int
 }
 
@@ -216,6 +217,7 @@ func (b *rdbBatch) Put(key, value []byte) error {
 	}
 	ck, cv := b2c(key), b2c(value)
 	C.rocksdb_writebatch_put(b.b, ck, C.size_t(len(key)), cv, C.size_t(len(value)))
+	b.data = append(b.data, &rdbBatchOp{del: false, key: key, value: value})
 	b.size += len(value)
 	return nil
 }
@@ -225,6 +227,7 @@ func (b *rdbBatch) Delete(key []byte) error {
 		atomic.AddUint64(&_d_count, 1)
 	}
 	C.rocksdb_writebatch_delete(b.b, b2c(key), C.size_t(len(key)))
+	b.data = append(b.data, &rdbBatchOp{del: true, key: key, value: nil})
 	b.size += 1
 	return nil
 }
@@ -241,60 +244,20 @@ func (b *rdbBatch) ValueSize() int {
 
 func (b *rdbBatch) Reset() {
 	C.rocksdb_writebatch_clear(b.b)
+	b.data = nil
 	b.size = 0
-}
-
-//export replayPut
-func replayPut(ptr *C.char, k *C.char, klen C.size_t, v *C.char, vlen C.size_t) {
-	w := (*ethdb.KeyValueWriter)(unsafe.Pointer(ptr))
-	if w != nil {
-		(*w).Put(C.GoBytes(unsafe.Pointer(k), C.int(klen)), C.GoBytes(unsafe.Pointer(v), C.int(vlen)))
-	}
-}
-
-//export replayDel
-func replayDel(ptr *C.char, k *C.char, klen C.size_t) {
-	w := (*ethdb.KeyValueWriter)(unsafe.Pointer(ptr))
-	if w != nil {
-		(*w).Delete(C.GoBytes(unsafe.Pointer(k), C.int(klen)))
-	}
 }
 
 // Replay replays the batch contents.
 func (b *rdbBatch) Replay(w ethdb.KeyValueWriter) error {
-	repsize := C.size_t(0)
-	rep := C.rocksdb_writebatch_data(b.b, &repsize)
-	b2 := C.rocksdb_writebatch_create_from(rep, repsize)
-	bp := unsafe.Pointer(b2)
-	wp := (C.intp)(unsafe.Pointer(&w))
-
-	C.replay_iterate(wp, bp)
-	C.rocksdb_writebatch_destroy(b2)
+	for _, i := range b.data {
+		if i.del {
+			w.Delete(i.key)
+		} else {
+			w.Put(i.key, i.value)
+		}
+	}
 	return nil
-}
-
-// replayer is a small wrapper to implement the correct replay methods.
-type replayer struct {
-	writer  ethdb.KeyValueWriter
-	failure error
-}
-
-// Put inserts the given value into the key-value data store.
-func (r *replayer) Put(key, value []byte) {
-	// If the replay already failed, stop executing ops
-	if r.failure != nil {
-		return
-	}
-	r.failure = r.writer.Put(key, value)
-}
-
-// Delete removes the key from the key-value data store.
-func (r *replayer) Delete(key []byte) {
-	// If the replay already failed, stop executing ops
-	if r.failure != nil {
-		return
-	}
-	r.failure = r.writer.Delete(key)
 }
 
 func EnableStats(b bool) {
