@@ -228,8 +228,7 @@ ifneq ($(USE_ROCKSDB), YES)
 rocksdb:
 else
 rocksdb:
-	@[ ! -e rocksdb/.git ] && git submodule init rocksdb;	\
-	git submodule update rocksdb &&				\
+	@[ ! -e rocksdb/.git ] && git submodule update --init rocksdb;	\
 	cd $(ROCKSDB_DIR) && make -j8 static_lib;
 endif
 
