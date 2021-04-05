@@ -210,7 +210,7 @@ ifeq ($(shell uname), Linux)
 			-v /etc/group:/etc/group:ro			\
 			-v ~/src:/home/$${USER}/src			\
 			-v $(shell pwd):/data -u $$(id -u):$$(id -g)	\
-			-w /data metadium/bobthe:latest			\
+			-w /data metadium/bobthe:0.4			\
 			make USE_ROCKSDB=$(USE_ROCKSDB);		\
 	fi
 else
