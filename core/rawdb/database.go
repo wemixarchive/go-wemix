@@ -255,8 +255,7 @@ func NewDB(file string, cache int, handles int, namespace string) (ethdb.Databas
 
 func NewDBWithFreezer(file string, cache int, handles int, freezer string, namespace string) (ethdb.Database, error) {
 	if params.UseRocksDb != 0 {
-		return NewRocksDBDatabase(file, cache, handles, namespace)
-		//return NewRocksDBDatabaseWithFreezer(file, cache, handles, freezer, namespace)
+		return NewRocksDBDatabaseWithFreezer(file, cache, handles, freezer, namespace)
 	} else {
 		return NewLevelDBDatabaseWithFreezer(file, cache, handles, freezer, namespace)
 	}
