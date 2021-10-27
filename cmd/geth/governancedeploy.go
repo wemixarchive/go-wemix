@@ -101,7 +101,7 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 		return fmt.Errorf("Invalid Arguments")
 	}
 
-	passwd := getPassPhrase("", false, 0, utils.MakePasswordList(cliCtx))
+	passwd := utils.GetPassPhraseWithList("", false, 0, utils.MakePasswordList(cliCtx))
 	if len(passwd) == 0 {
 		return fmt.Errorf("Invalid Arguments")
 	}

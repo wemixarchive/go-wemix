@@ -31,7 +31,7 @@ import (
 	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/p2p/discv5"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -966,8 +966,7 @@ func signBlock(hash common.Hash) (nodeId, sig []byte, err error) {
 
 	prvKey := admin.stack.Server().PrivateKey
 	sig, err = crypto.Sign(hash.Bytes(), prvKey)
-	v5id := discv5.PubkeyID(&prvKey.PublicKey)
-	nodeId = v5id[:]
+	nodeId = v5wire.EncodePubkey(&prvKey.PublicKey)
 	return
 }
 

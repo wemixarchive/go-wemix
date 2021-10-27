@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
@@ -396,13 +397,13 @@ func main() {
 	ethdb.EnableStats(true)
 	switch which {
 	case "leveldb":
-		db, err = ethdb.NewLDBDatabase(dbPath, 1024, 1024)
+		db, err = rawdb.NewLevelDBDatabase(dbPath, 1024, 1024, "", false)
 		if err != nil {
 			fmt.Printf("Cannot open DB %s: %v\n", dbPath, err)
 			return
 		}
 	case "rocksdb":
-		db, err = ethdb.NewRDBDatabase(dbPath, 1024, 1024)
+		db, err = rawdb.NewRocksDBDatabase(dbPath, 1024, 1024, "", false)
 		if err != nil {
 			fmt.Printf("Cannot open DB %s: %v\n", dbPath, err)
 			return

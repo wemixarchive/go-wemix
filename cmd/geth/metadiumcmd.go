@@ -29,7 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/metadium/metclient"
-	"github.com/ethereum/go-ethereum/p2p/discv5"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"gopkg.in/urfave/cli.v1"
 )
@@ -211,7 +211,7 @@ func newAccount(ctx *cli.Context) error {
 		}
 	}
 
-	password := getPassPhrase("Please give a password. Do not forget this password.", true, 0, utils.MakePasswordList(ctx))
+	password := utils.GetPassPhraseWithList("Please give a password. Do not forget this password.", true, 0, utils.MakePasswordList(ctx))
 
 	key, err := keystore.NewKey(rand.Reader)
 	if err != nil {
@@ -253,7 +253,7 @@ func nodeKey2Id(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	idv5 := discv5.PubkeyID(&nodeKey.PublicKey)
+	idv5 := v5wire.EncodePubkey(&nodeKey.PublicKey)
 	idv4 := enode.PubkeyToIDV4(&nodeKey.PublicKey)
 	fmt.Printf("idv4: %v\nidv5: %v\n", idv4, idv5)
 	// or

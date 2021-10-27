@@ -56,7 +56,7 @@ func b2c(b []byte) *C.char {
 	}
 }
 
-func New(file string, cache int, handles int, namespace string) (*RDBDatabase, error) {
+func New(file string, cache int, handles int, namespace string, readonly bool) (*RDBDatabase, error) {
 	var cerr *C.char
 
 	opts := C.rocksdb_options_create()
@@ -157,12 +157,22 @@ func (db *RDBDatabase) Delete(key []byte) error {
 	return nil
 }
 
-func (db *RDBDatabase) NewIterator() ethdb.Iterator {
-	it := C.rocksdb_create_iterator(db.db, db.ropts)
+func (db *RDBDatabase) NewIterator(prefix, start []byte) ethdb.Iterator {
+	begin := prefix
+	end := incrBytes(begin)
+	begin = append(begin, start...)
+
 	opts := C.rocksdb_readoptions_create()
+	lowerBound := b2c(begin)
+	C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(begin)))
+	upperBound := b2c(end)
+	C.rocksdb_readoptions_set_iterate_upper_bound(opts, upperBound, C.size_t(len(end)))
+	it := C.rocksdb_create_iterator(db.db, opts)
 	return &RDBIterator{
-		it:   it,
-		opts: opts,
+		it:         it,
+		opts:       opts,
+		lowerBound: begin,
+		upperBound: end,
 	}
 }
 
@@ -203,7 +213,7 @@ func (db *RDBDatabase) NewIteratorWithPrefix(prefix []byte) ethdb.Iterator {
 	lowerBound := b2c(start)
 	C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(start)))
 	upperBound := b2c(end)
-	C.rocksdb_readoptions_set_iterate_lower_bound(opts, upperBound, C.size_t(len(end)))
+	C.rocksdb_readoptions_set_iterate_upper_bound(opts, upperBound, C.size_t(len(end)))
 	it := C.rocksdb_create_iterator(db.db, opts)
 	return &RDBIterator{
 		it:         it,
