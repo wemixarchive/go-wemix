@@ -297,16 +297,16 @@ func (re *JSRE) getTxArgs(jtx string) (*SendTxArgs, error) {
 	}
 
 	fixNum := func(v interface{}) (*big.Int, error) {
-		switch v.(type) {
+		switch w := v.(type) {
 		case json.Number:
-			ui, err := v.(json.Number).Int64()
+			ui, err := w.Int64()
 			if err != nil {
 				return nil, err
 			} else {
 				return big.NewInt(ui), nil
 			}
 		case string:
-			bi, _ := new(big.Int).SetString(v.(string), 0)
+			bi, _ := new(big.Int).SetString(w, 0)
 			return bi, nil
 		default:
 			fmt.Printf("%T %v\n", v, v)
@@ -433,7 +433,7 @@ func (re *JSRE) offlineWalletSignTx(call otto.FunctionCall) otto.Value {
 		return otto.UndefinedValue()
 	} else {
 		_, stx, err := w.SignTx(accounts.DefaultBaseDerivationPath, tx,
-			big.NewInt(int64(chainID)))
+			big.NewInt(chainID))
 		if err != nil {
 			throwJSException(err)
 		}

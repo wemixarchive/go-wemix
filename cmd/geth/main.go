@@ -474,20 +474,18 @@ func limitMaxRss(max int64) {
 	interval := 10 * time.Second
 	timer := time.NewTimer(interval)
 	for {
-		select {
-		case <-timer.C:
-			rusage := syscall.Rusage{}
-			err := syscall.Getrusage(syscall.RUSAGE_SELF, &rusage)
-			if err != nil {
-				log.Error("Getrusage() failed:", "reason", err)
-			} else {
-				if rusage.Maxrss > max {
-					log.Info("Calling FreeOSMemory()", "Max", max, "Rusage.Maxrss", rusage.Maxrss)
-					godebug.FreeOSMemory()
-				}
+		<-timer.C
+		rusage := syscall.Rusage{}
+		err := syscall.Getrusage(syscall.RUSAGE_SELF, &rusage)
+		if err != nil {
+			log.Error("Getrusage() failed:", "reason", err)
+		} else {
+			if rusage.Maxrss > max {
+				log.Info("Calling FreeOSMemory()", "Max", max, "Rusage.Maxrss", rusage.Maxrss)
+				godebug.FreeOSMemory()
 			}
-			timer.Reset(interval)
 		}
+		timer.Reset(interval)
 	}
 }
 

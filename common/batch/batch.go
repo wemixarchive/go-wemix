@@ -69,8 +69,6 @@ func (b *Batch) Run() {
 
 		if !itstimer {
 			if ln == 0 {
-				lt = time.Now()
-				ln = len(data)
 				timer.Stop()
 				timer.Reset(b.toInterval)
 			} else if len(data) >= b.batchCount {

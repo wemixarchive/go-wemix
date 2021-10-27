@@ -63,8 +63,14 @@ geth:
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
 
-dbbench:
+dbbench: rocksdb
+ifeq ($(USE_ROCKSDB), NO)
 	$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/dbbench
+else
+	CGO_CFLAGS=-I$(ROCKSDB_DIR)/include \
+		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lrocksdb -lm -lstdc++ $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
+		$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/dbbench
+endif
 
 all:
 	$(GORUN) build/ci.go install
@@ -84,7 +90,7 @@ ios:
 test: all
 	$(GORUN) build/ci.go test
 
-lint: ## Run linters.
+lint: metadium/governance_abi.go ## Run linters.
 	$(GORUN) build/ci.go lint
 
 clean:
@@ -253,7 +259,7 @@ metadium/admin_abi.go: metadium/contracts/MetadiumAdmin-template.sol build/bin/s
 	rm -f /tmp/junk.$$$$;
 
 AWK_CODE_2='								     \
-BEGIN { print "package metadium"; }					     \
+BEGIN { print "package metadium\n"; }					     \
 /^var Registry_contract/ {						     \
   sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
   n = "Registry";							     \

@@ -42,7 +42,6 @@ func NewMsgQ(min, max int) *MsgQ {
 
 // Destroy is no-op for now
 func (q *MsgQ) Destroy() {
-	return
 }
 
 // CountOfSubscribers returns the number of current subscribers

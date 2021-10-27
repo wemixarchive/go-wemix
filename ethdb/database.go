@@ -19,8 +19,6 @@ package ethdb
 
 import (
 	"io"
-
-	//"github.com/ethereum/go-ethereum/ethdb/rocksdb"
 )
 
 // KeyValueReader wraps the Has and Get method of a backing data store.
@@ -143,7 +141,6 @@ type Database interface {
 
 func EnableStats(b bool) {
 	//rocksdb.EnableStats(b)
-	return
 }
 
 func Stats(device string) (disk_r_count, disk_r_bytes, disk_w_couhnt, disk_w_bytes, r_count, r_bytes, w_count, w_bytes, l_count, d_count uint64) {

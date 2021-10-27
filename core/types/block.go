@@ -67,25 +67,25 @@ func (n *BlockNonce) UnmarshalText(input []byte) error {
 
 // Header represents a block header in the Ethereum blockchain.
 type Header struct {
-	ParentHash   common.Hash     `json:"parentHash"       gencodec:"required"`
-	UncleHash    common.Hash     `json:"sha3Uncles"       gencodec:"required"`
-	Coinbase     common.Address  `json:"miner"            gencodec:"required"`
-	Root         common.Hash     `json:"stateRoot"        gencodec:"required"`
-	TxHash       common.Hash     `json:"transactionsRoot" gencodec:"required"`
-	ReceiptHash  common.Hash     `json:"receiptsRoot"     gencodec:"required"`
-	Bloom        Bloom           `json:"logsBloom"        gencodec:"required"`
-	Difficulty   *big.Int        `json:"difficulty"       gencodec:"required"`
-	Number       *big.Int        `json:"number"           gencodec:"required"`
-	GasLimit     uint64          `json:"gasLimit"         gencodec:"required"`
-	GasUsed      uint64          `json:"gasUsed"          gencodec:"required"`
-	Fees         *big.Int        `json:"fees"             gencodec:"required"`
-	Time         uint64          `json:"timestamp"        gencodec:"required"`
-	Extra        []byte          `json:"extraData"        gencodec:"required"`
-	Rewards	     []byte          `json:"rewards"          gencodec:"required"`
-	MixDigest    common.Hash     `json:"mixHash"`
-	Nonce        BlockNonce      `json:"nonce"`
-	MinerNodeId  []byte          `json:"minerNode"`
-	MinerNodeSig []byte          `json:"minerNodeSig"`
+	ParentHash   common.Hash    `json:"parentHash"       gencodec:"required"`
+	UncleHash    common.Hash    `json:"sha3Uncles"       gencodec:"required"`
+	Coinbase     common.Address `json:"miner"            gencodec:"required"`
+	Root         common.Hash    `json:"stateRoot"        gencodec:"required"`
+	TxHash       common.Hash    `json:"transactionsRoot" gencodec:"required"`
+	ReceiptHash  common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	Bloom        Bloom          `json:"logsBloom"        gencodec:"required"`
+	Difficulty   *big.Int       `json:"difficulty"       gencodec:"required"`
+	Number       *big.Int       `json:"number"           gencodec:"required"`
+	GasLimit     uint64         `json:"gasLimit"         gencodec:"required"`
+	GasUsed      uint64         `json:"gasUsed"          gencodec:"required"`
+	Fees         *big.Int       `json:"fees"             gencodec:"required"`
+	Time         uint64         `json:"timestamp"        gencodec:"required"`
+	Extra        []byte         `json:"extraData"        gencodec:"required"`
+	Rewards      []byte         `json:"rewards"          gencodec:"required"`
+	MixDigest    common.Hash    `json:"mixHash"`
+	Nonce        BlockNonce     `json:"nonce"`
+	MinerNodeId  []byte         `json:"minerNode"`
+	MinerNodeSig []byte         `json:"minerNodeSig"`
 
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
 	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`
@@ -100,7 +100,7 @@ type headerMarshaling struct {
 	Fees         *hexutil.Big
 	Time         hexutil.Uint64
 	Extra        hexutil.Bytes
-	Rewards	     hexutil.Bytes
+	Rewards      hexutil.Bytes
 	MinerNodeId  hexutil.Bytes
 	MinerNodeSig hexutil.Bytes
 	BaseFee      *hexutil.Big
@@ -315,8 +315,8 @@ func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
 func (b *Block) Rewards() []byte          { return common.CopyBytes(b.header.Rewards) }
 
-func (b *Block) MinerNodeId() []byte      { return b.header.MinerNodeId }
-func (b *Block) MinerNodeSig() []byte     { return b.header.MinerNodeSig }
+func (b *Block) MinerNodeId() []byte  { return b.header.MinerNodeId }
+func (b *Block) MinerNodeSig() []byte { return b.header.MinerNodeSig }
 
 func (b *Block) BaseFee() *big.Int {
 	if b.header.BaseFee == nil {

@@ -323,7 +323,7 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 	}
 	fmt.Printf("Initializing environment storage.\n")
 	envStorageImp.To = envStorage.To
-	if txs[0], err = metclient.SendContract(ctx, envStorageImp, "initialize", []interface{}(envDefaults)); err != nil {
+	if txs[0], err = metclient.SendContract(ctx, envStorageImp, "initialize", envDefaults); err != nil {
 		return err
 	}
 

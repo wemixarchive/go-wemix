@@ -65,14 +65,11 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 		abort := make(chan struct{})
 		found := make(chan *types.Block)
 		go ethash.mine(block, 0, uint64(ethash.rand.Int63()), abort, found)
-		var result *types.Block
+		result := <-found
 		select {
-		case result = <-found:
-			select {
-			case results <- result:
-			default:
-				ethash.config.Log.Warn("Sealing result is not read by miner", "sealhash", ethash.SealHash(block.Header()))
-			}
+		case results <- result:
+		default:
+			ethash.config.Log.Warn("Sealing result is not read by miner", "sealhash", ethash.SealHash(block.Header()))
 		}
 		return nil
 	}

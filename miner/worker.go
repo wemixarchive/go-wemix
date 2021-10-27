@@ -1112,7 +1112,7 @@ func (w *worker) ancestorTimes(num *big.Int) []int64 {
 //   1000     2000  2
 func (w *worker) throttleMining(ts []int64) (int64, int64) {
 	t := time.Now().Unix()
-	var dt, pt int64 = 0, t - ts[0]
+	dt, pt := int64(0), t-ts[0]
 
 	// 1000th
 	if dt = t - ts[5]; ts[5] > 0 && dt < 2000 {
@@ -1472,9 +1472,7 @@ func (w *worker) commitEx(uncles []*types.Header, interval func(), update bool, 
 		if err := w.engine.Seal(w.chain, block, resultCh, stopCh); err != nil {
 			log.Warn("Block sealing failed", "err", err)
 		} else {
-			select {
-			case sealedBlock = <-resultCh:
-			}
+			sealedBlock = <-resultCh
 		}
 		close(stopCh)
 		close(resultCh)

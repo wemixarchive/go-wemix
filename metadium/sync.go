@@ -224,7 +224,9 @@ func (ma *metaAdmin) updateMiner(locked bool) bool {
 
 			// check sync again
 			work, err = getLatestWork()
-			if work == nil {
+			if err != nil {
+				log.Error("Metadium - cannot get the latest work", "error", err)
+			} else if work == nil {
 				// this must be the first block, juts move on
 			} else if synced, _, height := inSync(work); !synced {
 				// if still not in sync, give up leadership

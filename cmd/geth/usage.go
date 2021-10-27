@@ -215,7 +215,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 		Flags: metricsFlags,
 	},
 	{
-		Name:  "METADIUM",
+		Name: "METADIUM",
 		Flags: []cli.Flag{
 			utils.ConsensusMethodFlag,
 			utils.FixedDifficultyFlag,

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math/big"
 	"path"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -289,21 +288,6 @@ func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNod
 	}
 
 	return miner, next, nodes
-}
-
-func isArray(x interface{}) bool {
-	if x == nil {
-		return false
-	}
-	y := reflect.TypeOf(x)
-	switch y.Kind() {
-	case reflect.Slice:
-		return true
-	case reflect.Array:
-		return true
-	default:
-		return false
-	}
 }
 
 // get nodes from the Governance contract
@@ -620,20 +604,20 @@ func (ma *metaAdmin) update() {
 		ma.nodes = _nodes
 
 		if len(data.addedNodes) > 0 {
-			log.Debug(fmt.Sprintf("Added:\n"))
+			log.Debug("Added:\n")
 			for _, i := range data.addedNodes {
 				log.Debug(fmt.Sprintf("%v\n", i))
 				ma.addPeer(i)
 			}
 		}
 		if len(data.addedNodes) > 0 {
-			log.Debug(fmt.Sprintf("Updated:\n"))
+			log.Debug("Updated:\n")
 			for _, i := range data.updatedNodes {
 				log.Debug(fmt.Sprintf("%v\n", i))
 			}
 		}
 		if len(data.addedNodes) > 0 {
-			log.Debug(fmt.Sprintf("Deleted:\n"))
+			log.Debug("Deleted:\n")
 			for _, i := range data.deletedNodes {
 				log.Debug(fmt.Sprintf("%v\n", i))
 			}
@@ -871,7 +855,6 @@ func distributeRewards(six int, rewardPoolAccount, maintenanceAccount *common.Ad
 	if maintenanceAccount != nil {
 		rewards[n].Addr = *maintenanceAccount
 		rewards[n].Reward = maintAmount
-		n++
 	}
 }
 
@@ -1142,7 +1125,7 @@ func (ma *metaAdmin) toMiningPeers(nodes []*metaNode) string {
 			bb.Write([]byte("/*"))
 		}
 	}
-	return string(bb.Bytes())
+	return bb.String()
 }
 
 func (ma *metaAdmin) miners() string {

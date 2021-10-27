@@ -134,9 +134,7 @@ func (ma *metaAdmin) etcdGetCluster() string {
 	}
 
 	var ms []*membership.Member
-	for _, i := range ma.etcd.Server.Cluster().Members() {
-		ms = append(ms, i)
-	}
+	ms = append(ms, ma.etcd.Server.Cluster().Members()...)
 	sort.Slice(ms, func(i, j int) bool {
 		return ms[i].Attributes.Name < ms[j].Attributes.Name
 	})
@@ -423,7 +421,7 @@ func (ma *metaAdmin) etcdLeader(locked bool) (uint64, *metaNode) {
 
 	lid := uint64(ma.etcd.Server.Leader())
 	for _, i := range rsp.Members {
-		if uint64(i.ID) == lid {
+		if i.ID == lid {
 			var node *metaNode
 			if !locked {
 				ma.lock.Lock()
@@ -510,9 +508,7 @@ func (ma *metaAdmin) etcdInfo() interface{} {
 
 	var ms []*etcdserverpb.Member
 	if err == nil {
-		for _, i := range rsp.Members {
-			ms = append(ms, i)
-		}
+		ms = append(ms, rsp.Members...)
 		sort.Slice(ms, func(i, j int) bool {
 			return ms[i].Name < ms[j].Name
 		})

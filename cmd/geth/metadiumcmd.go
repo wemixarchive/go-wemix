@@ -230,7 +230,7 @@ func newAccount(ctx *cli.Context) error {
 		return err
 	}
 
-	_, err = w.Write([]byte(keyjson))
+	_, err = w.Write(keyjson)
 	return err
 }
 
@@ -427,7 +427,7 @@ func genAdminContract(ctx *cli.Context) error {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		l := scanner.Text()
-		if strings.Index(l, "// To Be Substituted") < 0 {
+		if !strings.Contains(l, "// To Be Substituted") {
 			_, err = fmt.Fprintln(w, l)
 			if err != nil {
 				return err

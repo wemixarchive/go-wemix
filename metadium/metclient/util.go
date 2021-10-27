@@ -102,6 +102,9 @@ func LoadJsonContract(r io.Reader) (*ContractData, error) {
 	name = data.ContractName
 	if len(data.Bytecode) > 0 {
 		bytecode, err = hexutil.Decode(data.Bytecode)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	abiData, err = json.Marshal(data.Abi)
@@ -256,7 +259,7 @@ func Deploy(ctx context.Context, cli *ethclient.Client, from *keystore.Key,
 	}
 
 	var data []byte
-	if args == nil || len(args) == 0 {
+	if len(args) == 0 {
 		data = contractData.Bytecode
 	} else {
 		data, err = contractData.Abi.Pack("", args...)

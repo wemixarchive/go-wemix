@@ -1122,18 +1122,18 @@ func (srv *Server) PeersInfo() []*PeerInfo {
 
 // PeerInfo returns a collection of metadata known about the given node
 func (srv *Server) PeerInfo(id enode.ID) *PeerInfo {
-    var peer *Peer
-    select {
-    case srv.peerOp <- func(peers map[enode.ID]*Peer) {
-        peer, _ = peers[id]
-    }:
-        <- srv.peerOpDone
-    case <- srv.quit:
-    }
+	var peer *Peer
+	select {
+	case srv.peerOp <- func(peers map[enode.ID]*Peer) {
+		peer = peers[id]
+	}:
+		<-srv.peerOpDone
+	case <-srv.quit:
+	}
 
-    if peer == nil {
-        return nil
-    } else {
-        return peer.Info()
-    }
+	if peer == nil {
+		return nil
+	} else {
+		return peer.Info()
+	}
 }

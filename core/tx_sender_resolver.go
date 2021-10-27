@@ -3,10 +3,8 @@
 package core
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
@@ -54,6 +52,8 @@ func (s *SenderResolver) Run() {
 					j.f(j.param)
 				}()
 			}
+		default:
+			eor = true
 		}
 		if eor {
 			break
@@ -74,9 +74,8 @@ func (s *SenderResolver) Post(f func(interface{}), p interface{}) {
 // ResolveSenders resolves sender accounts from given transactions
 // concurrently using SenderResolver worker pool.
 func (pool *TxPool) ResolveSenders(signer types.Signer, txs []*types.Transaction) {
-	ot := time.Now()
 	s := pool.senderResolver
-	var total, by_ecrecover, failed int64 = int64(len(txs)), 0, 0
+	var by_ecrecover, failed int64
 
 	var wg sync.WaitGroup
 	for _, tx := range txs {
@@ -106,17 +105,6 @@ func (pool *TxPool) ResolveSenders(signer types.Signer, txs []*types.Transaction
 	}
 
 	wg.Wait()
-
-	if false && total > 1 {
-		dt := float64(time.Now().Sub(ot) / time.Millisecond)
-		if dt <= 0 {
-			dt = 1
-		}
-		ps := float64(total) * 1000.0 / dt
-		fmt.Printf("=== %d/%d/%d : took %.3f ms %.3f/sec %d\n", total, total-by_ecrecover, failed, dt, ps, s.tx2addr.Count())
-	}
-
-	return
 }
 
 // ResolveSender resolves sender address from a transaction
