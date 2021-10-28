@@ -37,27 +37,18 @@ func NewSenderResolver(concurrency, cacheSize int) *SenderResolver {
 
 // sender resolver main loop
 func (s *SenderResolver) Run() {
-	eor := false
 	for {
-		select {
-		case j := <-s.jobs:
-			if j == nil {
-				eor = true
-			} else {
-				go func() {
-					s.busy <- struct{}{}
-					defer func() {
-						<-s.busy
-					}()
-					j.f(j.param)
-				}()
-			}
-		default:
-			eor = true
-		}
-		if eor {
+		j, ok := <-s.jobs
+		if !ok || j == nil {
 			break
 		}
+		go func() {
+			s.busy <- struct{}{}
+			defer func() {
+				<-s.busy
+			}()
+			j.f(j.param)
+		}()
 	}
 }
 
