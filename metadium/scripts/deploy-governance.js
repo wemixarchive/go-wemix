@@ -100,7 +100,7 @@ var GovernanceDeployer = new function() {
             from: this.from,
             data: data,
             gas: this.gas,
-            gasPrice: this.gasPrice
+            gasPrice: this.gasPrice,
             nonce: this.nonce()
         }
         var stx = offlineWalletSignTx(this.wallet.id, tx, eth.chainId())
