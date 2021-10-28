@@ -79,13 +79,13 @@ func New(assetPath string, output io.Writer) *JSRE {
 	go re.runEventLoop()
 	re.Set("loadScript", MakeCallback(re.vm, re.loadScript))
 	re.Set("inspect", re.prettyPrintJS)
-	re.Set("loadFile", re.loadFile)
-	re.Set("msleep", re.msleep)
-	re.Set("offlineWalletOpen", re.offlineWalletOpen)
-	re.Set("offlineWalletAddress", re.offlineWalletAddress)
-	re.Set("offlineWalletClose", re.offlineWalletClose)
-	re.Set("offlineWalletSignTx", re.offlineWalletSignTx)
-	re.Set("offlineWalletList", re.offlineWalletList)
+	re.Set("loadFile", MakeCallback(re.vm, re.loadFile))
+	re.Set("msleep", MakeCallback(re.vm, re.msleep))
+	re.Set("offlineWalletOpen", MakeCallback(re.vm, re.offlineWalletOpen))
+	re.Set("offlineWalletAddress", MakeCallback(re.vm, re.offlineWalletAddress))
+	re.Set("offlineWalletClose", MakeCallback(re.vm, re.offlineWalletClose))
+	re.Set("offlineWalletSignTx", MakeCallback(re.vm, re.offlineWalletSignTx))
+	re.Set("offlineWalletList", MakeCallback(re.vm, re.offlineWalletList))
 	return re
 }
 
@@ -330,8 +330,8 @@ func (re *JSRE) loadFile(call Call) (goja.Value, error) {
 }
 
 // msleep sleeps in ms resolution
-func (re *JSRE) msleep(call Call) goja.Value {
+func (re *JSRE) msleep(call Call) (goja.Value, error) {
 	delay := call.Argument(0).ToInteger()
 	time.Sleep(time.Duration(delay) * time.Millisecond)
-	return re.vm.ToValue(true)
+	return re.vm.ToValue(true), nil
 }
