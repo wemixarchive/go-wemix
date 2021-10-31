@@ -18,7 +18,6 @@ package eth
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"math/big"
 	"sync"
@@ -538,7 +537,7 @@ func (h *handler) txBroadcastLoop() {
 
 // RequestMinerStatus sends GetStatusExMsg to the given peer
 func (h *handler) RequestMinerStatus(id enode.ID) error {
-	if p := h.peers.peer(fmt.Sprintf("%x", id[:8])); p != nil {
+	if p := h.peers.peer(id.String()); p != nil {
 		return p.RequestStatusEx()
 	} else {
 		return ethereum.NotFound
@@ -547,7 +546,7 @@ func (h *handler) RequestMinerStatus(id enode.ID) error {
 
 // RequestEtcdAddMember is an internal protocol level command to add a node to the etcd cluster
 func (h *handler) RequestEtcdAddMember(id enode.ID) error {
-	if p := h.peers.peer(fmt.Sprintf("%x", id[:8])); p != nil {
+	if p := h.peers.peer(id.String()); p != nil {
 		return p.RequestEtcdAddMember()
 	} else {
 		return ethereum.NotFound

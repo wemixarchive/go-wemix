@@ -24,6 +24,7 @@ import (
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -402,6 +403,32 @@ func (p *Peer) ReplyReceiptsRLP(id uint64, receipts []rlp.RawValue) error {
 	})
 }
 
+// SendStatusEx sends this node's miner status
+func (p *Peer) SendStatusEx(status *metaapi.MetadiumMinerStatus) error {
+	return p2p.Send(p.rw, StatusExMsg, status)
+}
+
+// ReplyStatusEx is the eth/66 response to GetStatusEx
+func (p *Peer) ReplyStatusEx(id uint64, status *metaapi.MetadiumMinerStatus) error {
+	return p2p.Send(p.rw, StatusExMsg, StatusExPacket66{
+		RequestId:      id,
+		StatusExPacket: StatusExPacket(*status),
+	})
+}
+
+// SendEtcdCluster sends this node's etcd cluster
+func (p *Peer) SendEtcdCluster(cluster string) error {
+	return p2p.Send(p.rw, EtcdClusterMsg, cluster)
+}
+
+// ReplyEtcdCluster is the eth/66 response to EtcdAddMember
+func (p *Peer) ReplyEtcdCluster(id uint64, cluster string) error {
+	return p2p.Send(p.rw, EtcdClusterMsg, EtcdClusterPacket66{
+		RequestId:         id,
+		EtcdClusterPacket: EtcdClusterPacket(cluster),
+	})
+}
+
 // RequestOneHeader is a wrapper around the header query functions to fetch a
 // single header. It is used solely by the fetcher.
 func (p *Peer) RequestOneHeader(hash common.Hash) error {
@@ -545,11 +572,17 @@ func (p *Peer) RequestTxs(hashes []common.Hash) error {
 // RequestStatusEx fetches extended status of the peer
 func (p *Peer) RequestStatusEx() error {
 	p.Log().Debug("Fetching extended status")
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetStatusExMsg, StatusExMsg, id)
 	return p2p.Send(p.rw, GetStatusExMsg, common.Big1)
 }
 
 // RequestEtcdAddMember requests the peer to add this node to the cluster
 func (p *Peer) RequestEtcdAddMember() error {
 	p.Log().Debug("Trying to join etcd network")
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, EtcdAddMemberMsg, EtcdClusterMsg, id)
 	return p2p.Send(p.rw, EtcdAddMemberMsg, common.Big1)
 }

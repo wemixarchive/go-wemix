@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
+	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -70,12 +71,12 @@ const (
 	PooledTransactionsMsg         = 0x0a
 
 	// Added by Metadium, meta/64
-	GetPendingTxsMsg = 0x11
-	GetStatusExMsg   = 0x12
-	StatusExMsg      = 0x13
-	EtcdAddMemberMsg = 0x14
-	EtcdClusterMsg   = 0x15
-	TxExMsg          = 0x16
+	GetPendingTxsMsg  = 0x11
+	GetStatusExMsg    = 0x12
+	StatusExMsg       = 0x13
+	EtcdAddMemberMsg  = 0x14
+	EtcdClusterMsg    = 0x15
+	TransactionsExMsg = 0x16
 )
 
 var (
@@ -127,6 +128,9 @@ func (p *NewBlockHashesPacket) Unpack() ([]common.Hash, []uint64) {
 
 // TransactionsPacket is the network packet for broadcasting new transactions.
 type TransactionsPacket []*types.Transaction
+
+// TransactionsExPacket is the network packet for broadcasting new extended transactions.
+type TransactionsExPacket []*types.TransactionEx
 
 // GetBlockHeadersPacket represents a block header query.
 type GetBlockHeadersPacket struct {
@@ -329,6 +333,42 @@ type PooledTransactionsRLPPacket66 struct {
 	PooledTransactionsRLPPacket
 }
 
+// GetStatusExPacket is the network packet for GetStatusEx
+type GetStatusExPacket int
+
+// GetStatusExPacket66 is the eth/66 form of GetSTatusExPacket
+type GetStatusExPacket66 struct {
+	RequestId uint64
+	GetStatusExPacket
+}
+
+// StatusExPacket is the network packet for extended status of a node
+type StatusExPacket metaapi.MetadiumMinerStatus
+
+// StatusExPacket66 is the eth/66 form of StatusExPacket
+type StatusExPacket66 struct {
+	RequestId uint64
+	StatusExPacket
+}
+
+// EtcdAddMemberPacket is the netowkr packet for EtcdAddMember
+type EtcdAddMemberPacket int
+
+// EtcdAddMemberPacket66 is the eth/66 form of EtcdAddMember
+type EtcdAddMemberPacket66 struct {
+	RequestId uint64
+	EtcdAddMemberPacket
+}
+
+// EtcdClusterPacket is the network packet for EtcdAddMember / EtcdCluster exchange
+type EtcdClusterPacket string
+
+// EtcdClusterPacket66 is the eth/66 form of EtcdClusterPacket
+type EtcdClusterPacket66 struct {
+	RequestId uint64
+	EtcdClusterPacket
+}
+
 func (*StatusPacket) Name() string { return "Status" }
 func (*StatusPacket) Kind() byte   { return StatusMsg }
 
@@ -337,6 +377,9 @@ func (*NewBlockHashesPacket) Kind() byte   { return NewBlockHashesMsg }
 
 func (*TransactionsPacket) Name() string { return "Transactions" }
 func (*TransactionsPacket) Kind() byte   { return TransactionsMsg }
+
+func (*TransactionsExPacket) Name() string { return "TransactionsEx" }
+func (*TransactionsExPacket) Kind() byte   { return TransactionsExMsg }
 
 func (*GetBlockHeadersPacket) Name() string { return "GetBlockHeaders" }
 func (*GetBlockHeadersPacket) Kind() byte   { return GetBlockHeadersMsg }
@@ -373,3 +416,15 @@ func (*GetPooledTransactionsPacket) Kind() byte   { return GetPooledTransactions
 
 func (*PooledTransactionsPacket) Name() string { return "PooledTransactions" }
 func (*PooledTransactionsPacket) Kind() byte   { return PooledTransactionsMsg }
+
+func (*GetStatusExPacket) Name() string { return "GetStatusEx" }
+func (*GetStatusExPacket) Kind() byte   { return GetStatusExMsg }
+
+func (*StatusExPacket) Name() string { return "StatusEx" }
+func (*StatusExPacket) Kind() byte   { return StatusExMsg }
+
+func (*EtcdAddMemberPacket) Name() string { return "EtcdAddMember" }
+func (*EtcdAddMemberPacket) Kind() byte   { return EtcdAddMemberMsg }
+
+func (*EtcdClusterPacket) Name() string { return "EtcdCluster" }
+func (*EtcdClusterPacket) Kind() byte   { return EtcdClusterMsg }

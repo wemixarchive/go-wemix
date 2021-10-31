@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -475,6 +476,33 @@ func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
 		peer.markTransaction(tx.Hash())
 	}
 	return backend.Handle(peer, &txs)
+}
+
+func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
+	// Transactions arrived, make sure we have a valid and fresh chain to handle them
+	if !backend.AcceptTxs() {
+		return nil
+	}
+	// Transactions can be processed, parse all of them and deliver to the pool
+	var txexs TransactionsExPacket
+	if err := msg.Decode(&txexs); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+
+	go func() error {
+		signer := types.MakeSigner(backend.Chain().Config(), backend.Chain().CurrentBlock().Number())
+		txs := types.TxExs2Txs(signer, txexs, metaminer.IsPartner(peer.ID()))
+		for i, tx := range txs {
+			// Validate and mark the remote transaction
+			if tx == nil {
+				return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+			}
+			peer.markTransaction(tx.Hash())
+		}
+		txsp := TransactionsPacket(txs)
+		return backend.Handle(peer, &txsp)
+	}()
+	return nil
 }
 
 func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
