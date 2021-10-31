@@ -52,7 +52,7 @@ func (ma *metaAdmin) getLatestBlockInfo(node *metaNode) (height *big.Int, hash c
 			if !ok {
 				continue
 			}
-			if s.Name != node.Name {
+			if s.NodeName != node.Name {
 				continue
 			}
 			height, hash, td, err = s.LatestBlockHeight, s.LatestBlockHash, s.LatestBlockTd, nil

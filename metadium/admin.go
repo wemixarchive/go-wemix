@@ -1192,7 +1192,7 @@ func getMinerStatus() *metaapi.MetadiumMinerStatus {
 	defer admin.lock.Unlock()
 
 	return &metaapi.MetadiumMinerStatus{
-		Name:              admin.self.Name,
+		NodeName:          admin.self.Name,
 		Enode:             admin.self.Enode,
 		Id:                admin.self.Id,
 		Addr:              fmt.Sprintf("%s:%d", admin.self.Ip, admin.self.Port),
@@ -1233,12 +1233,12 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 
 	getDownStatus := func(node *metaNode) *metaapi.MetadiumMinerStatus {
 		return &metaapi.MetadiumMinerStatus{
-			Name:   node.Name,
-			Enode:  node.Enode,
-			Id:     node.Id,
-			Addr:   fmt.Sprintf("%s:%d", node.Ip, node.Port),
-			Status: "down",
-			RttMs:  big0,
+			NodeName: node.Name,
+			Enode:    node.Enode,
+			Id:       node.Id,
+			Addr:     fmt.Sprintf("%s:%d", node.Ip, node.Port),
+			Status:   "down",
+			RttMs:    big0,
 		}
 	}
 
@@ -1312,11 +1312,11 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 			if !ok {
 				continue
 			}
-			if n, exists := peers[s.Name]; exists {
+			if n, exists := peers[s.NodeName]; exists {
 				s.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
 				miners = append(miners, s)
 				if n != nil {
-					peers[s.Name] = nil
+					peers[s.NodeName] = nil
 					count--
 					if count <= 0 {
 						done = true
@@ -1338,7 +1338,7 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 
 	if len(miners) > 1 {
 		sort.Slice(miners, func(i, j int) bool {
-			return miners[i].Name < miners[j].Name
+			return miners[i].NodeName < miners[j].NodeName
 		})
 	}
 	return miners
