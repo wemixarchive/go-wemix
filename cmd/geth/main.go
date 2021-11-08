@@ -139,6 +139,7 @@ var (
 		utils.NodeKeyHexFlag,
 		utils.DNSDiscoveryFlag,
 		utils.MainnetFlag,
+		utils.MetaTestnetFlag,
 		utils.DeveloperFlag,
 		utils.DeveloperPeriodFlag,
 		utils.RopstenFlag,
@@ -299,6 +300,9 @@ func main() {
 func prepare(ctx *cli.Context) {
 	// If we're running a known preset, log it for convenience.
 	switch {
+	case ctx.GlobalIsSet(utils.MetaTestnetFlag.Name):
+		log.Info("Starting Geth on Metadium testnet...")
+
 	case ctx.GlobalIsSet(utils.RopstenFlag.Name):
 		log.Info("Starting Geth on Ropsten testnet...")
 

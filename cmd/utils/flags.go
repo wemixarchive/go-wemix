@@ -136,15 +136,15 @@ var (
 	}
 	NetworkIdFlag = cli.Uint64Flag{
 		Name:  "networkid",
-		Usage: "Explicitly set network id (integer, 11=Metadium, 12=MetadiumTestnet)(For testnets: use --ropsten, --rinkeby, --goerli instead)",
+		Usage: "Explicitly set network id (integer, 11=Metadium, 12=MetadiumTestnet)(For testnets: use --meta-testnet --ropsten, --rinkeby, --goerli instead)",
 		Value: ethconfig.Defaults.NetworkId,
 	}
 	MainnetFlag = cli.BoolFlag{
 		Name:  "mainnet",
 		Usage: "Ethereum mainnet",
 	}
-	TestnetFlag = cli.BoolFlag{
-		Name:  "testnet",
+	MetaTestnetFlag = cli.BoolFlag{
+		Name:  "meta-testnet",
 		Usage: "Metadium test network: pre-configured metadium test network",
 	}
 	GoerliFlag = cli.BoolFlag{
@@ -900,7 +900,7 @@ func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
 	switch {
 	case ctx.GlobalIsSet(BootnodesFlag.Name):
 		urls = SplitAndTrim(ctx.GlobalString(BootnodesFlag.Name))
-	case ctx.GlobalBool(TestnetFlag.Name):
+	case ctx.GlobalBool(MetaTestnetFlag.Name):
 		urls = params.MetadiumTestnetBootnodes
 	case ctx.GlobalBool(RopstenFlag.Name):
 		urls = params.RopstenBootnodes
@@ -1536,7 +1536,7 @@ func CheckExclusive(ctx *cli.Context, args ...interface{}) {
 // SetEthConfig applies eth-related command line flags to the config.
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	// Avoid conflicting network flags
-	CheckExclusive(ctx, MainnetFlag, DeveloperFlag, RopstenFlag, RinkebyFlag, GoerliFlag)
+	CheckExclusive(ctx, MainnetFlag, MetaTestnetFlag, DeveloperFlag, RopstenFlag, RinkebyFlag, GoerliFlag)
 	CheckExclusive(ctx, LightServeFlag, SyncModeFlag, "light")
 	CheckExclusive(ctx, DeveloperFlag, ExternalSignerFlag) // Can't use both ephemeral unlocked and external signer
 	if ctx.GlobalString(GCModeFlag.Name) == "archive" && ctx.GlobalUint64(TxLookupLimitFlag.Name) != 0 {
@@ -1671,7 +1671,7 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		}
 		cfg.Genesis = core.DefaultGenesisBlock()
 		SetDNSDiscoveryDefaults(cfg, params.MetadiumMainnetGenesisHash)
-	case ctx.GlobalBool(TestnetFlag.Name):
+	case ctx.GlobalBool(MetaTestnetFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 12
 		}
@@ -1948,6 +1948,8 @@ func MakeGenesis(ctx *cli.Context) *core.Genesis {
 	switch {
 	case ctx.GlobalBool(MainnetFlag.Name):
 		genesis = core.DefaultGenesisBlock()
+	case ctx.GlobalBool(MetaTestnetFlag.Name):
+		genesis = core.DefaultTestnetGenesisBlock()
 	case ctx.GlobalBool(RopstenFlag.Name):
 		genesis = core.DefaultRopstenGenesisBlock()
 	case ctx.GlobalBool(RinkebyFlag.Name):
