@@ -552,3 +552,16 @@ func (h *handler) RequestEtcdAddMember(id enode.ID) error {
 		return ethereum.NotFound
 	}
 }
+
+func (h *handler) SynchroniseWith(id enode.ID) error {
+	if p := h.peers.peer(id.String()); p != nil {
+		if op, err := h.chainSync.peerSyncOp(p.Peer); err != nil {
+			return err
+		} else if op != nil {
+			return h.doSync(op)
+		}
+		return nil
+	} else {
+		return ethereum.NotFound
+	}
+}

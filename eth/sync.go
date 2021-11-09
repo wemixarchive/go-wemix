@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"errors"
 	"math/big"
 	"math/rand"
 	"sync/atomic"
@@ -269,6 +270,27 @@ func (cs *chainSyncer) nextSyncOp() *chainSyncOp {
 		return nil // We're in sync.
 	}
 	return op
+}
+
+func (cs *chainSyncer) peerSyncOp(p *eth.Peer) (*chainSyncOp, error) {
+	if cs.doneCh != nil {
+		// Sync already running
+		return nil, errors.New("sync already in progress")
+	} else if metaminer.AmPartner() && !metaminer.IsPartner(p.ID()) {
+		return nil, errors.New("not a miner")
+	}
+
+	mode, ourTD := cs.modeAndLocalHead()
+	if mode == downloader.FastSync && atomic.LoadUint32(&cs.handler.snapSync) == 1 {
+		// Fast sync via the snap protocol
+		mode = downloader.SnapSync
+	}
+	op := peerToSyncOp(mode, p)
+	if op.td.Cmp(ourTD) <= 0 {
+		// We're in sync.
+		return nil, nil
+	}
+	return op, nil
 }
 
 func peerToSyncOp(mode downloader.SyncMode, p *eth.Peer) *chainSyncOp {

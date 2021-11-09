@@ -318,6 +318,11 @@ func (api *PrivateAdminAPI) EtcdDeleteWork() error {
 	return metaapi.EtcdDeleteWork()
 }
 
+// Synchronize with the given peer
+func (api *PrivateAdminAPI) SynchroniseWith(id enode.ID) error {
+	return api.eth.handler.SynchroniseWith(id)
+}
+
 // PublicDebugAPI is the collection of Ethereum full node APIs exposed
 // over the public debugging endpoint.
 type PublicDebugAPI struct {
