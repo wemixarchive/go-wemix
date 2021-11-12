@@ -428,7 +428,7 @@ func TxExs2Txs(signer Signer, txs []*TransactionEx, trustIt bool) []*Transaction
 
 // EncodeRLP implements rlp.Encoder
 func (tx *TransactionEx) EncodeRLP(w io.Writer) error {
-	if err := rlp.Encode(w, &tx.Tx.inner); err != nil {
+	if err := tx.Tx.EncodeRLP(w); err != nil {
 		return err
 	}
 	var from common.Address
@@ -441,12 +441,8 @@ func (tx *TransactionEx) EncodeRLP(w io.Writer) error {
 // DecodeRLP implements rlp.Decoder
 func (tx *TransactionEx) DecodeRLP(s *rlp.Stream) error {
 	tx.Tx = &Transaction{}
-	_, size, _ := s.Kind()
-	err := s.Decode(&tx.Tx.inner)
-	if err != nil {
+	if err := tx.Tx.DecodeRLP(s); err != nil {
 		return err
-	} else {
-		tx.Tx.size.Store(common.StorageSize(rlp.ListSize(size)))
 	}
 	return s.Decode(&tx.From)
 }
