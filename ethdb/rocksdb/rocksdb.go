@@ -1,4 +1,5 @@
 // rocksdb.go
+//go:build rocksdb
 // +build rocksdb
 
 package rocksdb
@@ -35,6 +36,7 @@ type RDBDatabase struct {
 type RDBIterator struct {
 	it         *C.rocksdb_iterator_t
 	opts       *C.rocksdb_readoptions_t
+	first      bool
 	lowerBound []byte
 	upperBound []byte
 }
@@ -163,17 +165,24 @@ func (db *RDBDatabase) NewIterator(prefix, start []byte) ethdb.Iterator {
 	begin = append(begin, start...)
 
 	opts := C.rocksdb_readoptions_create()
-	lowerBound := b2c(begin)
-	C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(begin)))
-	upperBound := b2c(end)
-	C.rocksdb_readoptions_set_iterate_upper_bound(opts, upperBound, C.size_t(len(end)))
-	it := C.rocksdb_create_iterator(db.db, opts)
-	return &RDBIterator{
-		it:         it,
-		opts:       opts,
-		lowerBound: begin,
-		upperBound: end,
+	if len(begin) > 0 {
+		lowerBound := b2c(begin)
+		C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(begin)))
+		upperBound := b2c(end)
+		C.rocksdb_readoptions_set_iterate_upper_bound(opts, upperBound, C.size_t(len(end)))
 	}
+	it := C.rocksdb_create_iterator(db.db, opts)
+	C.rocksdb_iter_seek_to_first(it)
+	rit := &RDBIterator{
+		it:    it,
+		opts:  opts,
+		first: true,
+	}
+	if len(begin) > 0 {
+		rit.lowerBound = begin
+		rit.upperBound = end
+	}
+	return rit
 }
 
 func (db *RDBDatabase) NewIteratorWithStart(start []byte) ethdb.Iterator {
@@ -181,10 +190,32 @@ func (db *RDBDatabase) NewIteratorWithStart(start []byte) ethdb.Iterator {
 	lowerBound := b2c(start)
 	C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(start)))
 	it := C.rocksdb_create_iterator(db.db, opts)
+	C.rocksdb_iter_seek_to_first(it)
 	return &RDBIterator{
 		it:         it,
 		opts:       opts,
+		first:      true,
 		lowerBound: start,
+	}
+}
+
+func (db *RDBDatabase) NewIteratorWithPrefix(prefix []byte) ethdb.Iterator {
+	start := prefix
+	end := incrBytes(start)
+
+	opts := C.rocksdb_readoptions_create()
+	lowerBound := b2c(start)
+	C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(start)))
+	upperBound := b2c(end)
+	C.rocksdb_readoptions_set_iterate_upper_bound(opts, upperBound, C.size_t(len(end)))
+	it := C.rocksdb_create_iterator(db.db, opts)
+	C.rocksdb_iter_seek_to_first(it)
+	return &RDBIterator{
+		it:         it,
+		opts:       opts,
+		first:      true,
+		lowerBound: start,
+		upperBound: end,
 	}
 }
 
@@ -205,34 +236,20 @@ func incrBytes(bz []byte) []byte {
 	return nil
 }
 
-func (db *RDBDatabase) NewIteratorWithPrefix(prefix []byte) ethdb.Iterator {
-	start := prefix
-	end := incrBytes(start)
-
-	opts := C.rocksdb_readoptions_create()
-	lowerBound := b2c(start)
-	C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(start)))
-	upperBound := b2c(end)
-	C.rocksdb_readoptions_set_iterate_upper_bound(opts, upperBound, C.size_t(len(end)))
-	it := C.rocksdb_create_iterator(db.db, opts)
-	return &RDBIterator{
-		it:         it,
-		opts:       opts,
-		lowerBound: start,
-		upperBound: end,
-	}
-}
-
 func (it *RDBIterator) Next() bool {
-	if C.rocksdb_iter_valid(it.it) == 0 {
-		return false
+	if it.first {
+		it.first = false
+	} else {
+		C.rocksdb_iter_next(it.it)
 	}
-	C.rocksdb_iter_next(it.it)
 	return C.rocksdb_iter_valid(it.it) != 0
 }
 
 func (it *RDBIterator) Error() error {
 	var cerr *C.char
+	if it.it == nil {
+		return nil
+	}
 	C.rocksdb_iter_get_error(it.it, &cerr)
 	if cerr != nil {
 		err := errors.New(C.GoString(cerr))
