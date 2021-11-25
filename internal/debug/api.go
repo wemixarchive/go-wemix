@@ -199,7 +199,7 @@ func (*HandlerT) Stacks() string {
 	return buf.String()
 }
 
-// FreeOSMemory returns unused memory to the OS.
+// FreeOSMemory forces a garbage collection.
 func (*HandlerT) FreeOSMemory() {
 	debug.FreeOSMemory()
 }
@@ -245,7 +245,7 @@ func (*HandlerT) DbStats(device string, b interface{}) []uint64 {
 	}
 
 	disk_r_count, disk_r_bytes, disk_w_count, disk_w_bytes, r_count, r_bytees, w_count, w_bytes, l_count, d_count := ethdb.Stats(device)
-	return []uint64{ disk_r_count, disk_r_bytes, disk_w_count, disk_w_bytes, r_count, r_bytees, w_count, w_bytes, l_count, d_count }
+	return []uint64{disk_r_count, disk_r_bytes, disk_w_count, disk_w_bytes, r_count, r_bytees, w_count, w_bytes, l_count, d_count}
 }
 
 func (*HandlerT) VerifyBlockRewards(block *big.Int) interface{} {

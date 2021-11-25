@@ -169,7 +169,7 @@ function start ()
     [ "$PORT" = "" ] || RPCOPT="${RPCOPT} --rpcport ${PORT}"
     [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
     [ "$BOOT_NODES" = "" ] || BOOT_NODES="--bootnodes $BOOT_NODES"
-    [ "$TESTNET" = "1" ] && TESTNET=--testnet
+    [ "$TESTNET" = "1" ] && TESTNET=--meta-testnet
     if [ "$DISCOVER" = "0" ]; then
 	DISCOVER=--nodiscover
     else

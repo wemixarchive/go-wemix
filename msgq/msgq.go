@@ -42,7 +42,6 @@ func NewMsgQ(min, max int) *MsgQ {
 
 // Destroy is no-op for now
 func (q *MsgQ) Destroy() {
-	return
 }
 
 // CountOfSubscribers returns the number of current subscribers
@@ -211,6 +210,7 @@ func (q *MsgQ) Unsubscribe(name string) error {
 	return err
 }
 
+//nolint:deadcode
 // msgq test
 func msgqTest() error {
 	q := NewMsgQ(10, 100)

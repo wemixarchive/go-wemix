@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dop251/goja"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -22,10 +23,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/pborman/uuid"
-	"github.com/robertkrimen/otto"
 )
 
 var (
@@ -64,17 +63,6 @@ type offlineWallet interface {
 type gethAccount struct {
 	id  string
 	key *keystore.Key
-}
-
-// copied from 'console' package.
-// throwJSException panics on an otto.Value. The Otto VM will recover from the
-// Go panic and throw msg as a JavaScript error.
-func throwJSException(err error) otto.Value {
-	val, err2 := otto.ToValue(err.Error())
-	if err2 != nil {
-		log.Error("Failed to serialize JavaScript exception", "exception", err, "err", err2)
-	}
-	panic(val)
 }
 
 // id is sha3 of random uuid
@@ -165,20 +153,17 @@ func openUsbWallet(scheme, path string) (string, *common.Address, error) {
 	offlineWallets[id] = drv
 	addr, err := drv.Derive(accounts.DefaultBaseDerivationPath)
 	if err != nil {
-		throwJSException(err)
+		return "", nil, err
 	}
 	return id, &addr, nil
 }
 
 // { "id": string, "address": address } offlneWalletOpen(string url, string password)
-func (re *JSRE) offlineWalletOpen(call otto.FunctionCall) otto.Value {
-	rawurl, err := call.Argument(0).ToString()
-	if err != nil {
-		throwJSException(err)
-	}
+func (re *JSRE) offlineWalletOpen(call Call) (goja.Value, error) {
+	rawurl := call.Argument(0).ToString().String()
 	password := ""
-	if call.Argument(1).IsString() {
-		password, _ = call.Argument(1).ToString()
+	if len(call.Arguments) >= 2 && call.Argument(1).ToString() != nil {
+		password = call.Argument(1).ToString().String()
 	}
 
 	offlineWalletLock.Lock()
@@ -186,7 +171,7 @@ func (re *JSRE) offlineWalletOpen(call otto.FunctionCall) otto.Value {
 
 	u, err := url.Parse(rawurl)
 	if err != nil {
-		throwJSException(err)
+		return nil, err
 	}
 
 	path := u.Path
@@ -199,86 +184,62 @@ func (re *JSRE) offlineWalletOpen(call otto.FunctionCall) otto.Value {
 	case "", "geth", "gmet":
 		id, addr, err := loadGethAccount(password, path)
 		if err != nil {
-			throwJSException(err)
+			return nil, err
 		} else {
 			r := map[string]string{
 				"id":      id,
 				"address": addr.Hex(),
 			}
-			env := otto.New()
-			v, err := env.ToValue(r)
-			if err != nil {
-				throwJSException(err)
-			}
-			return v
+			return re.vm.ToValue(r), nil
 		}
 	case "ledger", "trezor":
 		id, addr, err := openUsbWallet(u.Scheme, path)
 		if err != nil {
-			throwJSException(err)
+			return nil, err
 		} else {
 			r := map[string]string{
 				"id":      id,
 				"address": addr.Hex(),
 			}
-			env := otto.New()
-			v, err := env.ToValue(r)
-			if err != nil {
-				throwJSException(err)
-			}
-			return v
+			return re.vm.ToValue(r), nil
 		}
 	default:
 		// not supported
-		throwJSException(errors.New("Not Supported"))
+		return nil, errors.New("Not Supported")
 	}
-	return otto.UndefinedValue()
 }
 
 // address offlneWalletAddress(string id)
-func (re *JSRE) offlineWalletAddress(call otto.FunctionCall) otto.Value {
-	id, err := call.Argument(0).ToString()
-	if err != nil {
-		throwJSException(err)
-	}
+func (re *JSRE) offlineWalletAddress(call Call) (goja.Value, error) {
+	id := call.Argument(0).ToString().String()
 
 	offlineWalletLock.Lock()
 	w, ok := offlineWallets[id]
 	offlineWalletLock.Unlock()
 
 	if !ok {
-		throwJSException(ethereum.NotFound)
-		return otto.UndefinedValue()
+		return nil, ethereum.NotFound
 	} else {
 		addr, err := w.Derive(accounts.DefaultBaseDerivationPath)
 		if err != nil {
-			throwJSException(err)
+			return nil, err
 		}
-		v, err := otto.ToValue(addr.Hex())
-		if err != nil {
-			throwJSException(err)
-		}
-		return v
+		return re.vm.ToValue(addr.Hex()), nil
 	}
 }
 
 // address offlneWalletClose(string id)
-func (re *JSRE) offlineWalletClose(call otto.FunctionCall) otto.Value {
-	id, err := call.Argument(0).ToString()
-	if err != nil {
-		throwJSException(err)
-	}
-
+func (re *JSRE) offlineWalletClose(call Call) (goja.Value, error) {
+	id := call.Argument(0).ToString().String()
 	offlineWalletLock.Lock()
 	defer offlineWalletLock.Unlock()
 
 	if w, ok := offlineWallets[id]; !ok {
-		throwJSException(ethereum.NotFound)
-		return otto.FalseValue()
+		return re.vm.ToValue(false), nil
 	} else {
 		delete(offlineWallets, id)
 		w.Close()
-		return otto.TrueValue()
+		return re.vm.ToValue(true), nil
 	}
 }
 
@@ -297,16 +258,16 @@ func (re *JSRE) getTxArgs(jtx string) (*SendTxArgs, error) {
 	}
 
 	fixNum := func(v interface{}) (*big.Int, error) {
-		switch v.(type) {
+		switch w := v.(type) {
 		case json.Number:
-			ui, err := v.(json.Number).Int64()
+			ui, err := w.Int64()
 			if err != nil {
 				return nil, err
 			} else {
 				return big.NewInt(ui), nil
 			}
 		case string:
-			bi, _ := new(big.Int).SetString(v.(string), 0)
+			bi, _ := new(big.Int).SetString(w, 0)
 			return bi, nil
 		default:
 			fmt.Printf("%T %v\n", v, v)
@@ -382,31 +343,22 @@ func (re *JSRE) getTxArgs(jtx string) (*SendTxArgs, error) {
 }
 
 // []byte offlineWalletSignTx(string id, transaction tx, chainID int)
-func (re *JSRE) offlineWalletSignTx(call otto.FunctionCall) otto.Value {
-	id, err := call.Argument(0).ToString()
-	if err != nil {
-		throwJSException(err)
-	}
-	chainID, err := call.Argument(2).ToInteger()
-	if err != nil {
-		throwJSException(err)
-	}
+func (re *JSRE) offlineWalletSignTx(call Call) (goja.Value, error) {
+	id := call.Argument(0).ToString().String()
+	chainID := call.Argument(2).ToInteger()
 
 	var (
 		tx    *types.Transaction
 		input []byte
 	)
 
-	// javascript json object -> string -> jsTx -> types.Transaction
-	JSON, _ := call.Otto.Object("JSON")
-	jtx, err := JSON.Call("stringify", call.Argument(1))
+	jtx, err := call.Argument(1).ToObject(re.vm).MarshalJSON()
 	if err != nil {
-		throwJSException(err)
+		return nil, err
 	}
-
-	txargs, err := re.getTxArgs(jtx.String())
+	txargs, err := re.getTxArgs(string(jtx))
 	if err != nil {
-		throwJSException(err)
+		return nil, err
 	}
 
 	if txargs.Data != nil {
@@ -429,41 +381,31 @@ func (re *JSRE) offlineWalletSignTx(call otto.FunctionCall) otto.Value {
 	offlineWalletLock.Unlock()
 
 	if !ok {
-		throwJSException(ethereum.NotFound)
-		return otto.UndefinedValue()
+		return nil, ethereum.NotFound
 	} else {
 		_, stx, err := w.SignTx(accounts.DefaultBaseDerivationPath, tx,
-			big.NewInt(int64(chainID)))
+			big.NewInt(chainID))
 		if err != nil {
-			throwJSException(err)
+			return nil, err
 		}
 		data, err := rlp.EncodeToBytes(stx)
 		if err != nil {
-			throwJSException(err)
+			return nil, err
 		}
-		v, err := otto.ToValue(hexutil.Encode(data))
-		if err != nil {
-			throwJSException(err)
-		}
-		return v
+		return re.vm.ToValue(hexutil.Encode(data)), nil
 	}
 }
 
 // offlineWalletList returns the array of ledger or trezor device paths
 // for mostly informational use
-func (re *JSRE) offlineWalletList(call otto.FunctionCall) otto.Value {
+func (re *JSRE) offlineWalletList(call Call) (goja.Value, error) {
 	scheme := ""
-	if call.Argument(0).IsString() {
-		scheme, _ = call.Argument(0).ToString()
+	if len(call.Arguments) >= 1 && call.Argument(0).ToString() != nil {
+		scheme = call.Argument(0).ToString().String()
 	}
 
 	paths := usbwallet.ListDevices(scheme)
-	env := otto.New()
-	v, err := env.ToValue(paths)
-	if err != nil {
-		throwJSException(err)
-	}
-	return v
+	return re.vm.ToValue(paths), nil
 }
 
 // EOF

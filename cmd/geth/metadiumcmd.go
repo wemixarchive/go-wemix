@@ -29,7 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/metadium/metclient"
-	"github.com/ethereum/go-ethereum/p2p/discv5"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"gopkg.in/urfave/cli.v1"
 )
@@ -211,7 +210,7 @@ func newAccount(ctx *cli.Context) error {
 		}
 	}
 
-	password := getPassPhrase("Please give a password. Do not forget this password.", true, 0, utils.MakePasswordList(ctx))
+	password := utils.GetPassPhraseWithList("Please give a password. Do not forget this password.", true, 0, utils.MakePasswordList(ctx))
 
 	key, err := keystore.NewKey(rand.Reader)
 	if err != nil {
@@ -230,7 +229,7 @@ func newAccount(ctx *cli.Context) error {
 		return err
 	}
 
-	_, err = w.Write([]byte(keyjson))
+	_, err = w.Write(keyjson)
 	return err
 }
 
@@ -253,7 +252,7 @@ func nodeKey2Id(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	idv5 := discv5.PubkeyID(&nodeKey.PublicKey)
+	idv5 := fmt.Sprintf("%x", crypto.FromECDSAPub(&nodeKey.PublicKey)[1:])
 	idv4 := enode.PubkeyToIDV4(&nodeKey.PublicKey)
 	fmt.Printf("idv4: %v\nidv5: %v\n", idv4, idv5)
 	// or
@@ -427,7 +426,7 @@ func genAdminContract(ctx *cli.Context) error {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		l := scanner.Text()
-		if strings.Index(l, "// To Be Substituted") < 0 {
+		if !strings.Contains(l, "// To Be Substituted") {
 			_, err = fmt.Fprintln(w, l)
 			if err != nil {
 				return err

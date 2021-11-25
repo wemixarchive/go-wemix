@@ -101,7 +101,7 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 		return fmt.Errorf("Invalid Arguments")
 	}
 
-	passwd := getPassPhrase("", false, 0, utils.MakePasswordList(cliCtx))
+	passwd := utils.GetPassPhraseWithList("", false, 0, utils.MakePasswordList(cliCtx))
 	if len(passwd) == 0 {
 		return fmt.Errorf("Invalid Arguments")
 	}
@@ -323,7 +323,7 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 	}
 	fmt.Printf("Initializing environment storage.\n")
 	envStorageImp.To = envStorage.To
-	if txs[0], err = metclient.SendContract(ctx, envStorageImp, "initialize", []interface{}(envDefaults)); err != nil {
+	if txs[0], err = metclient.SendContract(ctx, envStorageImp, "initialize", envDefaults); err != nil {
 		return err
 	}
 

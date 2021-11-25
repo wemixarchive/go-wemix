@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math/big"
 	"path"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -31,7 +30,6 @@ import (
 	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/p2p/discv5"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -289,21 +287,6 @@ func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNod
 	}
 
 	return miner, next, nodes
-}
-
-func isArray(x interface{}) bool {
-	if x == nil {
-		return false
-	}
-	y := reflect.TypeOf(x)
-	switch y.Kind() {
-	case reflect.Slice:
-		return true
-	case reflect.Array:
-		return true
-	default:
-		return false
-	}
 }
 
 // get nodes from the Governance contract
@@ -620,20 +603,20 @@ func (ma *metaAdmin) update() {
 		ma.nodes = _nodes
 
 		if len(data.addedNodes) > 0 {
-			log.Debug(fmt.Sprintf("Added:\n"))
+			log.Debug("Added:\n")
 			for _, i := range data.addedNodes {
 				log.Debug(fmt.Sprintf("%v\n", i))
 				ma.addPeer(i)
 			}
 		}
 		if len(data.addedNodes) > 0 {
-			log.Debug(fmt.Sprintf("Updated:\n"))
+			log.Debug("Updated:\n")
 			for _, i := range data.updatedNodes {
 				log.Debug(fmt.Sprintf("%v\n", i))
 			}
 		}
 		if len(data.addedNodes) > 0 {
-			log.Debug(fmt.Sprintf("Deleted:\n"))
+			log.Debug("Deleted:\n")
 			for _, i := range data.deletedNodes {
 				log.Debug(fmt.Sprintf("%v\n", i))
 			}
@@ -871,7 +854,6 @@ func distributeRewards(six int, rewardPoolAccount, maintenanceAccount *common.Ad
 	if maintenanceAccount != nil {
 		rewards[n].Addr = *maintenanceAccount
 		rewards[n].Reward = maintAmount
-		n++
 	}
 }
 
@@ -966,8 +948,7 @@ func signBlock(hash common.Hash) (nodeId, sig []byte, err error) {
 
 	prvKey := admin.stack.Server().PrivateKey
 	sig, err = crypto.Sign(hash.Bytes(), prvKey)
-	v5id := discv5.PubkeyID(&prvKey.PublicKey)
-	nodeId = v5id[:]
+	nodeId = crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
 	return
 }
 
@@ -1143,7 +1124,7 @@ func (ma *metaAdmin) toMiningPeers(nodes []*metaNode) string {
 			bb.Write([]byte("/*"))
 		}
 	}
-	return string(bb.Bytes())
+	return bb.String()
 }
 
 func (ma *metaAdmin) miners() string {
@@ -1211,7 +1192,7 @@ func getMinerStatus() *metaapi.MetadiumMinerStatus {
 	defer admin.lock.Unlock()
 
 	return &metaapi.MetadiumMinerStatus{
-		Name:              admin.self.Name,
+		NodeName:          admin.self.Name,
 		Enode:             admin.self.Enode,
 		Id:                admin.self.Id,
 		Addr:              fmt.Sprintf("%s:%d", admin.self.Ip, admin.self.Port),
@@ -1252,12 +1233,12 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 
 	getDownStatus := func(node *metaNode) *metaapi.MetadiumMinerStatus {
 		return &metaapi.MetadiumMinerStatus{
-			Name:   node.Name,
-			Enode:  node.Enode,
-			Id:     node.Id,
-			Addr:   fmt.Sprintf("%s:%d", node.Ip, node.Port),
-			Status: "down",
-			RttMs:  big0,
+			NodeName: node.Name,
+			Enode:    node.Enode,
+			Id:       node.Id,
+			Addr:     fmt.Sprintf("%s:%d", node.Ip, node.Port),
+			Status:   "down",
+			RttMs:    big0,
 		}
 	}
 
@@ -1331,11 +1312,11 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 			if !ok {
 				continue
 			}
-			if n, exists := peers[s.Name]; exists {
+			if n, exists := peers[s.NodeName]; exists {
 				s.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
 				miners = append(miners, s)
 				if n != nil {
-					peers[s.Name] = nil
+					peers[s.NodeName] = nil
 					count--
 					if count <= 0 {
 						done = true
@@ -1357,7 +1338,7 @@ func getMiners(id string, timeout int) []*metaapi.MetadiumMinerStatus {
 
 	if len(miners) > 1 {
 		sort.Slice(miners, func(i, j int) bool {
-			return miners[i].Name < miners[j].Name
+			return miners[i].NodeName < miners[j].NodeName
 		})
 	}
 	return miners
