@@ -163,15 +163,19 @@ func (ma *metaAdmin) getAdminAddresses() (registry, gov, staking, envStorage *co
 		Cli: ma.cli,
 		Abi: ma.registry.Abi,
 	}
-	for i := uint64(0); i < 10; i++ {
-		addr := crypto.CreateAddress(ma.bootAccount, i)
-		contract.To = &addr
+	if ma.registry != nil && ma.registry.To != nil {
+		registry = ma.registry.To
+	} else {
+		for i := uint64(0); i < 10; i++ {
+			addr := crypto.CreateAddress(ma.bootAccount, i)
+			contract.To = &addr
 
-		var v *big.Int
-		err = metclient.CallContract(ctx, contract, "magic", nil, &v, nil)
-		if err == nil && v.Cmp(magic) == 0 {
-			registry = &addr
-			break
+			var v *big.Int
+			err = metclient.CallContract(ctx, contract, "magic", nil, &v, nil)
+			if err == nil && v.Cmp(magic) == 0 {
+				registry = &addr
+				break
+			}
 		}
 	}
 
@@ -340,6 +344,11 @@ func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rew
 		stake *big.Int
 		input []interface{}
 	)
+
+	if ma.registry == nil || ma.registry.To == nil {
+		err = fmt.Errorf("Not initialized")
+		return
+	}
 
 	input = []interface{}{metclient.ToBytes32("RewardPool")}
 	err = metclient.CallContract(ctx, ma.registry, "getContractAddress", input, &addr, block)
