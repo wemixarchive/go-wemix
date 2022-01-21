@@ -303,7 +303,7 @@ func (h *handler) handleCallMsg(ctx *callProc, msg *jsonrpcMessage) *jsonrpcMess
 			if resp.Error.Data != nil {
 				ctx = append(ctx, "errdata", resp.Error.Data)
 			}
-			h.log.Warn("Served "+msg.Method, ctx...)
+			h.log.Debug("Served "+msg.Method, ctx...)
 		} else {
 			h.log.Debug("Served "+msg.Method, ctx...)
 		}
