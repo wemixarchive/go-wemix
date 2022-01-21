@@ -5,6 +5,7 @@
 package rocksdb
 
 // #include <stdlib.h>
+// #include <string.h>
 // #include "rocksdb/c.h"
 import "C"
 
@@ -37,8 +38,8 @@ type RDBIterator struct {
 	it         *C.rocksdb_iterator_t
 	opts       *C.rocksdb_readoptions_t
 	first      bool
-	lowerBound []byte
-	upperBound []byte
+	lowerBound *C.char
+	upperBound *C.char
 }
 
 func cerror(cerr *C.char) error {
@@ -159,16 +160,29 @@ func (db *RDBDatabase) Delete(key []byte) error {
 	return nil
 }
 
-func (db *RDBDatabase) NewIterator(prefix, start []byte) ethdb.Iterator {
-	begin := prefix
-	end := incrBytes(begin)
-	begin = append(begin, start...)
+func memdup(b []byte) *C.char {
+	x := (*C.char)(C.malloc(C.size_t(len(b))))
+	C.memcpy(unsafe.Pointer(x), unsafe.Pointer(b2c(b)), C.size_t(len(b)))
+	return x
+}
 
+func (db *RDBDatabase) NewIterator(prefix, start []byte) ethdb.Iterator {
+	var begin, end []byte
+	begin = prefix
+	if len(start) > 0 {
+		begin = append(begin, start...)
+	}
+	if len(prefix) > 0 {
+		end = incrBytes(prefix)
+	}
+	var lowerBound, upperBound *C.char
 	opts := C.rocksdb_readoptions_create()
 	if len(begin) > 0 {
-		lowerBound := b2c(begin)
+		lowerBound = memdup(begin)
 		C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(begin)))
-		upperBound := b2c(end)
+	}
+	if len(end) > 0 {
+		upperBound = memdup(end)
 		C.rocksdb_readoptions_set_iterate_upper_bound(opts, upperBound, C.size_t(len(end)))
 	}
 	it := C.rocksdb_create_iterator(db.db, opts)
@@ -179,15 +193,15 @@ func (db *RDBDatabase) NewIterator(prefix, start []byte) ethdb.Iterator {
 		first: true,
 	}
 	if len(begin) > 0 {
-		rit.lowerBound = begin
-		rit.upperBound = end
+		rit.lowerBound = lowerBound
+		rit.upperBound = upperBound
 	}
 	return rit
 }
 
 func (db *RDBDatabase) NewIteratorWithStart(start []byte) ethdb.Iterator {
 	opts := C.rocksdb_readoptions_create()
-	lowerBound := b2c(start)
+	lowerBound := memdup(start)
 	C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(start)))
 	it := C.rocksdb_create_iterator(db.db, opts)
 	C.rocksdb_iter_seek_to_first(it)
@@ -195,7 +209,7 @@ func (db *RDBDatabase) NewIteratorWithStart(start []byte) ethdb.Iterator {
 		it:         it,
 		opts:       opts,
 		first:      true,
-		lowerBound: start,
+		lowerBound: lowerBound,
 	}
 }
 
@@ -204,9 +218,9 @@ func (db *RDBDatabase) NewIteratorWithPrefix(prefix []byte) ethdb.Iterator {
 	end := incrBytes(start)
 
 	opts := C.rocksdb_readoptions_create()
-	lowerBound := b2c(start)
+	lowerBound := memdup(start)
 	C.rocksdb_readoptions_set_iterate_lower_bound(opts, lowerBound, C.size_t(len(start)))
-	upperBound := b2c(end)
+	upperBound := memdup(end)
 	C.rocksdb_readoptions_set_iterate_upper_bound(opts, upperBound, C.size_t(len(end)))
 	it := C.rocksdb_create_iterator(db.db, opts)
 	C.rocksdb_iter_seek_to_first(it)
@@ -214,8 +228,8 @@ func (db *RDBDatabase) NewIteratorWithPrefix(prefix []byte) ethdb.Iterator {
 		it:         it,
 		opts:       opts,
 		first:      true,
-		lowerBound: start,
-		upperBound: end,
+		lowerBound: lowerBound,
+		upperBound: upperBound,
 	}
 }
 
@@ -284,6 +298,12 @@ func (it *RDBIterator) Release() {
 	if it.opts != nil {
 		C.rocksdb_readoptions_destroy(it.opts)
 	}
+	if it.lowerBound != nil {
+		C.free(unsafe.Pointer(it.lowerBound))
+	}
+	if it.upperBound != nil {
+		C.free(unsafe.Pointer(it.upperBound))
+	}
 	it.it, it.opts, it.lowerBound, it.upperBound = nil, nil, nil, nil
 }
 
@@ -312,10 +332,10 @@ func (db *RDBDatabase) Meter(prefix string) {
 func (db *RDBDatabase) NewBatch() ethdb.Batch {
 	b := C.rocksdb_writebatch_create()
 	bb := &rdbBatch{db: db.db, b: b, wopts: db.wopts, data: nil}
-	runtime.SetFinalizer(bb, func(bb *rdbBatch) {
-		if bb.b != nil {
-			C.rocksdb_writebatch_destroy(bb.b)
-			bb.b = nil
+	runtime.SetFinalizer(bb, func(bbb *rdbBatch) {
+		if bbb.b != nil {
+			C.rocksdb_writebatch_destroy(bbb.b)
+			bbb.b = nil
 		}
 	})
 	return bb
@@ -368,7 +388,8 @@ func (b *rdbBatch) ValueSize() int {
 }
 
 func (b *rdbBatch) Reset() {
-	C.rocksdb_writebatch_clear(b.b)
+	C.rocksdb_writebatch_destroy(b.b)
+	b.b = C.rocksdb_writebatch_create()
 	b.data = nil
 	b.size = 0
 }
