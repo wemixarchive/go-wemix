@@ -40,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -1837,6 +1838,18 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		if err != nil {
 			return it.index, err
 		}
+
+		if !metaminer.IsPoW() {
+			// make sure the previous block exists in order to calculate rewards distribution
+			for {
+				if _, _, err := metaminer.CalculateRewards(
+					block.Number(), big.NewInt(0), big.NewInt(100000000), nil); err == nil {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+
 		// Enable prefetching to pull in trie node paths while processing transactions
 		statedb.StartPrefetcher("chain")
 		activeState = statedb
