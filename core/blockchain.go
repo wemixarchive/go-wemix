@@ -1834,22 +1834,16 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		if parent == nil {
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
+
+		// metadium: reward calculation uses governance contract, meaning
+		// the previous block is required. For fast sync, we need to wait for
+		// governance is initialized and try again.
+		retryCount := 2
+	retry:
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return it.index, err
 		}
-
-		if !metaminer.IsPoW() {
-			// make sure the previous block exists in order to calculate rewards distribution
-			for {
-				if _, _, err := metaminer.CalculateRewards(
-					block.Number(), big.NewInt(0), big.NewInt(100000000), nil); err == nil {
-					break
-				}
-				time.Sleep(100 * time.Millisecond)
-			}
-		}
-
 		// Enable prefetching to pull in trie node paths while processing transactions
 		statedb.StartPrefetcher("chain")
 		activeState = statedb
@@ -1895,6 +1889,17 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		// Validate the state using the default validator
 		substart = time.Now()
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas, fees); err != nil {
+			if retryCount--; !metaminer.IsPoW() && retryCount > 0 {
+				// make sure the previous block exists in order to calculate rewards distribution
+				for try := 100; try > 0; try-- {
+					if _, _, err := metaminer.CalculateRewards(block.Number(), big.NewInt(0), big.NewInt(100000000), nil); err == nil {
+						break
+					}
+					time.Sleep(100 * time.Millisecond)
+				}
+				goto retry
+			}
+
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
