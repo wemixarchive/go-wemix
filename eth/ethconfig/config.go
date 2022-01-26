@@ -88,9 +88,9 @@ var Defaults = Config{
 		Recommit: 3 * time.Second,
 	},
 	TxPool:      core.DefaultTxPoolConfig,
-	RPCGasCap:   50000000,
+	RPCGasCap:   0, // unlimited
 	GPO:         FullNodeGPO,
-	RPCTxFeeCap: 1, // 1 ether
+	RPCTxFeeCap: 0, // unlimited
 }
 
 func init() {
