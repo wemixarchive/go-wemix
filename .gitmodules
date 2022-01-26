@@ -4,3 +4,6 @@
 [submodule "rocksdb"]
 	path = rocksdb
 	url = https://github.com/facebook/rocksdb
+[submodule "etcd"]
+	path = etcd
+	url = https://github.com/metadium/etcd
