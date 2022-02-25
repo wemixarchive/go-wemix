@@ -16,6 +16,7 @@
     "minerNodeId" : "0x0",
     "minerNodeSig": "0x0",
     "config": {
+        "berlinBlock": 0,
         "chainId": 11,
         "homesteadBlock": 0,
         "eip150Block": 0,
@@ -24,6 +25,7 @@
         "byzantiumBlock": 0,
         "constantinopleBlock": 0,
         "istanbulBlock": 0,
+        "londonBlock": 0,
         "muirGlacierBlock": 0
     }
 }
