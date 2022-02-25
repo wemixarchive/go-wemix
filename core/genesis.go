@@ -207,6 +207,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// Get the existing chain configuration.
 	newcfg := genesis.configOrDefault(stored)
 	if overrideLondon != nil {
+		newcfg.BerlinBlock = overrideLondon
 		newcfg.LondonBlock = overrideLondon
 	}
 	if err := newcfg.CheckConfigForkOrder(); err != nil {
@@ -217,6 +218,10 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 		log.Warn("Found genesis block without chain config")
 		rawdb.WriteChainConfig(db, stored, newcfg)
 		return newcfg, stored, nil
+	}
+	if overrideLondon != nil {
+		storedcfg.BerlinBlock = overrideLondon
+		storedcfg.LondonBlock = overrideLondon
 	}
 	// Special case: don't change the existing config of a non-mainnet chain if no new
 	// config is supplied. These chains would get AllProtocolChanges (and a compat error)
