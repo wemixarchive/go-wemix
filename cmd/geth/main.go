@@ -124,6 +124,7 @@ var (
 		utils.CacheSnapshotFlag,
 		utils.CacheNoPrefetchFlag,
 		utils.CachePreimagesFlag,
+		utils.FDLimitFlag,
 		utils.ListenPortFlag,
 		utils.MaxPeersFlag,
 		utils.MaxPendingPeersFlag,
