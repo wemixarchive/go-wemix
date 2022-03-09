@@ -137,7 +137,6 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 		Flags: []cli.Flag{
 			utils.IPCDisabledFlag,
 			utils.IPCPathFlag,
-			utils.JWTSecretFlag,
 			utils.HTTPEnabledFlag,
 			utils.HTTPListenAddrFlag,
 			utils.HTTPPortFlag,
@@ -151,6 +150,9 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.WSApiFlag,
 			utils.WSPathPrefixFlag,
 			utils.WSAllowedOriginsFlag,
+			utils.JWTSecretFlag,
+			utils.AuthHostFlag,
+			utils.AuthPortFlag,
 			utils.GraphQLEnabledFlag,
 			utils.GraphQLCORSDomainFlag,
 			utils.GraphQLVirtualHostsFlag,

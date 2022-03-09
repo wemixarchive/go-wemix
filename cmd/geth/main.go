@@ -172,6 +172,7 @@ var (
 		utils.HTTPListenAddrFlag,
 		utils.HTTPPortFlag,
 		utils.HTTPCORSDomainFlag,
+		utils.AuthHostFlag,
 		utils.AuthPortFlag,
 		utils.JWTSecretFlag,
 		utils.HTTPVirtualHostsFlag,
