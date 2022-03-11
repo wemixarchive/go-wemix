@@ -17,12 +17,12 @@ var (
 	doneTxs = lru.NewLruCache(5000, false)
 )
 
-func tx_prefetch(w *worker, to *TxOrderer, numWorkers int) {
+func tx_prefetch(w *worker, env *environment, to *TxOrderer, numWorkers int) {
 	for i := 0; i < numWorkers; i++ {
 		go func() {
 			var (
 				ctx          = context.Background()
-				header       = w.chain.GetHeaderByNumber(w.current.header.Number.Uint64() - 1)
+				header       = w.chain.GetHeaderByNumber(env.header.Number.Uint64() - 1)
 				gaspool      = new(core.GasPool).AddGas(header.GasLimit)
 				blockContext = core.NewEVMBlockContext(header, w.chain, nil)
 				statedb, _   = w.chain.StateAt(header.Root)
