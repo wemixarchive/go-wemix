@@ -54,7 +54,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.EthStatsURLFlag,
 			utils.IdentityFlag,
 			utils.LightKDFFlag,
-			utils.WhitelistFlag,
+			utils.EthPeerRequiredBlocksFlag,
 		},
 	},
 	{
@@ -247,6 +247,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 		Name: "ALIASED (deprecated)",
 		Flags: []cli.Flag{
 			utils.NoUSBFlag,
+			utils.LegacyWhitelistFlag,
 		},
 	},
 	{
