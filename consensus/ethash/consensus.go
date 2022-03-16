@@ -321,7 +321,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		return err
 	}
 	// Metadium: Check if it's generated and signed by a registered node
-	if !metaminer.VerifyBlockSig(header.Number, header.MinerNodeId, header.Root, header.MinerNodeSig) {
+	if !metaminer.IsPoW() && !metaminer.VerifyBlockSig(header.Number, header.MinerNodeId, header.Root, header.MinerNodeSig) {
 		return consensus.ErrUnauthorized
 	}
 	return nil
@@ -613,12 +613,14 @@ func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 	ethash.Finalize(chain, header, state, txs, uncles)
 
 	// sign header.Root with node's private key
-	nodeId, sig, err := metaminer.SignBlock(header.Root)
-	if err != nil {
-		return nil, err
-	} else {
-		header.MinerNodeId = nodeId
-		header.MinerNodeSig = sig
+	if !metaminer.IsPoW() {
+		nodeId, sig, err := metaminer.SignBlock(header.Root)
+		if err != nil {
+			return nil, err
+		} else {
+			header.MinerNodeId = nodeId
+			header.MinerNodeSig = sig
+		}
 	}
 
 	// Header seems complete, assemble into a block and return
@@ -701,7 +703,9 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		} else {
 			// upon error, rewards go to the coinbase
 			reward := new(big.Int)
-			reward.Add(blockReward, header.Fees)
+			if header.Fees != nil {
+				reward.Add(blockReward, header.Fees)
+			}
 			state.AddBalance(header.Coinbase, reward)
 		}
 	}

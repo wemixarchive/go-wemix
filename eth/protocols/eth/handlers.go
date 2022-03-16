@@ -29,6 +29,106 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 )
 
+// handleGetBlockHeaders handles Block header query, collect the requested headers and reply
+func handleGetBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the complex header query
+	var query GetBlockHeadersPacket
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	go func() error {
+		response := answerGetBlockHeadersQuery(backend, &query, peer)
+		return peer.SendBlockHeaders(response)
+	}()
+	return nil
+}
+
+func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, peer *Peer) []*types.Header {
+	hashMode := query.Origin.Hash != (common.Hash{})
+	first := true
+	maxNonCanonical := uint64(100)
+
+	// Gather headers until the fetch or network limits is reached
+	var (
+		bytes   common.StorageSize
+		headers []*types.Header
+		unknown bool
+		lookups int
+	)
+	for !unknown && len(headers) < int(query.Amount) && bytes < softResponseLimit &&
+		len(headers) < maxHeadersServe && lookups < 2*maxHeadersServe {
+		lookups++
+		// Retrieve the next header satisfying the query
+		var origin *types.Header
+		if hashMode {
+			if first {
+				first = false
+				origin = backend.Chain().GetHeaderByHash(query.Origin.Hash)
+				if origin != nil {
+					query.Origin.Number = origin.Number.Uint64()
+				}
+			} else {
+				origin = backend.Chain().GetHeader(query.Origin.Hash, query.Origin.Number)
+			}
+		} else {
+			origin = backend.Chain().GetHeaderByNumber(query.Origin.Number)
+		}
+		if origin == nil {
+			break
+		}
+		headers = append(headers, origin)
+		bytes += estHeaderSize
+
+		// Advance to the next header of the query
+		switch {
+		case hashMode && query.Reverse:
+			// Hash based traversal towards the genesis block
+			ancestor := query.Skip + 1
+			if ancestor == 0 {
+				unknown = true
+			} else {
+				query.Origin.Hash, query.Origin.Number = backend.Chain().GetAncestor(query.Origin.Hash, query.Origin.Number, ancestor, &maxNonCanonical)
+				unknown = (query.Origin.Hash == common.Hash{})
+			}
+		case hashMode && !query.Reverse:
+			// Hash based traversal towards the leaf block
+			var (
+				current = origin.Number.Uint64()
+				next    = current + query.Skip + 1
+			)
+			if next <= current {
+				infos, _ := json.MarshalIndent(peer.Peer.Info(), "", "  ")
+				peer.Log().Warn("GetBlockHeaders skip overflow attack", "current", current, "skip", query.Skip, "next", next, "attacker", infos)
+				unknown = true
+			} else {
+				if header := backend.Chain().GetHeaderByNumber(next); header != nil {
+					nextHash := header.Hash()
+					expOldHash, _ := backend.Chain().GetAncestor(nextHash, next, query.Skip+1, &maxNonCanonical)
+					if expOldHash == query.Origin.Hash {
+						query.Origin.Hash, query.Origin.Number = nextHash, next
+					} else {
+						unknown = true
+					}
+				} else {
+					unknown = true
+				}
+			}
+		case query.Reverse:
+			// Number based traversal towards the genesis block
+			if query.Origin.Number >= query.Skip+1 {
+				query.Origin.Number -= query.Skip + 1
+			} else {
+				unknown = true
+			}
+
+		case !query.Reverse:
+			// Number based traversal towards the leaf block
+			query.Origin.Number += query.Skip + 1
+		}
+	}
+	return headers
+}
+
 // handleGetBlockHeaders66 is the eth/66 version of handleGetBlockHeaders
 func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the complex header query
@@ -206,6 +306,19 @@ func serviceContiguousBlockHeaderQuery(chain *core.BlockChain, query *GetBlockHe
 	}
 }
 
+func handleGetBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the block body retrieval message
+	var query GetBlockBodiesPacket
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	go func() error {
+		response := ServiceGetBlockBodiesQuery(backend.Chain(), query)
+		return peer.SendBlockBodiesRLP(response)
+	}()
+	return nil
+}
+
 func handleGetBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the block body retrieval message
 	var query GetBlockBodiesPacket66
@@ -238,6 +351,19 @@ func ServiceGetBlockBodiesQuery(chain *core.BlockChain, query GetBlockBodiesPack
 		}
 	}
 	return bodies
+}
+
+func handleGetNodeData(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the trie node data retrieval message
+	var query GetNodeDataPacket
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	go func() error {
+		response := ServiceGetNodeDataQuery(backend.Chain(), query)
+		return peer.SendNodeData(response)
+	}()
+	return nil
 }
 
 func handleGetNodeData66(backend Backend, msg Decoder, peer *Peer) error {
@@ -278,6 +404,19 @@ func ServiceGetNodeDataQuery(chain *core.BlockChain, query GetNodeDataPacket) []
 		}
 	}
 	return nodes
+}
+
+func handleGetReceipts(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the block receipts retrieval message
+	var query GetReceiptsPacket
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	go func() error {
+		response := ServiceGetReceiptsQuery(backend.Chain(), query)
+		return peer.SendReceiptsRLP(response)
+	}()
+	return nil
 }
 
 func handleGetReceipts66(backend Backend, msg Decoder, peer *Peer) error {
@@ -370,6 +509,29 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 	return nil
 }
 
+func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
+	// A batch of headers arrived to one of our previous requests
+	res := new(BlockHeadersPacket)
+	if err := msg.Decode(res); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	metadata := func() interface{} {
+		hashes := make([]common.Hash, len(*res))
+		for i, header := range *res {
+			hashes[i] = header.Hash()
+		}
+		return hashes
+	}
+	go func() error {
+		return peer.dispatchResponse(&Response{
+			id:   peer.genRequestId(BlockHeadersMsg),
+			code: BlockHeadersMsg,
+			Res:  res,
+		}, metadata)
+	}()
+	return nil
+}
+
 func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	// A batch of headers arrived to one of our previous requests
 	res := new(BlockHeadersPacket66)
@@ -388,6 +550,34 @@ func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 			id:   res.RequestId,
 			code: BlockHeadersMsg,
 			Res:  &res.BlockHeadersPacket,
+		}, metadata)
+	}()
+	return nil
+}
+
+func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
+	// A batch of block bodies arrived to one of our previous requests
+	res := new(BlockBodiesPacket)
+	if err := msg.Decode(res); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	metadata := func() interface{} {
+		var (
+			txsHashes   = make([]common.Hash, len(*res))
+			uncleHashes = make([]common.Hash, len(*res))
+		)
+		hasher := trie.NewStackTrie(nil)
+		for i, body := range *res {
+			txsHashes[i] = types.DeriveSha(types.Transactions(body.Transactions), hasher)
+			uncleHashes[i] = types.CalcUncleHash(body.Uncles)
+		}
+		return [][]common.Hash{txsHashes, uncleHashes}
+	}
+	go func() error {
+		return peer.dispatchResponse(&Response{
+			id:   peer.genRequestId(BlockBodiesMsg),
+			code: BlockBodiesMsg,
+			Res:  res,
 		}, metadata)
 	}()
 	return nil
@@ -421,6 +611,22 @@ func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 	return nil
 }
 
+func handleNodeData(backend Backend, msg Decoder, peer *Peer) error {
+	// A batch of node state data arrived to one of our previous requests
+	res := new(NodeDataPacket)
+	if err := msg.Decode(res); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	go func() error {
+		return peer.dispatchResponse(&Response{
+			id:   peer.genRequestId(NodeDataMsg),
+			code: NodeDataMsg,
+			Res:  res,
+		}, nil) // No post-processing, we're not using this packet anymore
+	}()
+	return nil
+}
+
 func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 	// A batch of node state data arrived to one of our previous requests
 	res := new(NodeDataPacket66)
@@ -433,6 +639,30 @@ func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 			code: NodeDataMsg,
 			Res:  &res.NodeDataPacket,
 		}, nil) // No post-processing, we're not using this packet anymore
+	}()
+	return nil
+}
+
+func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
+	// A batch of receipts arrived to one of our previous requests
+	res := new(ReceiptsPacket)
+	if err := msg.Decode(res); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	metadata := func() interface{} {
+		hasher := trie.NewStackTrie(nil)
+		hashes := make([]common.Hash, len(*res))
+		for i, receipt := range *res {
+			hashes[i] = types.DeriveSha(types.Receipts(receipt), hasher)
+		}
+		return hashes
+	}
+	go func() error {
+		return peer.dispatchResponse(&Response{
+			id:   peer.genRequestId(ReceiptsMsg),
+			code: ReceiptsMsg,
+			Res:  res,
+		}, metadata)
 	}()
 	return nil
 }
@@ -477,6 +707,19 @@ func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) 
 			peer.markTransaction(hash)
 		}
 		return backend.Handle(peer, ann)
+	}()
+	return nil
+}
+
+func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the pooled transactions retrieval message
+	var query GetPooledTransactionsPacket
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	go func() error {
+		hashes, txs := answerGetPooledTransactions(backend, query, peer)
+		return peer.SendPooledTransactionsRLP(hashes, txs)
 	}()
 	return nil
 }
@@ -568,6 +811,30 @@ func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
 		}
 		txsp := TransactionsPacket(txs)
 		return backend.Handle(peer, &txsp)
+	}()
+	return nil
+}
+
+func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
+	// Transactions arrived, make sure we have a valid and fresh chain to handle them
+	if !backend.AcceptTxs() {
+		return nil
+	}
+	// Transactions can be processed, parse all of them and deliver to the pool
+	var txs PooledTransactionsPacket
+	if err := msg.Decode(&txs); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+
+	go func() error {
+		for i, tx := range txs {
+			// Validate and mark the remote transaction
+			if tx == nil {
+				return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+			}
+			peer.markTransaction(tx.Hash())
+		}
+		return backend.Handle(peer, &txs)
 	}()
 	return nil
 }

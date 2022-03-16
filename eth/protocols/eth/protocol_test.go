@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -265,4 +266,8 @@ func TestEth66Messages(t *testing.T) {
 			t.Errorf("test %d, type %T, have\n\t%x\nwant\n\t%x", i, tc.message, have, tc.want)
 		}
 	}
+}
+
+func init() {
+	params.ConsensusMethod = params.ConsensusPoW
 }

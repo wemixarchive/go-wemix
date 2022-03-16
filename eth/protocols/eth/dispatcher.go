@@ -47,9 +47,10 @@ type Request struct {
 	sink   chan *Response // Channel to deliver the response on
 	cancel chan struct{}  // Channel to cancel requests ahead of time
 
-	code uint64      // Message code of the request packet
-	want uint64      // Message code of the response packet
-	data interface{} // Data content of the request packet
+	code   uint64      // Message code of the request packet
+	want   uint64      // Message code of the response packet
+	data   interface{} // Data content of the request packet
+	data65 interface{} // Data content of the request packet for eth/65
 
 	Peer string    // Demultiplexer if cross-peer requests are batched together
 	Sent time.Time // Timestamp when the request was sent
@@ -195,7 +196,13 @@ func (p *Peer) dispatcher() {
 			req.Sent = time.Now()
 
 			requestTracker.Track(p.id, p.version, req.code, req.want, req.id)
-			err := p2p.Send(p.rw, req.code, req.data)
+			var data interface{}
+			if p.Version() <= ETH65 {
+				data = req.data65
+			} else {
+				data = req.data
+			}
+			err := p2p.Send(p.rw, req.code, data)
 			reqOp.fail <- err
 
 			if err == nil {
