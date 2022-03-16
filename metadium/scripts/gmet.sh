@@ -167,6 +167,8 @@ function start ()
 
     RPCOPT="--http --http.addr 0.0.0.0"
     [ "$PORT" = "" ] || RPCOPT="${RPCOPT} --http.port ${PORT}"
+    RPCOPT="${RPCOPT} --ws --ws.addr 0.0.0.0"
+    [ "$PORT" = "" ] || RPCOPT="${RPCOPT} --ws.port $((${PORT}+4))"
     [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
     [ "$BOOT_NODES" = "" ] || BOOT_NODES="--bootnodes $BOOT_NODES"
     [ "$TESTNET" = "1" ] && TESTNET=--meta-testnet
