@@ -13,7 +13,7 @@ import (
 
 // account nonce cache map. Uses a global lock for now. If necessary,
 // need to use sync.Map instead.
-// Also we might have to maintain window ala tcp window to accomodate nonces
+// Also we might have to maintain window ala tcp window to accommodate nonces
 // used in failed transactions.
 var (
 	_lock     = &sync.Mutex{}
@@ -64,9 +64,13 @@ func GetOpportunisticTxParams(ctx context.Context, cli *ethclient.Client, addr c
 
 	var _n1, _n2 uint64
 	_n1, err = cli.PendingNonceAt(ctx, addr)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	_n2, err = cli.NonceAt(ctx, addr, nil)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	if _n1 < _n2 {
 		_n1 = _n2
 	}

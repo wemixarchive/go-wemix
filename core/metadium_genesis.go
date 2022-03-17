@@ -12288,6 +12288,7 @@ var (
   },
   "coinbase": "0x880a74d68b09418136c4442D1eA0f5cC72E5325A",
   "config": {
+    "berlinBlock": 80000000,
     "chainId": 11,
     "homesteadBlock": 0,
     "eip150Block": 11441000,
@@ -12296,6 +12297,7 @@ var (
     "byzantiumBlock": 0,
     "constantinopleBlock": 11441000,
     "istanbulBlock": 11441000,
+    "londonBlock": 80000000,
     "muirGlacierBlock": 11441000 
   },
   "difficulty": "0x1",
@@ -12331,6 +12333,7 @@ var (
   },
   "coinbase": "0x378360d4f25E6377f3da53F8cF09e9a258118528",
   "config": {
+    "berlinBlock": 80000000,
     "chainId": 12,
     "homesteadBlock": 0,
     "eip150Block": 5623000,
@@ -12339,6 +12342,7 @@ var (
     "byzantiumBlock": 0,
     "constantinopleBlock": 5623000,
     "istanbulBlock": 5623000,
+    "londonBlock": 80000000,
     "muirGlacierBlock": 5623000
   },
   "difficulty": "0x1",

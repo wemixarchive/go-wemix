@@ -2,11 +2,7 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: geth android ios geth-cross evm all test clean rocksdb
-.PHONY: geth-linux geth-linux-386 geth-linux-amd64 geth-linux-mips64 geth-linux-mips64le
-.PHONY: geth-linux-arm geth-linux-arm-5 geth-linux-arm-6 geth-linux-arm-7 geth-linux-arm64
-.PHONY: geth-darwin geth-darwin-386 geth-darwin-amd64
-.PHONY: geth-windows geth-windows-386 geth-windows-amd64
+.PHONY: geth android ios evm all test clean rocksdb
 .PHONY: gmet-linux
 
 GOBIN = ./build/bin
@@ -33,7 +29,7 @@ ROCKSDB_DIR=$(shell pwd)/rocksdb
 ROCKSDB_TAG=-tags rocksdb
 endif
 
-metadium: gmet logrot
+metadium: etcd gmet logrot
 	@[ -d build/conf ] || mkdir -p build/conf
 	@cp -p metadium/scripts/gmet.sh metadium/scripts/solc.sh build/bin/
 	@cp -p metadium/scripts/config.json.example		\
@@ -44,7 +40,7 @@ metadium: gmet logrot
 	@(cd build; tar cfz metadium.tar.gz bin conf)
 	@echo "Done building build/metadium.tar.gz"
 
-gmet: rocksdb metadium/governance_abi.go
+gmet: etcd rocksdb metadium/governance_abi.go
 ifeq ($(USE_ROCKSDB), NO)
 	$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
 else
@@ -63,8 +59,14 @@ geth:
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
 
-dbbench:
+dbbench: rocksdb
+ifeq ($(USE_ROCKSDB), NO)
 	$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/dbbench
+else
+	CGO_CFLAGS=-I$(ROCKSDB_DIR)/include \
+		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lrocksdb -lm -lstdc++ $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
+		$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/dbbench
+endif
 
 all:
 	$(GORUN) build/ci.go install
@@ -73,6 +75,8 @@ android:
 	$(GORUN) build/ci.go aar --local
 	@echo "Done building."
 	@echo "Import \"$(GOBIN)/geth.aar\" to use the library."
+	@echo "Import \"$(GOBIN)/geth-sources.jar\" to add javadocs"
+	@echo "For more info see https://stackoverflow.com/questions/20994336/android-studio-how-to-attach-javadoc"
 
 ios:
 	$(GORUN) build/ci.go xcode --local
@@ -82,7 +86,7 @@ ios:
 test: all
 	$(GORUN) build/ci.go test
 
-lint: ## Run linters.
+lint: metadium/governance_abi.go ## Run linters.
 	$(GORUN) build/ci.go lint
 
 clean:
@@ -98,140 +102,38 @@ clean:
 # You need to put $GOBIN (or $GOPATH/bin) in your PATH to use 'go generate'.
 
 devtools:
-	env GOBIN= go get -u golang.org/x/tools/cmd/stringer
-	env GOBIN= go get -u github.com/kevinburke/go-bindata/go-bindata
-	env GOBIN= go get -u github.com/fjl/gencodec
-	env GOBIN= go get -u github.com/golang/protobuf/protoc-gen-go
+	env GOBIN= go install golang.org/x/tools/cmd/stringer@latest
+	env GOBIN= go install github.com/kevinburke/go-bindata/go-bindata@latest
+	env GOBIN= go install github.com/fjl/gencodec@latest
+	env GOBIN= go install github.com/golang/protobuf/protoc-gen-go@latest
 	env GOBIN= go install ./cmd/abigen
-	@type "npm" 2> /dev/null || echo 'Please install node.js and npm'
 	@type "solc" 2> /dev/null || echo 'Please install solc'
 	@type "protoc" 2> /dev/null || echo 'Please install protoc'
 
-# Cross Compilation Targets (xgo)
-
-geth-cross: geth-linux geth-darwin geth-windows geth-android geth-ios
-	@echo "Full cross compilation done:"
-	@ls -ld $(GOBIN)/geth-*
-
-geth-linux: geth-linux-386 geth-linux-amd64 geth-linux-arm geth-linux-mips64 geth-linux-mips64le
-	@echo "Linux cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-*
-
-geth-linux-386:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/386 -v ./cmd/geth
-	@echo "Linux 386 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep 386
-
-geth-linux-amd64:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/amd64 -v ./cmd/geth
-	@echo "Linux amd64 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep amd64
-
-geth-linux-arm: geth-linux-arm-5 geth-linux-arm-6 geth-linux-arm-7 geth-linux-arm64
-	@echo "Linux ARM cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep arm
-
-geth-linux-arm-5:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/arm-5 -v ./cmd/geth
-	@echo "Linux ARMv5 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep arm-5
-
-geth-linux-arm-6:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/arm-6 -v ./cmd/geth
-	@echo "Linux ARMv6 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep arm-6
-
-geth-linux-arm-7:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/arm-7 -v ./cmd/geth
-	@echo "Linux ARMv7 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep arm-7
-
-geth-linux-arm64:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/arm64 -v ./cmd/geth
-	@echo "Linux ARM64 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep arm64
-
-geth-linux-mips:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/mips --ldflags '-extldflags "-static"' -v ./cmd/geth
-	@echo "Linux MIPS cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep mips
-
-geth-linux-mipsle:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/mipsle --ldflags '-extldflags "-static"' -v ./cmd/geth
-	@echo "Linux MIPSle cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep mipsle
-
-geth-linux-mips64:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/mips64 --ldflags '-extldflags "-static"' -v ./cmd/geth
-	@echo "Linux MIPS64 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep mips64
-
-geth-linux-mips64le:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=linux/mips64le --ldflags '-extldflags "-static"' -v ./cmd/geth
-	@echo "Linux MIPS64le cross compilation done:"
-	@ls -ld $(GOBIN)/geth-linux-* | grep mips64le
-
-geth-darwin: geth-darwin-386 geth-darwin-amd64
-	@echo "Darwin cross compilation done:"
-	@ls -ld $(GOBIN)/geth-darwin-*
-
-geth-darwin-386:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=darwin/386 -v ./cmd/geth
-	@echo "Darwin 386 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-darwin-* | grep 386
-
-geth-darwin-amd64:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=darwin/amd64 -v ./cmd/geth
-	@echo "Darwin amd64 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-darwin-* | grep amd64
-
-geth-windows: geth-windows-386 geth-windows-amd64
-	@echo "Windows cross compilation done:"
-	@ls -ld $(GOBIN)/geth-windows-*
-
-geth-windows-386:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=windows/386 -v ./cmd/geth
-	@echo "Windows 386 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-windows-* | grep 386
-
-geth-windows-amd64:
-	$(GORUN) build/ci.go xgo -- --go=$(GO) --targets=windows/amd64 -v ./cmd/geth
-	@echo "Windows amd64 cross compilation done:"
-	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
-
-gmet-linux:
-ifeq ($(shell uname), Linux)
+gmet-linux: etcd
 	@docker --version > /dev/null 2>&1;				\
 	if [ ! $$? = 0 ]; then						\
 		echo "Docker not found.";				\
 	else								\
-		docker run -e HOME=/tmp --rm				\
-			-v /etc/passwd:/etc/passwd:ro			\
-			-v /etc/group:/etc/group:ro			\
-			-v ~/src:/home/$${USER}/src			\
-			-v $(shell pwd):/data -u $$(id -u):$$(id -g)	\
-			-w /data metadium/bobthe:latest			\
-			make USE_ROCKSDB=$(USE_ROCKSDB);		\
-	fi
-else
-	@docker --version > /dev/null 2>&1;				\
-	if [ ! $$? = 0 ]; then						\
-		echo "Docker not found.";				\
-	else								\
+		docker build -t meta/builder:local			\
+			-f Dockerfile.metadium . &&			\
 		docker run -e HOME=/tmp --rm -v $(shell pwd):/data	\
-			-w /data metadium/bobthe:latest			\
+			-w /data meta/builder:local			\
 			make USE_ROCKSDB=$(USE_ROCKSDB);		\
 	fi
-endif
 
 ifneq ($(USE_ROCKSDB), YES)
 rocksdb:
 else
 rocksdb:
-	@[ ! -e rocksdb/.git ] && git submodule init rocksdb;	\
-	git submodule update rocksdb &&				\
+	@[ ! -e rocksdb/.git ] && git submodule update --init rocksdb;	\
 	cd $(ROCKSDB_DIR) && make -j8 static_lib;
 endif
+
+etcd:
+	@if [ ! -e etcd/.git ]; then			\
+		git submodule update --init etcd;	\
+	fi
 
 AWK_CODE='								\
 BEGIN { print "package metadium"; bin = 0; name = ""; abi = ""; }	\
@@ -253,7 +155,7 @@ metadium/admin_abi.go: metadium/contracts/MetadiumAdmin-template.sol build/bin/s
 	rm -f /tmp/junk.$$$$;
 
 AWK_CODE_2='								     \
-BEGIN { print "package metadium"; }					     \
+BEGIN { print "package metadium\n"; }					     \
 /^var Registry_contract/ {						     \
   sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
   n = "Registry";							     \

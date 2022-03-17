@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"math/big"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -19,22 +18,19 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
-var (
-	big1 = big.NewInt(1)
-)
-
 func pack4(s []byte) []byte {
-	if len(s) % 4 == 0 {
+	if len(s)%4 == 0 {
 		return s
 	} else {
-		l := (len(s) + 3) / 4 * 4;
+		l := (len(s) + 3) / 4 * 4
 		b := make([]byte, l)
 		copy(b, s)
 		for i := len(s); i < l; i++ {
-			b[i] = ' ';
+			b[i] = ' '
 		}
 		return b
 	}
@@ -91,7 +87,7 @@ func read(db ethdb.Database, prefix string, start, end, numThreads int, verbose 
 			return err
 		}
 		if verbose {
-			fmt.Printf("%s(<-%s): %d %s\n", hex.EncodeToString(k[:]), string(ks), len(v), hex.EncodeToString(v))
+			fmt.Printf("%s(<-%s): %d %s\n", hex.EncodeToString(k[:]), ks, len(v), hex.EncodeToString(v))
 		}
 		return nil
 	}
@@ -135,7 +131,7 @@ func rread(db ethdb.Database, prefix string, count, numThreads int, verbose bool
 			return err
 		}
 		if verbose {
-			fmt.Printf("%s(<-%s): %d %s\n", hex.EncodeToString(k[:]), string(ks), len(v), hex.EncodeToString(v))
+			fmt.Printf("%s(<-%s): %d %s\n", hex.EncodeToString(k[:]), ks, len(v), hex.EncodeToString(v))
 		}
 		return nil
 	}
@@ -285,7 +281,7 @@ func post(dbPath, device, header string, ot time.Time, count int, ss []uint64) {
 	}
 
 	fmt.Printf("%s,%d,%d,%.3f,%d", header, ot.Unix(), dur/1000,
-		float64(count) * 1000.0 / float64(dur), du)
+		float64(count)*1000.0/float64(dur), du)
 	for i := 0; i < len(se); i++ {
 		v := se[i]
 		// 1: disk read bytes
@@ -396,13 +392,13 @@ func main() {
 	ethdb.EnableStats(true)
 	switch which {
 	case "leveldb":
-		db, err = ethdb.NewLDBDatabase(dbPath, 1024, 1024)
+		db, err = rawdb.NewLevelDBDatabase(dbPath, 1024, 1024, "", false)
 		if err != nil {
 			fmt.Printf("Cannot open DB %s: %v\n", dbPath, err)
 			return
 		}
 	case "rocksdb":
-		db, err = ethdb.NewRDBDatabase(dbPath, 1024, 1024)
+		db, err = rawdb.NewRocksDBDatabase(dbPath, 1024, 1024, "", false)
 		if err != nil {
 			fmt.Printf("Cannot open DB %s: %v\n", dbPath, err)
 			return

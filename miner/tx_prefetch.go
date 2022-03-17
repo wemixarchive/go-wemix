@@ -4,7 +4,6 @@ package miner
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/lru"
@@ -18,17 +17,19 @@ var (
 	doneTxs = lru.NewLruCache(5000, false)
 )
 
-func tx_prefetch(w *worker, to *TxOrderer, numWorkers int) {
+func tx_prefetch(w *worker, env *environment, to *TxOrderer, numWorkers int) {
 	for i := 0; i < numWorkers; i++ {
 		go func() {
-			ctx := context.Background()
-			vmCfg := vm.Config{}
-			header := w.chain.GetHeaderByNumber(w.current.header.Number.Uint64() - 1)
-			state, err := w.chain.StateAt(header.Root)
-			if err != nil {
-				log.Error("Prefetch", "failed to get state db", err)
-				return
-			}
+			var (
+				ctx          = context.Background()
+				header       = w.chain.GetHeaderByNumber(env.header.Number.Uint64() - 1)
+				gaspool      = new(core.GasPool).AddGas(header.GasLimit)
+				blockContext = core.NewEVMBlockContext(header, w.chain, nil)
+				statedb, _   = w.chain.StateAt(header.Root)
+				evm          = vm.NewEVM(blockContext, vm.TxContext{}, statedb, w.chainConfig, vm.Config{})
+				signer       = types.MakeSigner(w.chainConfig, header.Number)
+				tix          = 0
+			)
 
 			for {
 				tx := to.NextForPrefetch()
@@ -40,27 +41,27 @@ func tx_prefetch(w *worker, to *TxOrderer, numWorkers int) {
 					doneTxs.Put(tx.Hash(), true)
 				}
 
-				from, err := types.Sender(
-					types.MakeSigner(w.chainConfig, header.Number), tx)
+				_, err := types.Sender(signer, tx)
 				if err != nil {
 					log.Error("Prefetch", "tx -> sender", err)
 					continue
 				}
 
-				state.Reset(header.Root)
-				msg := types.NewMessage(from, tx.To(), 0, tx.Value(), tx.Gas(),
-					tx.GasPrice(), tx.Data(), false)
-				ictx, cancel := context.WithTimeout(ctx, time.Second)
-				vmCtx := core.NewEVMContext(msg, header, w.chain, nil)
-				evm := vm.NewEVM(vmCtx, state, w.chainConfig, vmCfg)
+				msg, err := tx.AsMessage(signer, header.BaseFee)
+				if err != nil {
+					log.Error("Prefetch", "failed to turn tx to msg", err)
+					return
+				}
+				statedb.Prepare(tx.Hash(), tix)
+				tix++
 
+				ictx, cancel := context.WithTimeout(ctx, time.Second)
+				evm.Reset(core.NewEVMTxContext(msg), statedb)
 				go func() {
 					<-ictx.Done()
 					evm.Cancel()
 				}()
-
-				gp := new(core.GasPool).AddGas(math.MaxUint64)
-				_, _, _, _, err = core.ApplyMessage(evm, msg, gp)
+				_, err = core.ApplyMessage(evm, msg, gaspool)
 				if err != nil {
 					log.Error("Prefetch", "ApplyMessage failed", err)
 				}

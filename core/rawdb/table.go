@@ -62,6 +62,12 @@ func (t *table) Ancient(kind string, number uint64) ([]byte, error) {
 	return t.db.Ancient(kind, number)
 }
 
+// AncientRange is a noop passthrough that just forwards the request to the underlying
+// database.
+func (t *table) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
+	return t.db.AncientRange(kind, start, count, maxBytes)
+}
+
 // Ancients is a noop passthrough that just forwards the request to the underlying
 // database.
 func (t *table) Ancients() (uint64, error) {
@@ -74,10 +80,13 @@ func (t *table) AncientSize(kind string) (uint64, error) {
 	return t.db.AncientSize(kind)
 }
 
-// AppendAncient is a noop passthrough that just forwards the request to the underlying
-// database.
-func (t *table) AppendAncient(number uint64, hash, header, body, receipts, td []byte) error {
-	return t.db.AppendAncient(number, hash, header, body, receipts, td)
+// ModifyAncients runs an ancient write operation on the underlying database.
+func (t *table) ModifyAncients(fn func(ethdb.AncientWriteOp) error) (int64, error) {
+	return t.db.ModifyAncients(fn)
+}
+
+func (t *table) ReadAncients(fn func(reader ethdb.AncientReader) error) (err error) {
+	return t.db.ReadAncients(fn)
 }
 
 // TruncateAncients is a noop passthrough that just forwards the request to the underlying
@@ -103,23 +112,16 @@ func (t *table) Delete(key []byte) error {
 	return t.db.Delete(append([]byte(t.prefix), key...))
 }
 
-// NewIterator creates a binary-alphabetical iterator over the entire keyspace
-// contained within the database.
-func (t *table) NewIterator() ethdb.Iterator {
-	return t.NewIteratorWithPrefix(nil)
-}
-
-// NewIteratorWithStart creates a binary-alphabetical iterator over a subset of
-// database content starting at a particular initial key (or after, if it does
-// not exist).
-func (t *table) NewIteratorWithStart(start []byte) ethdb.Iterator {
-	return t.db.NewIteratorWithStart(start)
-}
-
-// NewIteratorWithPrefix creates a binary-alphabetical iterator over a subset
-// of database content with a particular key prefix.
-func (t *table) NewIteratorWithPrefix(prefix []byte) ethdb.Iterator {
-	return t.db.NewIteratorWithPrefix(append([]byte(t.prefix), prefix...))
+// NewIterator creates a binary-alphabetical iterator over a subset
+// of database content with a particular key prefix, starting at a particular
+// initial key (or after, if it does not exist).
+func (t *table) NewIterator(prefix []byte, start []byte) ethdb.Iterator {
+	innerPrefix := append([]byte(t.prefix), prefix...)
+	iter := t.db.NewIterator(innerPrefix, start)
+	return &tableIterator{
+		iter:   iter,
+		prefix: t.prefix,
+	}
 }
 
 // Stat returns a particular internal stat of the database.
@@ -138,6 +140,8 @@ func (t *table) Compact(start []byte, limit []byte) error {
 	// If no start was specified, use the table prefix as the first value
 	if start == nil {
 		start = []byte(t.prefix)
+	} else {
+		start = append([]byte(t.prefix), start...)
 	}
 	// If no limit was specified, use the first element not matching the prefix
 	// as the limit
@@ -154,6 +158,8 @@ func (t *table) Compact(start []byte, limit []byte) error {
 				limit = nil
 			}
 		}
+	} else {
+		limit = append([]byte(t.prefix), limit...)
 	}
 	// Range correctly calculated based on table prefix, delegate down
 	return t.db.Compact(start, limit)
@@ -198,7 +204,69 @@ func (b *tableBatch) Reset() {
 	b.batch.Reset()
 }
 
+// tableReplayer is a wrapper around a batch replayer which truncates
+// the added prefix.
+type tableReplayer struct {
+	w      ethdb.KeyValueWriter
+	prefix string
+}
+
+// Put implements the interface KeyValueWriter.
+func (r *tableReplayer) Put(key []byte, value []byte) error {
+	trimmed := key[len(r.prefix):]
+	return r.w.Put(trimmed, value)
+}
+
+// Delete implements the interface KeyValueWriter.
+func (r *tableReplayer) Delete(key []byte) error {
+	trimmed := key[len(r.prefix):]
+	return r.w.Delete(trimmed)
+}
+
 // Replay replays the batch contents.
 func (b *tableBatch) Replay(w ethdb.KeyValueWriter) error {
-	return b.batch.Replay(w)
+	return b.batch.Replay(&tableReplayer{w: w, prefix: b.prefix})
+}
+
+// tableIterator is a wrapper around a database iterator that prefixes each key access
+// with a pre-configured string.
+type tableIterator struct {
+	iter   ethdb.Iterator
+	prefix string
+}
+
+// Next moves the iterator to the next key/value pair. It returns whether the
+// iterator is exhausted.
+func (iter *tableIterator) Next() bool {
+	return iter.iter.Next()
+}
+
+// Error returns any accumulated error. Exhausting all the key/value pairs
+// is not considered to be an error.
+func (iter *tableIterator) Error() error {
+	return iter.iter.Error()
+}
+
+// Key returns the key of the current key/value pair, or nil if done. The caller
+// should not modify the contents of the returned slice, and its contents may
+// change on the next call to Next.
+func (iter *tableIterator) Key() []byte {
+	key := iter.iter.Key()
+	if key == nil {
+		return nil
+	}
+	return key[len(iter.prefix):]
+}
+
+// Value returns the value of the current key/value pair, or nil if done. The
+// caller should not modify the contents of the returned slice, and its contents
+// may change on the next call to Next.
+func (iter *tableIterator) Value() []byte {
+	return iter.iter.Value()
+}
+
+// Release releases associated resources. Release should always succeed and can
+// be called multiple times without causing error.
+func (iter *tableIterator) Release() {
+	iter.iter.Release()
 }

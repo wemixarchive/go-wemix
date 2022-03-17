@@ -22,7 +22,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/console"
+	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/console/prompt"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -47,7 +48,7 @@ type RemoteContract struct {
 func LoadAccount(password, fileName string) (*keystore.Key, error) {
 	var err error
 	if password == "" || password == "-" {
-		password, err = console.Stdin.PromptPassword("Passphrase: ")
+		password, err = prompt.PromptPassword("Passphrase: ")
 		if err != nil {
 			return nil, err
 		}
@@ -101,6 +102,9 @@ func LoadJsonContract(r io.Reader) (*ContractData, error) {
 	name = data.ContractName
 	if len(data.Bytecode) > 0 {
 		bytecode, err = hexutil.Decode(data.Bytecode)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	abiData, err = json.Marshal(data.Abi)
@@ -205,11 +209,11 @@ func LoadContract(fn string, name string) (*ContractData, error) {
 func PackNum(value reflect.Value) []byte {
 	switch kind := value.Kind(); kind {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return abi.U256(new(big.Int).SetUint64(value.Uint()))
+		return math.U256Bytes(new(big.Int).SetUint64(value.Uint()))
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return abi.U256(big.NewInt(value.Int()))
+		return math.U256Bytes(big.NewInt(value.Int()))
 	case reflect.Ptr:
-		return abi.U256(value.Interface().(*big.Int))
+		return math.U256Bytes(new(big.Int).Set(value.Interface().(*big.Int)))
 	default:
 		panic("abi: fatal error")
 	}
@@ -255,7 +259,7 @@ func Deploy(ctx context.Context, cli *ethclient.Client, from *keystore.Key,
 	}
 
 	var data []byte
-	if args == nil || len(args) == 0 {
+	if len(args) == 0 {
 		data = contractData.Bytecode
 	} else {
 		data, err = contractData.Abi.Pack("", args...)
@@ -335,13 +339,13 @@ func CallContract(ctx context.Context, contract *RemoteContract,
 		if output == nil {
 			return fmt.Errorf("Output is nil")
 		} else {
-			err = contract.Abi.Unpack(output, method, out)
+			err = contract.Abi.UnpackIntoInterface(output, method, out)
 		}
 	} else {
 		if len(output.([]interface{})) == 0 {
 			return fmt.Errorf("Output is empty array")
 		} else {
-			err = contract.Abi.Unpack(output.([]interface{}), method, out)
+			err = contract.Abi.UnpackIntoInterface(output.([]interface{}), method, out)
 		}
 	}
 	return err

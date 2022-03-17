@@ -23,11 +23,12 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
 )
 
 var (
-	// ErrBadProDAOExtra is returned if a header doens't support the DAO fork on a
+	// ErrBadProDAOExtra is returned if a header doesn't support the DAO fork on a
 	// pro-fork client.
 	ErrBadProDAOExtra = errors.New("bad DAO pro-fork extra-data")
 
@@ -55,13 +56,15 @@ func VerifyDAOHeaderExtraData(config *params.ChainConfig, header *types.Header) 
 		return nil
 	}
 	// Depending on whether we support or oppose the fork, validate the extra-data contents
-	if config.DAOForkSupport {
-		if !bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
-			return ErrBadProDAOExtra
-		}
-	} else {
-		if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
-			return ErrBadNoDAOExtra
+	if metaminer.IsPoW() {
+		if config.DAOForkSupport {
+			if !bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
+				return ErrBadProDAOExtra
+			}
+		} else {
+			if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
+				return ErrBadNoDAOExtra
+			}
 		}
 	}
 	// All ok, header has the same extra-data we expect

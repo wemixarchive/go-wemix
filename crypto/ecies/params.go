@@ -49,7 +49,13 @@ var (
 	DefaultCurve                  = ethcrypto.S256()
 	ErrUnsupportedECDHAlgorithm   = fmt.Errorf("ecies: unsupported ECDH algorithm")
 	ErrUnsupportedECIESParameters = fmt.Errorf("ecies: unsupported ECIES parameters")
+	ErrInvalidKeyLen              = fmt.Errorf("ecies: invalid key size (> %d) in ECIESParams", maxKeyLen)
 )
+
+// KeyLen is limited to prevent overflow of the counter
+// in concatKDF. While the theoretical limit is much higher,
+// no known cipher uses keys larger than 512 bytes.
+const maxKeyLen = 512
 
 type ECIESParams struct {
 	Hash      func() hash.Hash // hash function
@@ -72,6 +78,14 @@ var (
 		Cipher:    aes.NewCipher,
 		BlockSize: aes.BlockSize,
 		KeyLen:    16,
+	}
+
+	ECIES_AES192_SHA384 = &ECIESParams{
+		Hash:      sha512.New384,
+		hashAlgo:  crypto.SHA384,
+		Cipher:    aes.NewCipher,
+		BlockSize: aes.BlockSize,
+		KeyLen:    24,
 	}
 
 	ECIES_AES256_SHA256 = &ECIESParams{
@@ -102,7 +116,7 @@ var (
 var paramsFromCurve = map[elliptic.Curve]*ECIESParams{
 	ethcrypto.S256(): ECIES_AES128_SHA256,
 	elliptic.P256():  ECIES_AES128_SHA256,
-	elliptic.P384():  ECIES_AES256_SHA384,
+	elliptic.P384():  ECIES_AES192_SHA384,
 	elliptic.P521():  ECIES_AES256_SHA512,
 }
 
@@ -114,4 +128,17 @@ func AddParamsForCurve(curve elliptic.Curve, params *ECIESParams) {
 // Only the curves P256, P384, and P512 are supported.
 func ParamsFromCurve(curve elliptic.Curve) (params *ECIESParams) {
 	return paramsFromCurve[curve]
+}
+
+func pubkeyParams(key *PublicKey) (*ECIESParams, error) {
+	params := key.Params
+	if params == nil {
+		if params = ParamsFromCurve(key.Curve); params == nil {
+			return nil, ErrUnsupportedECIESParameters
+		}
+	}
+	if params.KeyLen > maxKeyLen {
+		return nil, ErrInvalidKeyLen
+	}
+	return params, nil
 }

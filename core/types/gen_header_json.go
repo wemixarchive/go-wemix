@@ -35,6 +35,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Nonce        BlockNonce    `json:"nonce"`
 		MinerNodeId  hexutil.Bytes `json:"minderNodeId"`
 		MinerNodeSig hexutil.Bytes `json:"minderNodeId"`
+		BaseFee     *hexutil.Big   `json:"baseFeePerGas" rlp:"optional"`
 		Hash         common.Hash   `json:"hash"`
 	}
 	var enc Header
@@ -57,6 +58,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.Nonce = h.Nonce
 	enc.MinerNodeId = h.MinerNodeId
 	enc.MinerNodeSig = h.MinerNodeSig
+	enc.BaseFee = (*hexutil.Big)(h.BaseFee)
 	enc.Hash = h.Hash()
 	return json.Marshal(&enc)
 }
@@ -83,6 +85,7 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		Nonce        *BlockNonce     `json:"nonce"`
 		MinerNodeId  *hexutil.Bytes  `json:"minerNodeId"`
 		MinerNodeSig *hexutil.Bytes  `json:"minerNodeSig"`
+		BaseFee      *hexutil.Big    `json:"baseFeePerGas" rlp:"optional"`
 	}
 	var dec Header
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -159,6 +162,9 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 	}
 	if dec.MinerNodeSig != nil {
 		h.MinerNodeSig = *dec.MinerNodeSig
+	}
+	if dec.BaseFee != nil {
+		h.BaseFee = (*big.Int)(dec.BaseFee)
 	}
 	return nil
 }

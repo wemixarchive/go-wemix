@@ -129,7 +129,6 @@ func (to *TxOrderer) Peek() *types.Transaction {
 			continue
 		}
 	}
-	return nil
 }
 
 func (to *TxOrderer) Shift() {
@@ -181,7 +180,6 @@ func (to *TxOrderer) NextForPrefetch() *types.Transaction {
 			continue
 		}
 	}
-	return nil
 }
 
 // EOF

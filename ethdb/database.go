@@ -19,8 +19,6 @@ package ethdb
 
 import (
 	"io"
-
-	//"github.com/ethereum/go-ethereum/ethdb/rocksdb"
 )
 
 // KeyValueReader wraps the Has and Get method of a backing data store.
@@ -80,6 +78,13 @@ type AncientReader interface {
 	// Ancient retrieves an ancient binary blob from the append-only immutable files.
 	Ancient(kind string, number uint64) ([]byte, error)
 
+	// AncientRange retrieves multiple items in sequence, starting from the index 'start'.
+	// It will return
+	//  - at most 'count' items,
+	//  - at least 1 item (even if exceeding the maxBytes), but will otherwise
+	//   return as many items as fit into maxBytes.
+	AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error)
+
 	// Ancients returns the ancient item numbers in the ancient store.
 	Ancients() (uint64, error)
 
@@ -87,11 +92,21 @@ type AncientReader interface {
 	AncientSize(kind string) (uint64, error)
 }
 
+// AncientBatchReader is the interface for 'batched' or 'atomic' reading.
+type AncientBatchReader interface {
+	AncientReader
+
+	// ReadAncients runs the given read operation while ensuring that no writes take place
+	// on the underlying freezer.
+	ReadAncients(fn func(AncientReader) error) (err error)
+}
+
 // AncientWriter contains the methods required to write to immutable ancient data.
 type AncientWriter interface {
-	// AppendAncient injects all binary blobs belong to block at the end of the
-	// append-only immutable table files.
-	AppendAncient(number uint64, hash, header, body, receipt, td []byte) error
+	// ModifyAncients runs a write operation on the ancient store.
+	// If the function returns an error, any changes to the underlying store are reverted.
+	// The integer return value is the total size of the written data.
+	ModifyAncients(func(AncientWriteOp) error) (int64, error)
 
 	// TruncateAncients discards all but the first n ancient data from the ancient store.
 	TruncateAncients(n uint64) error
@@ -100,11 +115,20 @@ type AncientWriter interface {
 	Sync() error
 }
 
+// AncientWriteOp is given to the function argument of ModifyAncients.
+type AncientWriteOp interface {
+	// Append adds an RLP-encoded item.
+	Append(kind string, number uint64, item interface{}) error
+
+	// AppendRaw adds an item without RLP-encoding it.
+	AppendRaw(kind string, number uint64, item []byte) error
+}
+
 // Reader contains the methods required to read data from both key-value as well as
 // immutable ancient data.
 type Reader interface {
 	KeyValueReader
-	AncientReader
+	AncientBatchReader
 }
 
 // Writer contains the methods required to write data to both key-value as well as
@@ -117,7 +141,7 @@ type Writer interface {
 // AncientStore contains all the methods required to allow handling different
 // ancient data stores backing immutable chain data store.
 type AncientStore interface {
-	AncientReader
+	AncientBatchReader
 	AncientWriter
 	io.Closer
 }
@@ -136,7 +160,6 @@ type Database interface {
 
 func EnableStats(b bool) {
 	//rocksdb.EnableStats(b)
-	return
 }
 
 func Stats(device string) (disk_r_count, disk_r_bytes, disk_w_couhnt, disk_w_bytes, r_count, r_bytes, w_count, w_bytes, l_count, d_count uint64) {
