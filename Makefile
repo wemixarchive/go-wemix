@@ -2,7 +2,7 @@
 # with Go source code. If you know what GOPATH is then you probably
 # don't need to bother with make.
 
-.PHONY: geth android ios evm all test clean rocksdb
+.PHONY: geth android ios evm all test clean rocksdb etcd
 .PHONY: gmet-linux
 
 GOBIN = ./build/bin
