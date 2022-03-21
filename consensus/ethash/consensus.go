@@ -600,17 +600,22 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
-func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
+func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) error {
 	// Accumulate any block and uncle rewards and commit the final state root
-	accumulateRewards(chain.Config(), state, header, uncles)
+	if err := accumulateRewards(chain.Config(), state, header, uncles); err != nil {
+		return err
+	}
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	return nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
 func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Finalize block
-	ethash.Finalize(chain, header, state, txs, uncles)
+	if err := ethash.Finalize(chain, header, state, txs, uncles); err != nil {
+		return nil, err
+	}
 
 	// sign header.Root with node's private key
 	if !metaminer.IsPoW() {
@@ -663,7 +668,7 @@ var (
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
+func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) error {
 	// Select the correct block reward based on chain progression
 	blockReward := FrontierBlockReward
 	if config.IsByzantium(header.Number) {
@@ -695,18 +700,13 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 			func(addr common.Address, amt *big.Int) {
 				state.AddBalance(addr, amt)
 			})
-		if err == nil {
-			header.Rewards = rewards
-			if coinbase != nil {
-				header.Coinbase = *coinbase
-			}
-		} else {
-			// upon error, rewards go to the coinbase
-			reward := new(big.Int)
-			if header.Fees != nil {
-				reward.Add(blockReward, header.Fees)
-			}
-			state.AddBalance(header.Coinbase, reward)
+		if err != nil {
+			return err
+		}
+		header.Rewards = rewards
+		if coinbase != nil {
+			header.Coinbase = *coinbase
 		}
 	}
+	return nil
 }
