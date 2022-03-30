@@ -700,12 +700,19 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 			func(addr common.Address, amt *big.Int) {
 				state.AddBalance(addr, amt)
 			})
-		if err != nil {
+		if err == nil {
+			header.Rewards = rewards
+			if coinbase != nil {
+				header.Coinbase = *coinbase
+			}
+		} else {
+			if err == metaminer.ErrNotInitialized {
+				reward := new(big.Int)
+				reward.Add(blockReward, header.Fees)
+				state.AddBalance(header.Coinbase, reward)
+				return nil
+			}
 			return err
-		}
-		header.Rewards = rewards
-		if coinbase != nil {
-			header.Coinbase = *coinbase
 		}
 	}
 	return nil
