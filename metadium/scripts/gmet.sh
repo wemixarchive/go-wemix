@@ -114,8 +114,8 @@ function wipe ()
     fi
 
     cd $d
-    /bin/rm -rf geth/LOCK geth/chaindata geth/ethash geth/lightchaindata \
-	geth/transactions.rlp geth/nodes geth.ipc logs/* etcd
+    /bin/rm -rf geth/LOCK geth/chaindata* geth/ethash geth/lightchaindata \
+	geth/transactions.rlp geth/nodes geth/triecache geth.ipc logs/* etcd
 }
 
 function wipe_all ()
@@ -307,6 +307,14 @@ case "$1" in
     PIDS=`get_gmet_pids`
     if [ ! "$PIDS" = "" ]; then
 	echo $PIDS | xargs -L1 kill -9
+    fi
+    # wait until geth/chaindata is free
+    if [ ! "$NODE" = "" ]; then
+        d=$(get_data_dir "$1")
+        for i in {1..200}; do
+            lsof ${d}/geth/chaindata/LOG 2>&1 | grep -q gmet > /dev/null 2>&1 || break
+            sleep 1
+        done
     fi
     echo "done."
     ;;
