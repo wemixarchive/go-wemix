@@ -320,6 +320,14 @@ func (p *Peer) SendBlockHeaders(headers []*types.Header) error {
 }
 
 // ReplyBlockHeaders is the eth/66 version of SendBlockHeaders.
+func (p *Peer) ReplyBlockHeaders(id uint64, headers []*types.Header) error {
+	return p2p.Send(p.rw, BlockHeadersMsg, BlockHeadersPacket66{
+		RequestId:          id,
+		BlockHeadersPacket: headers,
+	})
+}
+
+// ReplyBlockHeaders is the eth/66 version of SendBlockHeaders.
 func (p *Peer) ReplyBlockHeadersRLP(id uint64, headers []rlp.RawValue) error {
 	return p2p.Send(p.rw, BlockHeadersMsg, BlockHeadersRLPPacket66{
 		RequestId:             id,
