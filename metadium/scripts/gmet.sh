@@ -114,7 +114,7 @@ function wipe ()
     fi
 
     cd $d
-    /bin/rm -rf geth/LOCK geth/chaindata* geth/ethash geth/lightchaindata \
+    /bin/rm -rf geth/LOCK geth/chaindata geth/ethash geth/lightchaindata \
 	geth/transactions.rlp geth/nodes geth/triecache geth.ipc logs/* etcd
 }
 
