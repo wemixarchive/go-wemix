@@ -1437,7 +1437,7 @@ func (w *worker) refreshPending(locked bool) {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}
-	if env, err := w.makeEnv(parent, header, header.Coinbase); err != nil {
+	if env, err := w.makeEnv(parent, header, header.Coinbase); err == nil {
 		w.updateSnapshot(env)
 	}
 }
