@@ -99,8 +99,9 @@ var (
 	nilAddress      = common.Address{}
 	admin           *metaAdmin
 
-	ErrNotRunning     = errors.New("Not Running")
-	ErrAlreadyRunning = errors.New("Already Running")
+	ErrNotRunning     = errors.New("not running")
+	ErrAlreadyRunning = errors.New("already running")
+	ErrInvalidEnode   = errors.New("invalid enode")
 )
 
 func (n *metaNode) eq(m *metaNode) bool {
@@ -319,7 +320,7 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 
 		sid := hex.EncodeToString(enode)
 		if len(sid) != 128 {
-			return nil, errors.New("Invalid enode")
+			return nil, ErrInvalidEnode
 		}
 		idv4, _ := toIdv4(sid)
 		nodes = append(nodes, &metaNode{
@@ -346,7 +347,7 @@ func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rew
 	)
 
 	if ma.registry == nil || ma.registry.To == nil {
-		err = fmt.Errorf("Not initialized")
+		err = metaminer.ErrNotInitialized
 		return
 	}
 
@@ -877,7 +878,7 @@ func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalanc
 	}
 
 	if rewardPoolAccount == nil && maintenanceAccount == nil && len(members) == 0 {
-		err = fmt.Errorf("Not initialized")
+		err = metaminer.ErrNotInitialized
 		return
 	}
 
@@ -951,7 +952,7 @@ func verifyRewards(num *big.Int, rewards string) error {
 
 func signBlock(hash common.Hash) (nodeId, sig []byte, err error) {
 	if admin == nil {
-		err = errors.New("Not initialized")
+		err = metaminer.ErrNotInitialized
 		return
 	}
 

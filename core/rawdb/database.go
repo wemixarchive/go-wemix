@@ -17,10 +17,13 @@
 package rawdb
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"os"
+	"path"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -293,7 +296,24 @@ func NewRocksDBDatabaseWithFreezer(file string, cache int, handles int, freezer 
 	return frdb, nil
 }
 
+func detectDb(file string) int {
+	if f, err := os.Open(path.Join(file, "LOG")); err != nil {
+		return 0
+	} else if s, err := bufio.NewReader(f).ReadString('\n'); err != nil {
+		return 0
+	} else if strings.Contains(s, "RocksDB version") {
+		return 2
+	}
+	return 1
+}
+
 func NewDB(file string, cache int, handles int, namespace string, readonly bool) (ethdb.Database, error) {
+	switch detectDb(file) {
+	case 1:
+		return NewLevelDBDatabase(file, cache, handles, namespace, readonly)
+	case 2:
+		return NewRocksDBDatabase(file, cache, handles, namespace, readonly)
+	}
 	if params.UseRocksDb != 0 {
 		return NewRocksDBDatabase(file, cache, handles, namespace, readonly)
 	} else {
@@ -302,6 +322,12 @@ func NewDB(file string, cache int, handles int, namespace string, readonly bool)
 }
 
 func NewDBWithFreezer(file string, cache int, handles int, freezer string, namespace string, readonly bool) (ethdb.Database, error) {
+	switch detectDb(file) {
+	case 1:
+		return NewLevelDBDatabaseWithFreezer(file, cache, handles, freezer, namespace, readonly)
+	case 2:
+		return NewRocksDBDatabaseWithFreezer(file, cache, handles, freezer, namespace, readonly)
+	}
 	if params.UseRocksDb != 0 {
 		return NewRocksDBDatabaseWithFreezer(file, cache, handles, freezer, namespace, readonly)
 	} else {

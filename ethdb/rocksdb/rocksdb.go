@@ -62,6 +62,9 @@ func b2c(b []byte) *C.char {
 func New(file string, cache int, handles int, namespace string, readonly bool) (*RDBDatabase, error) {
 	var cerr *C.char
 
+	// null terminated c string
+	file0 := file + string(rune(0))
+
 	opts := C.rocksdb_options_create()
 	C.rocksdb_options_set_create_if_missing(opts, 1)
 	C.rocksdb_options_set_max_open_files(opts, C.int(handles))
@@ -69,7 +72,12 @@ func New(file string, cache int, handles int, namespace string, readonly bool) (
 	wopts := C.rocksdb_writeoptions_create()
 	ropts := C.rocksdb_readoptions_create()
 
-	db := C.rocksdb_open(opts, b2c([]byte(file)), &cerr)
+	var db *C.rocksdb_t
+	if readonly {
+		db = C.rocksdb_open_for_read_only(opts, b2c([]byte(file0)), 0, &cerr)
+	} else {
+		db = C.rocksdb_open(opts, b2c([]byte(file0)), &cerr)
+	}
 	if cerr != nil {
 		C.rocksdb_options_destroy(opts)
 		return nil, cerror(cerr)
