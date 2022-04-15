@@ -14,10 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/etcd/embed"
-	"github.com/coreos/etcd/etcdserver/api/membership"
-	"github.com/coreos/etcd/etcdserver/api/v3client"
-	"github.com/coreos/etcd/etcdserver/etcdserverpb"
+	"go.etcd.io/etcd/api/v3/etcdserverpb"
+	"go.etcd.io/etcd/server/v3/embed"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/membership"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/log"
 	metaapi "github.com/ethereum/go-ethereum/metadium/api"
@@ -103,6 +104,7 @@ func (ma *metaAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	// LCUrls: listening client urls
 	// LPUrls: advertised client urls
 	cfg := embed.NewConfig()
+	cfg.LogLevel = "error"
 	cfg.Dir = ma.etcdDir
 	cfg.Name = ma.self.Name
 	u, _ := url.Parse(fmt.Sprintf("http://%s:%d", "0.0.0.0", ma.self.Port+1))
