@@ -3,7 +3,7 @@
 # don't need to bother with make.
 
 .PHONY: geth android ios evm all test clean rocksdb etcd
-.PHONY: gmet-linux
+.PHONY: gnxt-linux
 
 GOBIN = ./build/bin
 GO ?= latest
@@ -29,27 +29,27 @@ ROCKSDB_DIR=$(shell pwd)/rocksdb
 ROCKSDB_TAG=-tags rocksdb
 endif
 
-metadium: etcd gmet logrot
+nxtmeta: etcd gnxt logrot
 	@[ -d build/conf ] || mkdir -p build/conf
-	@cp -p metadium/scripts/gmet.sh metadium/scripts/solc.sh build/bin/
+	@cp -p metadium/scripts/gnxt.sh metadium/scripts/solc.sh build/bin/
 	@cp -p metadium/scripts/config.json.example		\
 		metadium/scripts/genesis-template.json		\
 		metadium/contracts/MetadiumGovernance.js	\
 		metadium/scripts/deploy-governance.js		\
 		build/conf/
-	@(cd build; tar cfz metadium.tar.gz bin conf)
-	@echo "Done building build/metadium.tar.gz"
+	@(cd build; tar cfz nxtmeta.tar.gz bin conf)
+	@echo "Done building build/nxtmeta.tar.gz"
 
-gmet: etcd rocksdb metadium/governance_abi.go
+gnxt: etcd rocksdb metadium/governance_abi.go
 ifeq ($(USE_ROCKSDB), NO)
-	$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
+	$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/gnxt
 else
 	CGO_CFLAGS=-I$(ROCKSDB_DIR)/include \
 		CGO_LDFLAGS="-L$(ROCKSDB_DIR) -lrocksdb -lm -lstdc++ $(shell awk '/PLATFORM_LDFLAGS/ {sub("PLATFORM_LDFLAGS=", ""); print} /JEMALLOC=1/ {print "-ljemalloc"}' < $(ROCKSDB_DIR)/make_config.mk)" \
-		$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/gmet
+		$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/gnxt
 endif
 	@echo "Done building."
-	@echo "Run \"$(GOBIN)/gmet\" to launch gmet."
+	@echo "Run \"$(GOBIN)/gnxt\" to launch gnxt."
 
 logrot:
 	$(GORUN) build/ci.go install ./cmd/logrot
@@ -110,7 +110,7 @@ devtools:
 	@type "solc" 2> /dev/null || echo 'Please install solc'
 	@type "protoc" 2> /dev/null || echo 'Please install protoc'
 
-gmet-linux: etcd
+gnxt-linux: etcd
 	@docker --version > /dev/null 2>&1;				\
 	if [ ! $$? = 0 ]; then						\
 		echo "Docker not found.";				\

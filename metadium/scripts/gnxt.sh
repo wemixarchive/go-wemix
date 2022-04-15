@@ -13,12 +13,12 @@ function get_data_dir ()
 {
     if [ ! "$1" = "" ]; then
 	d=${META_DIR}/$1
-	if [ -x "$d/bin/gmet" ]; then
+	if [ -x "$d/bin/gnxt" ]; then
 	    echo $d
 	fi
     else
 	for i in $(/bin/ls -1 ${META_DIR}); do
-	    if [ -x "${META_DIR}/$i/bin/gmet" ]; then
+	    if [ -x "${META_DIR}/$i/bin/gnxt" ]; then
 		echo ${META_DIR}/$i
 		return
 	    fi
@@ -39,10 +39,10 @@ function init ()
     fi
 
     d=$(get_data_dir "${NODE}")
-    if [ -x "$d/bin/gmet" ]; then
-	GMET="$d/bin/gmet"
+    if [ -x "$d/bin/gnxt" ]; then
+	GNXT="$d/bin/gnxt"
     else
-	echo "Cannot find gmet"
+	echo "Cannot find gnxt"
 	return 1
     fi
 
@@ -57,15 +57,15 @@ function init ()
     [ -d "$d/geth" ] || mkdir -p "$d/geth"
     [ -d "$d/logs" ] || mkdir -p "$d/logs"
 
-    ${GMET} metadium genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
+    ${GNXT} metadium genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
     [ $? = 0 ] || return $?
 
     echo "PORT=8588
 DISCOVER=0" > $d/.rc
-    ${GMET} --datadir $d init $d/genesis.json
+    ${GNXT} --datadir $d init $d/genesis.json
     echo "Generating dags for epoch 0 and 1..."
-    ${GMET} makedag 0     $d/.ethash &
-    ${GMET} makedag 30000 $d/.ethash &
+    ${GNXT} makedag 0     $d/.ethash &
+    ${GNXT} makedag 30000 $d/.ethash &
     wait
 }
 
@@ -86,10 +86,10 @@ function init_gov ()
     fi
 
     d=$(get_data_dir "${NODE}")
-    if [ -x "$d/bin/gmet" ]; then
-	GMET="$d/bin/gmet"
+    if [ -x "$d/bin/gnxt" ]; then
+	GNXT="$d/bin/gnxt"
     else
-	echo "Cannot find gmet"
+	echo "Cannot find gnxt"
 	return 1
     fi
 
@@ -101,15 +101,15 @@ function init_gov ()
     PORT=$(grep PORT ${d}/.rc | sed -e 's/PORT=//')
     [ "$PORT" = "" ] && PORT=8588
 
-    exec ${GMET} attach http://localhost:${PORT} --preload "$d/conf/MetadiumGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'")'
-#    ${GMET} metadium deploy-governance --url http://localhost:${PORT} --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
+    exec ${GNXT} attach http://localhost:${PORT} --preload "$d/conf/MetadiumGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'")'
+#    ${GNXT} metadium deploy-governance --url http://localhost:${PORT} --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
 }
 
 function wipe ()
 {
     d=$(get_data_dir "$1")
-    if [ ! -x "$d/bin/gmet" ]; then
-	echo "Is '$1' metadium data directory?"
+    if [ ! -x "$d/bin/gnxt" ]; then
+	echo "Is '$1' nxtmeta data directory?"
 	return
     fi
 
@@ -121,7 +121,7 @@ function wipe ()
 function wipe_all ()
 {
     for i in `/bin/ls -1 ${META_DIR}/`; do
-	if [ ! -d "${META_DIR}/$i" -o ! -x "${META_DIR}/$i/bin/gmet" ]; then
+	if [ ! -d "${META_DIR}/$i" -o ! -x "${META_DIR}/$i/bin/gnxt" ]; then
 	    continue
 	fi
 	wipe $i
@@ -131,15 +131,15 @@ function wipe_all ()
 function clean ()
 {
     d=$(get_data_dir "$1")
-    if [ -x "$d/bin/gmet" ]; then
-	GMET="$d/bin/gmet"
+    if [ -x "$d/bin/gnxt" ]; then
+	GNXT="$d/bin/gnxt"
     else
-	echo "Cannot find gmet"
+	echo "Cannot find gnxt"
 	return
     fi
 
     cd $d
-    $GMET --datadir ${PWD} removedb
+    $GNXT --datadir ${PWD} removedb
 }
 
 function clean_all ()
@@ -155,10 +155,10 @@ function clean_all ()
 function start ()
 {
     d=$(get_data_dir "$1")
-    if [ -x "$d/bin/gmet" ]; then
-	GMET="$d/bin/gmet"
+    if [ -x "$d/bin/gnxt" ]; then
+	GNXT="$d/bin/gnxt"
     else
-	echo "Cannot find gmet"
+	echo "Cannot find gnxt"
 	return
     fi
 
@@ -188,7 +188,7 @@ function start ()
 	SYNC_MODE="--syncmode full --gcmode archive";;
     esac
 
-    OPTS="$COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT $TESTNET $SYNC_MODE ${GMET_OPTS}"
+    OPTS="$COINBASE $DISCOVER $RPCOPT $BOOT_NODES $NONCE_LIMIT $TESTNET $SYNC_MODE ${GNXT_OPTS}"
     [ "$PORT" = "" ] || OPTS="${OPTS} --port $(($PORT + 1))"
     [ "$HUB" = "" ] || OPTS="${OPTS} --hub ${HUB}"
     [ "$MAX_TXS_PER_BLOCK" = "" ] || OPTS="${OPTS} --maxtxsperblock ${MAX_TXS_PER_BLOCK}"
@@ -197,21 +197,21 @@ function start ()
 
     cd $d
     if [ ! "$2" = "inner" ]; then
-	$GMET --datadir ${PWD} --metrics $OPTS 2>&1 |   \
+	$GNXT --datadir ${PWD} --metrics $OPTS 2>&1 |   \
 	    ${d}/bin/logrot ${d}/logs/log 10M 5 &
     else
 	if [ -x "$d/bin/logrot" ]; then
 	    exec > >($d/bin/logrot $d/logs/log 10M 5)
 	    exec 2>&1
 	fi
-	exec $GMET --datadir ${PWD} --metrics $OPTS
+	exec $GNXT --datadir ${PWD} --metrics $OPTS
     fi
 }
 
 function start_all ()
 {
     for i in `/bin/ls -1 ${META_DIR}/`; do
-	if [ ! -d "${META_DIR}/$i" -o ! -f "${META_DIR}/$i/bin/gmet" ]; then
+	if [ ! -d "${META_DIR}/$i" -o ! -f "${META_DIR}/$i/bin/gnxt" ]; then
 	    continue
 	fi
 	start $i
@@ -219,12 +219,12 @@ function start_all ()
 	return
     done
 
-    echo "Cannot find gmet directory. Check if 'bin/gmet' is present in the data directory";
+    echo "Cannot find gnxt directory. Check if 'bin/gnxt' is present in the data directory";
 }
 
-function get_gmet_pids ()
+function get_gnxt_pids ()
 {
-    ps axww | grep -v grep | grep "gmet.*datadir.*${NODE}" | awk '{print $1}'
+    ps axww | grep -v grep | grep "gnxt.*datadir.*${NODE}" | awk '{print $1}'
 }
 
 function do_nodes ()
@@ -236,7 +236,7 @@ function do_nodes ()
 	if [ "$1" = "$LHN" -o "$1" = "${LHN/.*/}" ]; then
 	    $0 ${CMD} $2
 	else
-	    ssh -f $1 ${META_DIR}/$2/bin/gmet.sh ${CMD} $2
+	    ssh -f $1 ${META_DIR}/$2/bin/gnxt.sh ${CMD} $2
 	fi
 	shift
 	shift
@@ -294,17 +294,17 @@ case "$1" in
     else
 	NODE=
     fi
-    PIDS=`get_gmet_pids`
+    PIDS=`get_gnxt_pids`
     if [ ! "$PIDS" = "" ]; then
 	echo $PIDS | xargs -L1 kill
     fi
     for i in {1..200}; do
-	PIDS=`get_gmet_pids`
+	PIDS=`get_gnxt_pids`
 	[ "$PIDS" = "" ] && break
 	echo -n "."
 	sleep 1
     done
-    PIDS=`get_gmet_pids`
+    PIDS=`get_gnxt_pids`
     if [ ! "$PIDS" = "" ]; then
 	echo $PIDS | xargs -L1 kill -9
     fi
@@ -312,7 +312,7 @@ case "$1" in
     if [ ! "$NODE" = "" ]; then
         d=$(get_data_dir "$1")
         for i in {1..200}; do
-            lsof ${d}/geth/chaindata/LOG 2>&1 | grep -q gmet > /dev/null 2>&1 || break
+            lsof ${d}/geth/chaindata/LOG 2>&1 | grep -q gnxt > /dev/null 2>&1 || break
             sleep 1
         done
     fi
@@ -362,7 +362,7 @@ case "$1" in
     if [ -f "$d/rc.js" ]; then
 	RCJS="--preload $d/rc.js"
     fi
-    exec ${d}/bin/gmet ${RCJS} attach ipc:${d}/geth.ipc
+    exec ${d}/bin/gnxt ${RCJS} attach ipc:${d}/geth.ipc
     ;;
 
 *)
