@@ -13,6 +13,7 @@ import (
 	"errors"
 	"runtime"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -337,15 +338,22 @@ func (db *RDBDatabase) Meter(prefix string) {
 	return
 }
 
+func rdbBatchFinalizer(b *rdbBatch) {
+	if b.b != nil {
+		bb := b.b
+		b.b = nil
+		go func() {
+			// a little bit of delay here seems to abate crash
+			time.Sleep(1 * time.Second)
+			C.rocksdb_writebatch_destroy(bb)
+		}()
+	}
+}
+
 func (db *RDBDatabase) NewBatch() ethdb.Batch {
 	b := C.rocksdb_writebatch_create()
 	bb := &rdbBatch{db: db.db, b: b, wopts: db.wopts, data: nil}
-	runtime.SetFinalizer(bb, func(bbb *rdbBatch) {
-		if bbb.b != nil {
-			C.rocksdb_writebatch_destroy(bbb.b)
-			bbb.b = nil
-		}
-	})
+	runtime.SetFinalizer(bb, rdbBatchFinalizer)
 	return bb
 }
 
