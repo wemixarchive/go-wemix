@@ -659,8 +659,6 @@ func (w *worker) mainLoop() {
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
 					w.commitWork(nil, false, time.Now().Unix())
-				} else if !metaminer.IsPoW() && !isBusyMining() && metaminer.AmPartner() {
-					w.commitWork(nil, true, time.Now().Unix())
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
