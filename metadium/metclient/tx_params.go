@@ -16,69 +16,64 @@ import (
 // Also we might have to maintain window ala tcp window to accommodate nonces
 // used in failed transactions.
 var (
-	_lock     = &sync.Mutex{}
-	_chainId  *big.Int
-	_gasPrice *big.Int
-	_nonces   = map[common.Address]*big.Int{}
+	txParamsCache = &sync.Map{}
 )
 
 func GetOpportunisticTxParams(ctx context.Context, cli *ethclient.Client, addr common.Address, refresh bool, incNonce bool) (chainId, gasPrice, nonce *big.Int, err error) {
-	_lock.Lock()
-	defer _lock.Unlock()
+	n, n_ok := txParamsCache.Load(addr)
+	cid, cid_ok := txParamsCache.Load("chain-id")
+	gp, gp_ok := txParamsCache.Load("gas-price")
 
-	if _nonce, ok := _nonces[addr]; refresh || _chainId == nil || _gasPrice == nil || !ok {
-		// pass
-	} else {
+	if !refresh && n_ok && cid_ok && gp_ok {
 		// cache's good
-		chainId = big.NewInt(_chainId.Int64())
-		gasPrice = big.NewInt(_gasPrice.Int64())
-		nonce = big.NewInt(_nonce.Int64())
+		chainId = new(big.Int).Set(cid.(*big.Int))
+		gasPrice = new(big.Int).Set(gp.(*big.Int))
+		nonce = new(big.Int).Set(n.(*big.Int))
 		if incNonce {
-			_nonce.Add(_nonce, common.Big1)
+			txParamsCache.Store(addr, new(big.Int).Add(nonce, common.Big1))
 		}
 		return
 	}
 
-	if refresh || _chainId == nil {
-		var cid *big.Int
+	if !refresh && cid_ok {
+		chainId = new(big.Int).Set(cid.(*big.Int))
+	} else {
 		cid, err = cli.NetworkID(ctx)
 		if err != nil {
 			return
 		}
-		_chainId = big.NewInt(cid.Int64())
-		chainId = big.NewInt(cid.Int64())
-	} else {
-		chainId = big.NewInt(_chainId.Int64())
+		txParamsCache.Store("chain-id", cid)
+		chainId = new(big.Int).Set(cid.(*big.Int))
 	}
-	if refresh || _gasPrice == nil {
-		var gp *big.Int
+	if !refresh && gp_ok {
+		gasPrice = new(big.Int).Set(gp.(*big.Int))
+	} else {
 		gp, err = cli.SuggestGasPrice(ctx)
 		if err != nil {
 			return
 		}
-		_gasPrice = big.NewInt(gp.Int64())
-		gasPrice = big.NewInt(gp.Int64())
+		txParamsCache.Store("gas-price", gp)
+		gasPrice = new(big.Int).Set(gp.(*big.Int))
+	}
+
+	var n1, n2 uint64
+	n1, err = cli.PendingNonceAt(ctx, addr)
+	if err != nil {
+		return
+	}
+	n2, err = cli.NonceAt(ctx, addr, nil)
+	if err != nil {
+		return
+	}
+	if n1 < n2 {
+		n1 = n2
+	}
+
+	nonce = big.NewInt(int64(n1))
+	if !incNonce {
+		txParamsCache.Store(addr, nonce)
 	} else {
-		gasPrice = big.NewInt(_gasPrice.Int64())
-	}
-
-	var _n1, _n2 uint64
-	_n1, err = cli.PendingNonceAt(ctx, addr)
-	if err != nil {
-		return
-	}
-	_n2, err = cli.NonceAt(ctx, addr, nil)
-	if err != nil {
-		return
-	}
-	if _n1 < _n2 {
-		_n1 = _n2
-	}
-
-	_nonces[addr] = big.NewInt(int64(_n1))
-	nonce = big.NewInt(_nonces[addr].Int64())
-	if incNonce {
-		_nonces[addr].Add(_nonces[addr], common.Big1)
+		txParamsCache.Store(addr, new(big.Int).Add(nonce, common.Big1))
 	}
 
 	return
