@@ -36,8 +36,11 @@ func handleGetBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := answerGetBlockHeadersQuery(backend, &query, peer)
-	return peer.SendBlockHeaders(response)
+	go func() error {
+		response := answerGetBlockHeadersQuery(backend, &query, peer)
+		return peer.SendBlockHeaders(response)
+	}()
+	return nil
 }
 
 func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, peer *Peer) []*types.Header {
@@ -133,19 +136,21 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := ServiceGetBlockHeadersQuery(backend.Chain(), query.GetBlockHeadersPacket, peer)
-	//	if len(response) > 1 || query.GetBlockHeadersPacket.Amount == 1 {
-	if len(response) == int(query.GetBlockHeadersPacket.Amount) {
-		return peer.ReplyBlockHeadersRLP(query.RequestId, response)
-	} else {
-		// Metadium: fall back to old behavior
-		response2 := answerGetBlockHeadersQuery(backend, query.GetBlockHeadersPacket, peer)
-		if len(response2) > len(response) {
-			return peer.ReplyBlockHeaders(query.RequestId, response2)
-		} else {
+	go func() error {
+		response := ServiceGetBlockHeadersQuery(backend.Chain(), query.GetBlockHeadersPacket, peer)
+		if len(response) == int(query.GetBlockHeadersPacket.Amount) {
 			return peer.ReplyBlockHeadersRLP(query.RequestId, response)
+		} else {
+			// Metadium: fall back to old behavior
+			response2 := answerGetBlockHeadersQuery(backend, query.GetBlockHeadersPacket, peer)
+			if len(response2) > len(response) {
+				return peer.ReplyBlockHeaders(query.RequestId, response2)
+			} else {
+				return peer.ReplyBlockHeadersRLP(query.RequestId, response)
+			}
 		}
-	}
+	}()
+	return nil
 }
 
 // ServiceGetBlockHeadersQuery assembles the response to a header query. It is
@@ -317,8 +322,11 @@ func handleGetBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := ServiceGetBlockBodiesQuery(backend.Chain(), query)
-	return peer.SendBlockBodiesRLP(response)
+	go func() error {
+		response := ServiceGetBlockBodiesQuery(backend.Chain(), query)
+		return peer.SendBlockBodiesRLP(response)
+	}()
+	return nil
 }
 
 func handleGetBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
@@ -327,8 +335,11 @@ func handleGetBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := ServiceGetBlockBodiesQuery(backend.Chain(), query.GetBlockBodiesPacket)
-	return peer.ReplyBlockBodiesRLP(query.RequestId, response)
+	go func() error {
+		response := ServiceGetBlockBodiesQuery(backend.Chain(), query.GetBlockBodiesPacket)
+		return peer.ReplyBlockBodiesRLP(query.RequestId, response)
+	}()
+	return nil
 }
 
 // ServiceGetBlockBodiesQuery assembles the response to a body query. It is
@@ -358,8 +369,11 @@ func handleGetNodeData(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := ServiceGetNodeDataQuery(backend.Chain(), query)
-	return peer.SendNodeData(response)
+	go func() error {
+		response := ServiceGetNodeDataQuery(backend.Chain(), query)
+		return peer.SendNodeData(response)
+	}()
+	return nil
 }
 
 func handleGetNodeData66(backend Backend, msg Decoder, peer *Peer) error {
@@ -368,8 +382,11 @@ func handleGetNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := ServiceGetNodeDataQuery(backend.Chain(), query.GetNodeDataPacket)
-	return peer.ReplyNodeData(query.RequestId, response)
+	go func() error {
+		response := ServiceGetNodeDataQuery(backend.Chain(), query.GetNodeDataPacket)
+		return peer.ReplyNodeData(query.RequestId, response)
+	}()
+	return nil
 }
 
 // ServiceGetNodeDataQuery assembles the response to a node data query. It is
@@ -405,8 +422,11 @@ func handleGetReceipts(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := ServiceGetReceiptsQuery(backend.Chain(), query)
-	return peer.SendReceiptsRLP(response)
+	go func() error {
+		response := ServiceGetReceiptsQuery(backend.Chain(), query)
+		return peer.SendReceiptsRLP(response)
+	}()
+	return nil
 }
 
 func handleGetReceipts66(backend Backend, msg Decoder, peer *Peer) error {
@@ -415,8 +435,11 @@ func handleGetReceipts66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := ServiceGetReceiptsQuery(backend.Chain(), query.GetReceiptsPacket)
-	return peer.ReplyReceiptsRLP(query.RequestId, response)
+	go func() error {
+		response := ServiceGetReceiptsQuery(backend.Chain(), query.GetReceiptsPacket)
+		return peer.ReplyReceiptsRLP(query.RequestId, response)
+	}()
+	return nil
 }
 
 // ServiceGetReceiptsQuery assembles the response to a receipt query. It is
@@ -456,12 +479,15 @@ func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(ann); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	// Mark the hashes as present at the remote node
-	for _, block := range *ann {
-		peer.markBlock(block.Hash)
-	}
-	// Deliver them all to the backend for queuing
-	return backend.Handle(peer, ann)
+	go func() error {
+		// Mark the hashes as present at the remote node
+		for _, block := range *ann {
+			peer.markBlock(block.Hash)
+		}
+		// Deliver them all to the backend for queuing
+		return backend.Handle(peer, ann)
+	}()
+	return nil
 }
 
 func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
@@ -473,21 +499,24 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 	if err := ann.sanityCheck(); err != nil {
 		return err
 	}
-	if hash := types.CalcUncleHash(ann.Block.Uncles()); hash != ann.Block.UncleHash() {
-		log.Warn("Propagated block has invalid uncles", "have", hash, "exp", ann.Block.UncleHash())
-		return nil // TODO(karalabe): return error eventually, but wait a few releases
-	}
-	if hash := types.DeriveSha(ann.Block.Transactions(), trie.NewStackTrie(nil)); hash != ann.Block.TxHash() {
-		log.Warn("Propagated block has invalid body", "have", hash, "exp", ann.Block.TxHash())
-		return nil // TODO(karalabe): return error eventually, but wait a few releases
-	}
-	ann.Block.ReceivedAt = msg.Time()
-	ann.Block.ReceivedFrom = peer
+	go func() error {
+		if hash := types.CalcUncleHash(ann.Block.Uncles()); hash != ann.Block.UncleHash() {
+			log.Warn("Propagated block has invalid uncles", "have", hash, "exp", ann.Block.UncleHash())
+			return nil // TODO(karalabe): return error eventually, but wait a few releases
+		}
+		if hash := types.DeriveSha(ann.Block.Transactions(), trie.NewStackTrie(nil)); hash != ann.Block.TxHash() {
+			log.Warn("Propagated block has invalid body", "have", hash, "exp", ann.Block.TxHash())
+			return nil // TODO(karalabe): return error eventually, but wait a few releases
+		}
+		ann.Block.ReceivedAt = msg.Time()
+		ann.Block.ReceivedFrom = peer
 
-	// Mark the peer as owning the block
-	peer.markBlock(ann.Block.Hash())
+		// Mark the peer as owning the block
+		peer.markBlock(ann.Block.Hash())
 
-	return backend.Handle(peer, ann)
+		return backend.Handle(peer, ann)
+	}()
+	return nil
 }
 
 func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
@@ -496,18 +525,21 @@ func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	metadata := func() interface{} {
-		hashes := make([]common.Hash, len(*res))
-		for i, header := range *res {
-			hashes[i] = header.Hash()
+	go func() error {
+		metadata := func() interface{} {
+			hashes := make([]common.Hash, len(*res))
+			for i, header := range *res {
+				hashes[i] = header.Hash()
+			}
+			return hashes
 		}
-		return hashes
-	}
-	return peer.dispatchResponse(&Response{
-		id:   peer.genRequestId(BlockHeadersMsg),
-		code: BlockHeadersMsg,
-		Res:  res,
-	}, metadata)
+		return peer.dispatchResponse(&Response{
+			id:   peer.genRequestId(BlockHeadersMsg),
+			code: BlockHeadersMsg,
+			Res:  res,
+		}, metadata)
+	}()
+	return nil
 }
 
 func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
@@ -516,18 +548,21 @@ func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	metadata := func() interface{} {
-		hashes := make([]common.Hash, len(res.BlockHeadersPacket))
-		for i, header := range res.BlockHeadersPacket {
-			hashes[i] = header.Hash()
+	go func() error {
+		metadata := func() interface{} {
+			hashes := make([]common.Hash, len(res.BlockHeadersPacket))
+			for i, header := range res.BlockHeadersPacket {
+				hashes[i] = header.Hash()
+			}
+			return hashes
 		}
-		return hashes
-	}
-	return peer.dispatchResponse(&Response{
-		id:   res.RequestId,
-		code: BlockHeadersMsg,
-		Res:  &res.BlockHeadersPacket,
-	}, metadata)
+		return peer.dispatchResponse(&Response{
+			id:   res.RequestId,
+			code: BlockHeadersMsg,
+			Res:  &res.BlockHeadersPacket,
+		}, metadata)
+	}()
+	return nil
 }
 
 func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
@@ -536,23 +571,26 @@ func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	metadata := func() interface{} {
-		var (
-			txsHashes   = make([]common.Hash, len(*res))
-			uncleHashes = make([]common.Hash, len(*res))
-		)
-		hasher := trie.NewStackTrie(nil)
-		for i, body := range *res {
-			txsHashes[i] = types.DeriveSha(types.Transactions(body.Transactions), hasher)
-			uncleHashes[i] = types.CalcUncleHash(body.Uncles)
+	go func() error {
+		metadata := func() interface{} {
+			var (
+				txsHashes   = make([]common.Hash, len(*res))
+				uncleHashes = make([]common.Hash, len(*res))
+			)
+			hasher := trie.NewStackTrie(nil)
+			for i, body := range *res {
+				txsHashes[i] = types.DeriveSha(types.Transactions(body.Transactions), hasher)
+				uncleHashes[i] = types.CalcUncleHash(body.Uncles)
+			}
+			return [][]common.Hash{txsHashes, uncleHashes}
 		}
-		return [][]common.Hash{txsHashes, uncleHashes}
-	}
-	return peer.dispatchResponse(&Response{
-		id:   peer.genRequestId(BlockBodiesMsg),
-		code: BlockBodiesMsg,
-		Res:  res,
-	}, metadata)
+		return peer.dispatchResponse(&Response{
+			id:   peer.genRequestId(BlockBodiesMsg),
+			code: BlockBodiesMsg,
+			Res:  res,
+		}, metadata)
+	}()
+	return nil
 }
 
 func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
@@ -561,23 +599,26 @@ func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	metadata := func() interface{} {
-		var (
-			txsHashes   = make([]common.Hash, len(res.BlockBodiesPacket))
-			uncleHashes = make([]common.Hash, len(res.BlockBodiesPacket))
-		)
-		hasher := trie.NewStackTrie(nil)
-		for i, body := range res.BlockBodiesPacket {
-			txsHashes[i] = types.DeriveSha(types.Transactions(body.Transactions), hasher)
-			uncleHashes[i] = types.CalcUncleHash(body.Uncles)
+	go func() error {
+		metadata := func() interface{} {
+			var (
+				txsHashes   = make([]common.Hash, len(res.BlockBodiesPacket))
+				uncleHashes = make([]common.Hash, len(res.BlockBodiesPacket))
+			)
+			hasher := trie.NewStackTrie(nil)
+			for i, body := range res.BlockBodiesPacket {
+				txsHashes[i] = types.DeriveSha(types.Transactions(body.Transactions), hasher)
+				uncleHashes[i] = types.CalcUncleHash(body.Uncles)
+			}
+			return [][]common.Hash{txsHashes, uncleHashes}
 		}
-		return [][]common.Hash{txsHashes, uncleHashes}
-	}
-	return peer.dispatchResponse(&Response{
-		id:   res.RequestId,
-		code: BlockBodiesMsg,
-		Res:  &res.BlockBodiesPacket,
-	}, metadata)
+		return peer.dispatchResponse(&Response{
+			id:   res.RequestId,
+			code: BlockBodiesMsg,
+			Res:  &res.BlockBodiesPacket,
+		}, metadata)
+	}()
+	return nil
 }
 
 func handleNodeData(backend Backend, msg Decoder, peer *Peer) error {
@@ -586,11 +627,14 @@ func handleNodeData(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	return peer.dispatchResponse(&Response{
-		id:   peer.genRequestId(NodeDataMsg),
-		code: NodeDataMsg,
-		Res:  res,
-	}, nil) // No post-processing, we're not using this packet anymore
+	go func() error {
+		return peer.dispatchResponse(&Response{
+			id:   peer.genRequestId(NodeDataMsg),
+			code: NodeDataMsg,
+			Res:  res,
+		}, nil) // No post-processing, we're not using this packet anymore
+	}()
+	return nil
 }
 
 func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
@@ -599,11 +643,14 @@ func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	return peer.dispatchResponse(&Response{
-		id:   res.RequestId,
-		code: NodeDataMsg,
-		Res:  &res.NodeDataPacket,
-	}, nil) // No post-processing, we're not using this packet anymore
+	go func() error {
+		return peer.dispatchResponse(&Response{
+			id:   res.RequestId,
+			code: NodeDataMsg,
+			Res:  &res.NodeDataPacket,
+		}, nil) // No post-processing, we're not using this packet anymore
+	}()
+	return nil
 }
 
 func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
@@ -612,19 +659,22 @@ func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	metadata := func() interface{} {
-		hasher := trie.NewStackTrie(nil)
-		hashes := make([]common.Hash, len(*res))
-		for i, receipt := range *res {
-			hashes[i] = types.DeriveSha(types.Receipts(receipt), hasher)
+	go func() error {
+		metadata := func() interface{} {
+			hasher := trie.NewStackTrie(nil)
+			hashes := make([]common.Hash, len(*res))
+			for i, receipt := range *res {
+				hashes[i] = types.DeriveSha(types.Receipts(receipt), hasher)
+			}
+			return hashes
 		}
-		return hashes
-	}
-	return peer.dispatchResponse(&Response{
-		id:   peer.genRequestId(ReceiptsMsg),
-		code: ReceiptsMsg,
-		Res:  res,
-	}, metadata)
+		return peer.dispatchResponse(&Response{
+			id:   peer.genRequestId(ReceiptsMsg),
+			code: ReceiptsMsg,
+			Res:  res,
+		}, metadata)
+	}()
+	return nil
 }
 
 func handleReceipts66(backend Backend, msg Decoder, peer *Peer) error {
@@ -633,19 +683,22 @@ func handleReceipts66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	metadata := func() interface{} {
-		hasher := trie.NewStackTrie(nil)
-		hashes := make([]common.Hash, len(res.ReceiptsPacket))
-		for i, receipt := range res.ReceiptsPacket {
-			hashes[i] = types.DeriveSha(types.Receipts(receipt), hasher)
+	go func() error {
+		metadata := func() interface{} {
+			hasher := trie.NewStackTrie(nil)
+			hashes := make([]common.Hash, len(res.ReceiptsPacket))
+			for i, receipt := range res.ReceiptsPacket {
+				hashes[i] = types.DeriveSha(types.Receipts(receipt), hasher)
+			}
+			return hashes
 		}
-		return hashes
-	}
-	return peer.dispatchResponse(&Response{
-		id:   res.RequestId,
-		code: ReceiptsMsg,
-		Res:  &res.ReceiptsPacket,
-	}, metadata)
+		return peer.dispatchResponse(&Response{
+			id:   res.RequestId,
+			code: ReceiptsMsg,
+			Res:  &res.ReceiptsPacket,
+		}, metadata)
+	}()
+	return nil
 }
 
 func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) error {
@@ -658,11 +711,14 @@ func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) 
 	if err := msg.Decode(ann); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	// Schedule all the unknown hashes for retrieval
-	for _, hash := range *ann {
-		peer.markTransaction(hash)
-	}
-	return backend.Handle(peer, ann)
+	go func() error {
+		// Schedule all the unknown hashes for retrieval
+		for _, hash := range *ann {
+			peer.markTransaction(hash)
+		}
+		return backend.Handle(peer, ann)
+	}()
+	return nil
 }
 
 func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
@@ -671,8 +727,11 @@ func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	hashes, txs := answerGetPooledTransactions(backend, query, peer)
-	return peer.SendPooledTransactionsRLP(hashes, txs)
+	go func() error {
+		hashes, txs := answerGetPooledTransactions(backend, query, peer)
+		return peer.SendPooledTransactionsRLP(hashes, txs)
+	}()
+	return nil
 }
 
 func handleGetPooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
@@ -681,8 +740,11 @@ func handleGetPooledTransactions66(backend Backend, msg Decoder, peer *Peer) err
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	hashes, txs := answerGetPooledTransactions(backend, query.GetPooledTransactionsPacket, peer)
-	return peer.ReplyPooledTransactionsRLP(query.RequestId, hashes, txs)
+	go func() error {
+		hashes, txs := answerGetPooledTransactions(backend, query.GetPooledTransactionsPacket, peer)
+		return peer.ReplyPooledTransactionsRLP(query.RequestId, hashes, txs)
+	}()
+	return nil
 }
 
 func answerGetPooledTransactions(backend Backend, query GetPooledTransactionsPacket, peer *Peer) ([]common.Hash, []rlp.RawValue) {
@@ -723,14 +785,17 @@ func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&txs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	for i, tx := range txs {
-		// Validate and mark the remote transaction
-		if tx == nil {
-			return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+	go func() error {
+		for i, tx := range txs {
+			// Validate and mark the remote transaction
+			if tx == nil {
+				return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+			}
+			peer.markTransaction(tx.Hash())
 		}
-		peer.markTransaction(tx.Hash())
-	}
-	return backend.Handle(peer, &txs)
+		return backend.Handle(peer, &txs)
+	}()
+	return nil
 }
 
 func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
@@ -743,18 +808,20 @@ func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&txexs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-
-	signer := types.MakeSigner(backend.Chain().Config(), backend.Chain().CurrentBlock().Number())
-	txs := types.TxExs2Txs(signer, txexs, metaminer.IsPartner(peer.ID()))
-	for i, tx := range txs {
-		// Validate and mark the remote transaction
-		if tx == nil {
-			return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+	go func() error {
+		signer := types.MakeSigner(backend.Chain().Config(), backend.Chain().CurrentBlock().Number())
+		txs := types.TxExs2Txs(signer, txexs, metaminer.IsPartner(peer.ID()))
+		for i, tx := range txs {
+			// Validate and mark the remote transaction
+			if tx == nil {
+				return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+			}
+			peer.markTransaction(tx.Hash())
 		}
-		peer.markTransaction(tx.Hash())
-	}
-	txsp := TransactionsPacket(txs)
-	return backend.Handle(peer, &txsp)
+		txsp := TransactionsPacket(txs)
+		return backend.Handle(peer, &txsp)
+	}()
+	return nil
 }
 
 func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
@@ -767,15 +834,17 @@ func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&txs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-
-	for i, tx := range txs {
-		// Validate and mark the remote transaction
-		if tx == nil {
-			return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+	go func() error {
+		for i, tx := range txs {
+			// Validate and mark the remote transaction
+			if tx == nil {
+				return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+			}
+			peer.markTransaction(tx.Hash())
 		}
-		peer.markTransaction(tx.Hash())
-	}
-	return backend.Handle(peer, &txs)
+		return backend.Handle(peer, &txs)
+	}()
+	return nil
 }
 
 func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
@@ -788,14 +857,17 @@ func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error 
 	if err := msg.Decode(&txs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	for i, tx := range txs.PooledTransactionsPacket {
-		// Validate and mark the remote transaction
-		if tx == nil {
-			return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+	go func() error {
+		for i, tx := range txs.PooledTransactionsPacket {
+			// Validate and mark the remote transaction
+			if tx == nil {
+				return fmt.Errorf("%w: transaction %d is nil", errDecode, i)
+			}
+			peer.markTransaction(tx.Hash())
 		}
-		peer.markTransaction(tx.Hash())
-	}
-	requestTracker.Fulfil(peer.id, peer.version, PooledTransactionsMsg, txs.RequestId)
+		requestTracker.Fulfil(peer.id, peer.version, PooledTransactionsMsg, txs.RequestId)
 
-	return backend.Handle(peer, &txs.PooledTransactionsPacket)
+		return backend.Handle(peer, &txs.PooledTransactionsPacket)
+	}()
+	return nil
 }
