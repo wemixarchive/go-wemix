@@ -32,22 +32,13 @@ import (
 var AppHelpFlagGroups = []flags.FlagGroup{
 	{
 		Name: "ETHEREUM",
-		Flags: []cli.Flag{
+		Flags: utils.GroupFlags([]cli.Flag{
 			configFileFlag,
-			utils.DataDirFlag,
-			utils.AncientFlag,
 			utils.MinFreeDiskSpaceFlag,
 			utils.KeyStoreDirFlag,
 			utils.USBFlag,
 			utils.SmartCardDaemonPathFlag,
 			utils.NetworkIdFlag,
-			utils.MainnetFlag,
-			utils.WemixTestnetFlag,
-			utils.GoerliFlag,
-			utils.RinkebyFlag,
-			utils.RopstenFlag,
-			utils.SepoliaFlag,
-			utils.KilnFlag,
 			utils.SyncModeFlag,
 			utils.ExitWhenSyncedFlag,
 			utils.GCModeFlag,
@@ -56,7 +47,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.IdentityFlag,
 			utils.LightKDFFlag,
 			utils.EthPeerRequiredBlocksFlag,
-		},
+		}, utils.NetworkFlags, utils.DatabasePathFlags),
 	},
 	{
 		Name: "LIGHT CLIENT",
