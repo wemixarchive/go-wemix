@@ -111,7 +111,7 @@ var (
 		utils.UltraLightFractionFlag,
 		utils.UltraLightOnlyAnnounceFlag,
 		utils.LightNoSyncServeFlag,
-		utils.EthPeerRequiredBlocksFlag,
+		utils.EthRequiredBlocksFlag,
 		utils.LegacyWhitelistFlag,
 		utils.BloomFilterSizeFlag,
 		utils.CacheFlag,
