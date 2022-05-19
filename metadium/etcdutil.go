@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/log"
 	metaapi "github.com/ethereum/go-ethereum/metadium/api"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 )
 
 var (
@@ -236,10 +237,10 @@ func (ma *metaAdmin) etcdMoveLeader(name string) error {
 			return ethereum.NotFound
 		}
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), ma.etcd.Server.Cfg.ReqTimeout())
+	to := 1500 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), to)
 	err := ma.etcd.Server.MoveLeader(ctx, ma.etcd.Server.Lead(), id)
-	defer cancel()
+	cancel()
 	return err
 }
 
@@ -299,6 +300,19 @@ func (ma *metaAdmin) etcdStart() error {
 
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)
+
+	// capture leader changes
+	go func() {
+		for {
+			if !ma.etcdIsRunning() {
+				break
+			}
+			<-etcd.Server.LeaderChangedNotify()
+			if ma.etcd.Server.ID() == ma.etcd.Server.Leader() {
+				metaminer.FeedLeadership()
+			}
+		}
+	}()
 	return nil
 }
 
@@ -413,24 +427,15 @@ func (ma *metaAdmin) etcdLeader(locked bool) (uint64, *metaNode) {
 		return 0, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(),
-		ma.etcd.Server.Cfg.ReqTimeout())
-	rsp, err := ma.etcdCli.MemberList(ctx)
-	cancel()
-
-	if err != nil {
-		return 0, nil
-	}
-
 	lid := uint64(ma.etcd.Server.Leader())
-	for _, i := range rsp.Members {
-		if i.ID == lid {
+	for _, i := range ma.etcd.Server.Cluster().Members() {
+		if uint64(i.ID) == lid {
 			var node *metaNode
 			if !locked {
 				ma.lock.Lock()
 			}
 			for _, j := range ma.nodes {
-				if i.Name == j.Name {
+				if i.Attributes.Name == j.Name {
 					node = j
 					break
 				}
@@ -454,7 +459,11 @@ func (ma *metaAdmin) etcdPut(key, value string) (int64, error) {
 		ma.etcd.Server.Cfg.ReqTimeout())
 	defer cancel()
 	resp, err := ma.etcdCli.Put(ctx, key, value)
-	return resp.Header.Revision, err
+	if err == nil {
+		return resp.Header.Revision, err
+	} else {
+		return 0, err
+	}
 }
 
 func (ma *metaAdmin) etcdGet(key string) (string, error) {

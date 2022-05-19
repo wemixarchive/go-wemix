@@ -126,4 +126,50 @@ func SuggestGasPrice() *big.Int {
 	}
 }
 
+var leadershipSink *chan struct{}
+
+func SubscribeToLeadership(ch *chan struct{}) {
+	leadershipSink = ch
+}
+
+func UnsubscribeToLeadership() {
+	leadershipSink = nil
+}
+
+func FeedLeadership() {
+	if leadershipSink != nil {
+		select {
+		case *leadershipSink <- struct{}{}:
+		default:
+		}
+	}
+}
+
+type MetaBlockHead struct {
+	Height int64
+	Hash   common.Hash
+}
+
+var blockImportedSink *chan MetaBlockHead
+
+func SubscribeToBlockImported(ch *chan MetaBlockHead) {
+	blockImportedSink = ch
+}
+
+func UnsubscribeToBlockImported() {
+	blockImportedSink = nil
+}
+
+func FeedBlockImported(height int64, hash common.Hash) {
+	if blockImportedSink != nil {
+		select {
+		case *blockImportedSink <- MetaBlockHead{Height: height, Hash: hash}:
+		default:
+			// if full, replace it
+			<-*blockImportedSink
+			*blockImportedSink <- MetaBlockHead{Height: height, Hash: hash}
+		}
+	}
+}
+
 // EOF

@@ -94,6 +94,8 @@ type environment struct {
 	txs      []*types.Transaction
 	receipts []*types.Receipt
 	uncles   map[common.Hash]*types.Header
+
+	till *time.Time // nxtmeta: until when to block generation holds
 }
 
 // copy creates a deep copy of environment.
@@ -514,7 +516,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 func (w *worker) newWorkLoopEx(recommit time.Duration) {
 	defer w.wg.Done()
 
-	timer := time.NewTimer(1 * time.Second)
+	timer := time.NewTimer(10 * time.Millisecond)
+	defer timer.Stop()
+
+	// to be notified when we become the leader / miner
+	leader := make(chan struct{}, 1)
+	metaminer.SubscribeToLeadership(&leader)
+	defer metaminer.UnsubscribeToLeadership()
 
 	// commitSimple just starts a new commitNewWork
 	commitSimple := func() {
@@ -543,12 +551,18 @@ func (w *worker) newWorkLoopEx(recommit time.Duration) {
 			commitSimple()
 
 		case head := <-w.chainHeadCh:
+			// if leader & miner, may be waiting to sync with the previous miner
+			metaminer.FeedBlockImported(int64(head.Block.NumberU64()), head.Block.Hash())
 			clearPending(head.Block.NumberU64())
+			commitSimple()
+
+		case <-leader:
+			// got the leadership
 			commitSimple()
 
 		case <-timer.C:
 			commitSimple()
-			timer.Reset(time.Second)
+			timer.Reset(10 * time.Millisecond)
 
 		case <-w.resubmitIntervalCh:
 		case <-w.resubmitAdjustCh:
@@ -941,7 +955,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			break
 		}
 		// Break if it took too long
-		if tstart != nil && time.Since(*tstart).Seconds() >= 4 {
+		if tstart != nil && env.till != nil && time.Until(*env.till) <= 0 && len(committedTxs) >= int(params.BlockMinBuildTxs) {
 			break
 		}
 		// mark it processed
@@ -1065,7 +1079,7 @@ func (w *worker) commitTransactionsSimple(env *environment, txs *TxOrderer, inte
 			break
 		}
 		// Break if it took too long
-		if tstart != nil && time.Since(*tstart).Seconds() >= 4 {
+		if tstart != nil && env.till != nil && time.Until(*env.till) <= 0 && txs.CommittedLength() >= int(params.BlockMinBuildTxs) {
 			break
 		}
 		// mark it processed
@@ -1203,6 +1217,8 @@ func (w *worker) throttleMining(ts []int64) (int64, int64) {
 }
 
 func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart time.Time) bool {
+	interval := 10 * time.Millisecond
+
 	// committed transactions in this round
 	committedTxs := map[common.Hash]*types.Transaction{}
 	round := 0
@@ -1213,10 +1229,12 @@ func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart
 		pending := w.eth.TxPool().Pending(true)
 		// Short circuit if there is no available pending transactions
 		if len(pending) == 0 {
-			break
+			if time.Until(*env.till) <= 0 {
+				break
+			}
+			time.Sleep(interval)
+			continue
 		}
-
-		n := 0
 
 		// using new simple round-robin ordering instead of old one.
 		if params.PrefetchCount == 0 {
@@ -1237,32 +1255,24 @@ func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart
 				}
 			}
 
-			n = len(committedTxs)
 			txs := types.NewTransactionsByPriceAndNonce(env.signer, pending, env.header.BaseFee)
 			if w.commitTransactions(env, txs, interrupt, &tstart, committedTxs) {
 				return true
 			}
-			n = len(committedTxs) - n
 		} else {
-			n = len(committedTxs)
 			txs := NewTxOrderer(pending, committedTxs)
 			if w.commitTransactionsSimple(env, txs, interrupt, &tstart) {
 				return true
 			}
-			n = len(committedTxs) - n
 		}
-		round++
 
-		// less than 500 ms elapsed, transactions are less than 500 and
-		// all handled, then try to get more transactions
-		if time.Since(tstart).Nanoseconds()/1000000 < 500 &&
-			0 < n && n < 500 {
-			continue
-		} else {
+		if time.Until(*env.till) <= 0 {
 			break
 		}
+		time.Sleep(interval)
+		round++
 	}
-	log.Debug("Block", "number", env.header.Number.Int64(), "elapsed", time.Since(tstart).Nanoseconds()/1000000, "txs", len(committedTxs), "round", round)
+	log.Debug("Block", "number", env.header.Number.Int64(), "elapsed", common.PrettyDuration(time.Since(tstart)), "txs", len(committedTxs), "round", round)
 
 	return false
 }
@@ -1289,6 +1299,8 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
+	var till time.Time
+
 	// Find the parent block for sealing task
 	parent := w.chain.CurrentBlock()
 	if genParams.parentHash != (common.Hash{}) {
@@ -1309,15 +1321,22 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	// Construct the sealing block header, set the extra field if it's allowed
 	num := parent.Number()
 	num.Add(num, common.Big1)
-	ts := w.ancestorTimes(num)
-	if dt, pt := w.throttleMining(ts); dt > 0 && pt < 1 {
-		// sleep 1 second here to prevent unnecessary checks
-		log.Info("Metadium: too many blocks", "ahead", dt)
-		time.Sleep(time.Second)
-		return nil, fmt.Errorf("too many blocks")
-	} else if w.eth.TxPool().PendingEmpty() {
-		if pt < int64(params.MaxIdleBlockInterval) {
-			return nil, fmt.Errorf("no pending transactions")
+
+	if true {
+		// nxtmeta
+		timestamp, till = w.timeIt()
+	} else {
+		// metadium
+		ts := w.ancestorTimes(num)
+		if dt, pt := w.throttleMining(ts); dt > 0 && pt < 1 {
+			// sleep 1 second here to prevent unnecessary checks
+			log.Info("Metadium: too many blocks", "ahead", dt)
+			time.Sleep(time.Second)
+			return nil, fmt.Errorf("too many blocks")
+		} else if w.eth.TxPool().PendingEmpty() {
+			if pt < int64(params.MaxIdleBlockInterval) {
+				return nil, fmt.Errorf("no pending transactions")
+			}
 		}
 	}
 	header := &types.Header{
@@ -1356,6 +1375,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		log.Error("Failed to create sealing context", "err", err)
 		return nil, err
 	}
+	env.till = &till
 	// Accumulate the uncles for the sealing work only if it's allowed.
 	if !genParams.noUncle {
 		commitUncles := func(blocks map[common.Hash]*types.Block) {
@@ -1450,6 +1470,98 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 
 	w.fillTransactions(nil, work)
 	return w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
+}
+
+func (w *worker) timeIt() (timestamp uint64, till time.Time) {
+	maxPeekBack := int64(86400)   // don't look back further than this
+	tooBehindMultiple := int64(2) // ignore if > tooBehindMultiple * height * blockInterval
+
+	parent := w.chain.CurrentBlock()
+	num := parent.Number()
+	num.Add(num, common.Big1)
+	now := time.Now()
+	nowInSeconds := now.Unix()
+	nowInMilliSeconds := now.UnixMilli()
+
+	check := func(heightToPeek int64) (offset int, height, stamp uint64, dt int64) {
+		if heightToPeek > maxPeekBack {
+			heightToPeek = maxPeekBack
+		}
+		n := num.Int64() - heightToPeek
+		if n < 0 {
+			return 0, 0, 0, 0
+		}
+		h := w.chain.GetHeaderByNumber(uint64(n))
+		if h == nil {
+			return 0, uint64(n), 0, 0
+		}
+		offset = 0
+		height = uint64(n)
+		stamp = h.Time
+		dt = nowInSeconds - int64(stamp)
+		if heightToPeek*params.BlockInterval < dt && dt < tooBehindMultiple*heightToPeek*params.BlockInterval {
+			// behind
+			offset = -1
+		} else if dt < heightToPeek*params.BlockInterval {
+			// ahead
+			offset = 1
+		}
+		return
+	}
+
+	ahead := 0
+	offset, height, _, dt := check(1)
+	log.Debug("Metadium time-it", "round", 1, "offset", offset, "height", height, "dt", dt)
+	if offset >= 0 {
+		if offset > 0 {
+			ahead++
+		}
+		adjBlocks := params.BlockTimeAdjBlocks
+		for i := int64(0); i < params.BlockTimeAdjMultiple; i++ {
+			offset, height, _, dt = check(adjBlocks)
+			log.Debug("Metadium time-it", "round", adjBlocks, "offset", offset, "height", height, "dt", dt)
+			if offset < 0 {
+				break
+			} else if offset > 0 {
+				ahead++
+			}
+			adjBlocks *= 10
+		}
+	}
+	if offset >= 0 && ahead > 1 {
+		offset = 1
+	}
+	timestamp = uint64(nowInSeconds)
+	if timestamp < parent.Number().Uint64() {
+		timestamp = parent.Number().Uint64()
+	}
+	switch offset {
+	case -1: // behind, i.e. too few blocks so far, need to make more
+		tms := nowInMilliSeconds + params.BlockMinBuildTime
+		if tms/1000 <= int64(parent.Time()) {
+			// make sure that no more than 2 blocks have the same timestamp
+			tms = (nowInSeconds + 1) * 1000
+		}
+		till = time.UnixMilli(tms)
+		log.Debug("Metadium time-it", "behind", timestamp, "duration", tms-nowInMilliSeconds)
+	case 1: // ahead, i.e. too many blocks, need to slow down
+		tms := nowInMilliSeconds + params.BlockInterval*1000 + params.BlockMinBuildTime
+		if tms/1000 > nowInSeconds+1 {
+			// make sure time stamp doesn't jump by 2
+			tms = (nowInSeconds+2)*1000 - params.BlockTrailTime
+		}
+		till = time.UnixMilli(tms)
+		log.Debug("Metadium time-it", "ahead", timestamp, "duration", tms-nowInMilliSeconds)
+	default: // on schedule
+		tms := nowInMilliSeconds + params.BlockInterval*1000 - params.BlockTrailTime
+		if tms/1000 > nowInSeconds+1 {
+			// make sure time stamp doesn't jump by 2
+			tms = (nowInSeconds+2)*1000 - params.BlockTrailTime
+		}
+		till = time.UnixMilli(tms)
+		log.Debug("Metadium time-it", "on-schedule", timestamp, "duration", tms-nowInMilliSeconds)
+	}
+	return timestamp, till
 }
 
 // commitWork generates several new sealing tasks based on the parent block

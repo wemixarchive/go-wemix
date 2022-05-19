@@ -253,7 +253,7 @@ var GovernanceDeployer = new function() {
         txs[txs.length] = this.sendTx(envStorage.address, null,
             tmpEnvStorageImp.initialize.getData(
                 // blocksPer
-                100,
+                1,
                 // ballotDurationMin, ...Max
                 86400, 604800,
                 // stakingMin, ...Max

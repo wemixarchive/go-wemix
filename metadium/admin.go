@@ -1093,15 +1093,17 @@ func LogBlock(height int64, hash common.Hash) {
 		log.Error("Metadium - failed to log the latest block",
 			"height", height, "hash", hash, "took", time.Since(tstart))
 	} else {
-		log.Info("Metadium - logged the latest block",
+		log.Debug("Metadium - logged the latest block",
 			"height", height, "hash", hash, "took", time.Since(tstart))
 
 		if ((rev%etcdCompactFrequency == 0) && (rev > etcdCompactFrequency)) && (rev > etcdCompactWindow) {
-			go func() {
-				if err := admin.etcdCompact(rev - etcdCompactWindow + 1); err != nil {
-					log.Error("Metadium - failed to compact",
-						"rev", rev, "took", time.Since(tstart))
-				}
+			defer func() {
+				go func() {
+					if err := admin.etcdCompact(rev - etcdCompactWindow + 1); err != nil {
+						log.Error("Metadium - failed to compact",
+							"rev", rev, "took", time.Since(tstart))
+					}
+				}()
 			}()
 		}
 	}
@@ -1114,11 +1116,11 @@ func LogBlock(height int64, hash common.Hash) {
 
 		_, next, _ := admin.getMinerNodes(int(height), true)
 		if next.Id == admin.self.Id {
-			log.Info("Metadium - yield to self", "mined", admin.blocksMined,
+			log.Debug("Metadium - yield to self", "mined", admin.blocksMined,
 				"new miner", "self")
 		} else {
 			if err := admin.etcdMoveLeader(next.Name); err == nil {
-				log.Info("Metadium - yielded", "mined", admin.blocksMined,
+				log.Debug("Metadium - yielded", "mined", admin.blocksMined,
 					"new miner", next.Name)
 				admin.blocksMined = 0
 			} else {

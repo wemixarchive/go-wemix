@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	metaapi "github.com/ethereum/go-ethereum/metadium/api"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -68,28 +70,34 @@ func (ma *metaAdmin) getLatestBlockInfo(node *metaNode) (height *big.Int, hash c
 }
 
 // syncLock should be held by the caller
-func (ma *metaAdmin) syncWith(node *metaNode) error {
+func (ma *metaAdmin) syncWith(node *metaNode, work *metaWork) error {
 	tsync := time.Now()
-	height, hash, td, err := ma.getLatestBlockInfo(node)
-	if err != nil {
-		log.Error("Metadium", "failed to synchronize with", node.Name,
-			"error", err, "took", time.Since(tsync))
-		return err
-	} else {
-		log.Info("Metadium", "synchronizing with", node.Name,
-			"height", height, "hash", hash, "td", td, "took", time.Since(tsync))
-	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	err = ma.rpcCli.CallContext(ctx, nil, "admin_synchroniseWith", &node.Id)
-	if err != nil {
-		log.Error("Metadium", "failed to synchronize with", node.Name,
-			"error", err, "took", time.Since(tsync))
-	} else {
-		log.Info("Metadium", "synchronized with", node.Name, "took", time.Since(tsync))
+	blocks := make(chan metaminer.MetaBlockHead, 1)
+	metaminer.SubscribeToBlockImported(&blocks)
+	defer metaminer.UnsubscribeToBlockImported()
+
+	timer := time.NewTimer(1 * time.Second)
+	defer timer.Stop()
+
+	go func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ma.rpcCli.CallContext(ctx, nil, "admin_synchroniseWith", &node.Id)
+	}()
+
+	for {
+		select {
+		case head := <-blocks:
+			if head.Height == work.Height && head.Hash == work.Hash {
+				log.Debug("Metadium - syncwith", "self", ma.self.Name, "with", node.Name, "head", head.Height, "hash", head.Hash, "took", time.Since(tsync))
+				return nil
+			}
+		case <-timer.C:
+			log.Error("Metadium - syncwith", "self", ma.self.Name, "with", node.Name, "timed out", time.Since(tsync))
+			return fmt.Errorf("timed out")
+		}
 	}
-	return err
 }
 
 // return true if this node still is the miner after update
@@ -113,7 +121,7 @@ func (ma *metaAdmin) updateMiner(locked bool) bool {
 		// Otherwise, punt the leadership to the next in line.
 		// If all fails, accept the potential fork and move on.
 
-		log.Info("Metadium: we are the new leader")
+		log.Debug("Metadium: we are the new leader")
 		tstart := time.Now()
 
 		// get the latest work info from etcd
@@ -129,7 +137,7 @@ func (ma *metaAdmin) updateMiner(locked bool) bool {
 				workInfo, err = ma.etcdGet("metadium-work")
 				if err != nil {
 					// TODO: ignore if error is not found
-					log.Info("Metadium - cannot get the latest work info",
+					log.Error("Metadium - cannot get the latest work info",
 						"error", err, "took", time.Since(tstart))
 					continue
 				}
@@ -143,7 +151,7 @@ func (ma *metaAdmin) updateMiner(locked bool) bool {
 							"error", err, "took", time.Since(tstart))
 						return nil, err
 					}
-					log.Info("Metadium - got the latest work info",
+					log.Debug("Metadium - got the latest work info",
 						"height", work.Height, "hash", work.Hash,
 						"took", time.Since(tstart))
 					return work, nil
@@ -153,7 +161,7 @@ func (ma *metaAdmin) updateMiner(locked bool) bool {
 		}
 
 		// check if we are in sync with the latest work info recorded
-		inSync := func(work *metaWork) (synced bool, latestNum uint64, curNum uint64) {
+		inSync := func(work *metaWork) (synced bool, latestNum uint64, curNum uint64, err error) {
 			synced, latestNum, curNum = false, 0, 0
 
 			if work == nil {
@@ -211,24 +219,18 @@ func (ma *metaAdmin) updateMiner(locked bool) bool {
 			if err != nil {
 				log.Error("Metadium - leadership yielding failed", "error", err)
 			} else {
-				log.Info("Metadium - yielded leadership")
+				log.Debug("Metadium - yielded leadership")
 			}
 		} else if work == nil {
 			// this must be the first block, juts move on
-			log.Info("Metadium - not initialized yet. Starting mining")
-		} else if synced, _, height := inSync(work); synced {
-			log.Info("Metadium - in sync. Starting mining", "height", height)
+			log.Debug("Metadium - not initialized yet. Starting mining")
+		} else if synced, _, height, err := inSync(work); synced {
+			log.Debug("Metadium - in sync. Starting mining", "height", height)
 		} else {
 			// sync with the previous leader
-			ma.syncWith(oldLeader)
+			ma.syncWith(oldLeader, work)
 
-			// check sync again
-			work, err = getLatestWork()
-			if err != nil {
-				log.Error("Metadium - cannot get the latest work", "error", err)
-			} else if work == nil {
-				// this must be the first block, juts move on
-			} else if synced, _, height := inSync(work); !synced {
+			if synced, _, height, _ := inSync(work); !synced {
 				// if still not in sync, give up leadership
 				err = puntLeadership()
 				if err != nil {
@@ -236,7 +238,7 @@ func (ma *metaAdmin) updateMiner(locked bool) bool {
 						"latest", work.Height, "current", height, "error", err)
 				} else {
 					log.Error("Metadium - not in sync. Yielded leadership",
-						"latest", work.Height, "current", height)
+						"latest", work.Height, "current", height, "self", ma.self.Name)
 				}
 			}
 		}

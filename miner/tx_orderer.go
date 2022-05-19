@@ -149,6 +149,12 @@ func (to *TxOrderer) MarkCommitted(tx *types.Transaction) {
 	to.committedTxs[tx.Hash()] = tx
 }
 
+func (to *TxOrderer) CommittedLength() int {
+	to.lock.Lock()
+	defer to.lock.Unlock()
+	return len(to.committedTxs)
+}
+
 func (to *TxOrderer) NextForPrefetch() *types.Transaction {
 	to.lock.Lock()
 	defer to.lock.Unlock()
