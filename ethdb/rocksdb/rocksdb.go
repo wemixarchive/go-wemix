@@ -344,7 +344,7 @@ func rdbBatchFinalizer(b *rdbBatch) {
 		b.b = nil
 		go func() {
 			// a little bit of delay here seems to abate crash
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 			C.rocksdb_writebatch_destroy(bb)
 		}()
 	}
