@@ -851,6 +851,31 @@ var (
 		Usage: "Id of message hub",
 		Value: params.Hub,
 	}
+	BlockInterval = cli.Int64Flag{
+		Name:  "metadium.block.interval",
+		Usage: "Block generation interval in seconds",
+		Value: params.BlockInterval,
+	}
+	BlockTimeAdjBlocks = cli.Int64Flag{
+		Name:  "metadium.block.timeadjblocks",
+		Usage: "Block interval to ajdust timestamp",
+		Value: params.BlockTimeAdjBlocks,
+	}
+	BlockMinBuildTime = cli.Int64Flag{
+		Name:  "metadium.block.minbuildtime",
+		Usage: "Minimum block generation time in ms",
+		Value: params.BlockMinBuildTime,
+	}
+	BlockMinBuildTxs = cli.Int64Flag{
+		Name:  "metadium.block.minbuildtxs",
+		Usage: "Minimum txs in a block with pending txs",
+		Value: params.BlockMinBuildTxs,
+	}
+	BlockTrailTime = cli.Int64Flag{
+		Name:  "metadium.block.trailtime",
+		Usage: "Time to leave for block data transfer in ms",
+		Value: params.BlockTrailTime,
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1806,6 +1831,21 @@ func SetMetadiumConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(Hub.Name) {
 		params.Hub = ctx.GlobalString(Hub.Name)
+	}
+	if ctx.GlobalIsSet(BlockInterval.Name) {
+		params.BlockInterval = ctx.GlobalInt64(BlockInterval.Name)
+	}
+	if ctx.GlobalIsSet(BlockTimeAdjBlocks.Name) {
+		params.BlockTimeAdjBlocks = ctx.GlobalInt64(BlockTimeAdjBlocks.Name)
+	}
+	if ctx.GlobalIsSet(BlockMinBuildTime.Name) {
+		params.BlockMinBuildTime = ctx.GlobalInt64(BlockMinBuildTime.Name)
+	}
+	if ctx.GlobalIsSet(BlockMinBuildTxs.Name) {
+		params.BlockMinBuildTxs = ctx.GlobalInt64(BlockMinBuildTxs.Name)
+	}
+	if ctx.GlobalIsSet(BlockTrailTime.Name) {
+		params.BlockTrailTime = ctx.GlobalInt64(BlockTrailTime.Name)
 	}
 
 	if params.ConsensusMethod == params.ConsensusInvalid {

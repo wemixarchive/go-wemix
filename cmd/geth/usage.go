@@ -232,6 +232,11 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.LogFlag,
 			utils.MaxTxsPerBlock,
 			utils.Hub,
+			utils.BlockInterval,
+			utils.BlockTimeAdjBlocks,
+			utils.BlockMinBuildTime,
+			utils.BlockMinBuildTxs,
+			utils.BlockTrailTime,
 		},
 	},
 	{
