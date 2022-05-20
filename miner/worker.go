@@ -1528,7 +1528,7 @@ func (w *worker) timeIt() (timestamp uint64, till time.Time) {
 			adjBlocks *= 10
 		}
 	}
-	if offset >= 0 && ahead > 1 {
+	if offset >= 0 && ahead > 0 {
 		offset = 1
 	}
 	timestamp = uint64(nowInSeconds)
