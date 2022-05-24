@@ -10,8 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.1.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.1.1
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.1.1
-	github.com/btcsuite/btcd/btcec/v2 v2.1.3
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
+	github.com/btcsuite/btcd/btcec/v2 v2.2.0
 	github.com/cespare/cp v0.1.0
 	github.com/charlanxcc/logrot v0.0.0-20180713171554-0c22fa310dfe
 	github.com/cloudflare/cloudflare-go v0.14.0
@@ -63,13 +62,13 @@ require (
 	go.etcd.io/etcd/api/v3 v3.5.2
 	go.etcd.io/etcd/client/v3 v3.5.2
 	go.etcd.io/etcd/server/v3 v3.5.2
-	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
+	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/mobile v0.0.0-20190719004257-d2bd2a29d028
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210816183151-1e6c022a8912
+	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
-	golang.org/x/tools v0.1.2
+	golang.org/x/tools v0.1.8-0.20211029000441-d6a9af8af023
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
@@ -141,8 +140,8 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.17.0 // indirect
-	golang.org/x/mod v0.4.2 // indirect
-	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
+	golang.org/x/mod v0.5.1 // indirect
+	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f // indirect
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/genproto v0.0.0-20210602131652-f16073e35f0c // indirect
