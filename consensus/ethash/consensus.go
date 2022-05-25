@@ -548,33 +548,37 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 		digest []byte
 		result []byte
 	)
-	// If fast-but-heavy PoW verification was requested, use an ethash dataset
-	if fulldag {
-		dataset := ethash.dataset(number, true)
-		if dataset.generated() {
-			digest, result = hashimotoFull(dataset.dataset, ethash.SealHash(header).Bytes(), header.Nonce.Uint64())
+	if metaminer.IsPoW() {
+		// If fast-but-heavy PoW verification was requested, use an ethash dataset
+		if fulldag {
+			dataset := ethash.dataset(number, true)
+			if dataset.generated() {
+				digest, result = hashimotoFull(dataset.dataset, ethash.SealHash(header).Bytes(), header.Nonce.Uint64())
 
-			// Datasets are unmapped in a finalizer. Ensure that the dataset stays alive
-			// until after the call to hashimotoFull so it's not unmapped while being used.
-			runtime.KeepAlive(dataset)
-		} else {
-			// Dataset not yet generated, don't hang, use a cache instead
-			fulldag = false
+				// Datasets are unmapped in a finalizer. Ensure that the dataset stays alive
+				// until after the call to hashimotoFull so it's not unmapped while being used.
+				runtime.KeepAlive(dataset)
+			} else {
+				// Dataset not yet generated, don't hang, use a cache instead
+				fulldag = false
+			}
 		}
-	}
-	// If slow-but-light PoW verification was requested (or DAG not yet ready), use an ethash cache
-	if !fulldag {
-		cache := ethash.cache(number)
+		// If slow-but-light PoW verification was requested (or DAG not yet ready), use an ethash cache
+		if !fulldag {
+			cache := ethash.cache(number)
 
-		size := datasetSize(number)
-		if ethash.config.PowMode == ModeTest {
-			size = 32 * 1024
+			size := datasetSize(number)
+			if ethash.config.PowMode == ModeTest {
+				size = 32 * 1024
+			}
+			digest, result = hashimotoLight(size, cache.cache, ethash.SealHash(header).Bytes(), header.Nonce.Uint64())
+
+			// Caches are unmapped in a finalizer. Ensure that the cache stays alive
+			// until after the call to hashimotoLight so it's not unmapped while being used.
+			runtime.KeepAlive(cache)
 		}
-		digest, result = hashimotoLight(size, cache.cache, ethash.SealHash(header).Bytes(), header.Nonce.Uint64())
-
-		// Caches are unmapped in a finalizer. Ensure that the cache stays alive
-		// until after the call to hashimotoLight so it's not unmapped while being used.
-		runtime.KeepAlive(cache)
+	} else {
+		digest, result = hashimeta(ethash.SealHash(header).Bytes(), header.Nonce.Uint64())
 	}
 	// Verify the calculated values against the ones provided in the header
 	if !bytes.Equal(header.MixDigest[:], digest) {

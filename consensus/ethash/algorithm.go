@@ -1150,3 +1150,14 @@ var cacheSizes = [maxEpoch]uint64{
 	283377344, 283508416, 283639744, 283770304, 283901504, 284032576,
 	284163136, 284294848, 284426176, 284556992, 284687296, 284819264,
 	284950208, 285081536}
+
+// a simple sha256 hash from seed & nonce
+func hashimeta(hash []byte, nonce uint64) ([]byte, []byte) {
+	// Combine header+nonce into a 64 byte seed
+	seed := make([]byte, 40)
+	copy(seed, hash)
+	binary.LittleEndian.PutUint64(seed[32:], nonce)
+
+	result := crypto.Keccak256(seed)
+	return result, result
+}
