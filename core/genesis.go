@@ -483,6 +483,7 @@ func DefaultGenesisBlock() *Genesis {
 		if err := json.NewDecoder(strings.NewReader(wemixMainnetGenesisJson)).Decode(genesis); err != nil {
 			panic("Cannot parse default wemix mainnet genesis.")
 		}
+		genesis.Config = genesis.configOrDefault(params.WemixMainnetGenesisHash) //set WemixMainnetChainConfig
 		return genesis
 	}
 }
@@ -503,6 +504,7 @@ func DefaultTestnetGenesisBlock() *Genesis {
 		if err := json.NewDecoder(strings.NewReader(wemixTestnetGenesisJson)).Decode(genesis); err != nil {
 			panic("Cannot parse default wemix testnet genesis.")
 		}
+		genesis.Config = genesis.configOrDefault(params.WemixTestnetGenesisHash) //set WemixTestnetChainConfig
 		return genesis
 	}
 }
