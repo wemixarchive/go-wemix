@@ -23,7 +23,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -31,10 +30,6 @@ import (
 // - gas limit check
 // - basefee check
 func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Header) error {
-	// Metadium: eip-1559 is inactive
-	if !metaminer.IsPoW() {
-		return nil
-	}
 	// Verify that the gas limit remains within allowed bounds
 	parentGasLimit := parent.GasLimit
 	if !config.IsLondon(parent.Number) {
@@ -58,10 +53,6 @@ func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Heade
 
 // CalcBaseFee calculates the basefee of the header.
 func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
-	// Metadium: eip-1559 is inactive
-	if !metaminer.IsPoW() {
-		return new(big.Int).SetUint64(0)
-	}
 	// If the current block is the first EIP-1559 block, return the InitialBaseFee.
 	if !config.IsLondon(parent.Number) {
 		return new(big.Int).SetUint64(params.InitialBaseFee)

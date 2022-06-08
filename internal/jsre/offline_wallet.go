@@ -134,7 +134,7 @@ func (acct *gethAccount) Derive(path accounts.DerivationPath) (common.Address, e
 }
 
 func (acct *gethAccount) SignTx(path accounts.DerivationPath, tx *types.Transaction, chainID *big.Int) (common.Address, *types.Transaction, error) {
-	signer := types.NewEIP155Signer(chainID)
+	signer := types.NewLondonSigner(chainID)
 	stx, err := types.SignTx(tx, signer, acct.key.PrivateKey)
 	return acct.key.Address, stx, err
 }
