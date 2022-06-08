@@ -539,7 +539,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 		rpcCli:      rpcCli,
 		cli:         cli,
 		blocksPer:   100,
-		gasPrice:    big.NewInt(80 * params.GWei),
+		gasPrice:    big.NewInt(100 * params.GWei),
 		etcdDir:     path.Join(datadir, "etcd"),
 		etcdTimeout: 30 * time.Second,
 	}
@@ -1133,9 +1133,9 @@ func LogBlock(height int64, hash common.Hash) {
 
 func suggestGasPrice() *big.Int {
 	if admin == nil || admin.gasPrice == nil {
-		return big.NewInt(80 * params.GWei)
+		return big.NewInt(100 * params.GWei)
 	} else {
-		return admin.gasPrice
+		return new(big.Int).Set(admin.gasPrice)
 	}
 }
 

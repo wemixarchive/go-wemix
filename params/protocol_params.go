@@ -119,8 +119,8 @@ const (
 	// Introduced in Tangerine Whistle (Eip 150)
 	CreateBySelfdestructGas uint64 = 25000
 
-	BaseFeeChangeDenominator = 8          // Bounds the amount the base fee can change between blocks.
-	ElasticityMultiplier     = 2          // Bounds the maximum gas limit an EIP-1559 block may have.
+	BaseFeeChangeDenominator = 4          // Bounds the amount the base fee can change between blocks.
+	ElasticityMultiplier     = 4          // Bounds the maximum gas limit an EIP-1559 block may have.
 	InitialBaseFee           = 1000000000 // Initial base fee for EIP-1559 blocks.
 
 	MaxCodeSize        = 253952 // Maximum bytecode to permit for a contract
@@ -183,7 +183,7 @@ const (
 var (
 	ConsensusMethod      int    = ConsensusPoA // consensus method
 	FixedDifficulty      uint64 = 1            // 0 means no fixed difficulty
-	FixedGasLimit        uint64 = 0x10000000   // 0 means no fixed gas limit
+	FixedGasLimit        uint64 = 105000000    // 5000 * 21000, 0 means no fixed gas limit,
 	MaxIdleBlockInterval uint64 = 600          // in seconds
 	BlocksPerTurn        uint64 = 100
 
