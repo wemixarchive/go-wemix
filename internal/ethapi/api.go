@@ -272,7 +272,7 @@ func (s *PublicAccountAPI) Accounts() []common.Address {
 
 // return genesis.json if available
 func (s *PublicAccountAPI) Genesis() (string, error) {
-	genesis, err := ioutil.ReadFile(params.MetadiumGenesisFile)
+	genesis, err := ioutil.ReadFile(params.WemixGenesisFile)
 	if err != nil {
 		return "", err
 	} else {

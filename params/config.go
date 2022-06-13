@@ -27,13 +27,13 @@ import (
 
 // Genesis hashes to enforce below configs on.
 var (
-	MainnetGenesisHash         = common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
-	RopstenGenesisHash         = common.HexToHash("0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d")
-	MetadiumMainnetGenesisHash = common.HexToHash("0xf1b2a543e2dd402fc905d6f2caf9565e796ef83f5356970b2b0a993f01316e27")
-	MetadiumTestnetGenesisHash = common.HexToHash("0x10c1b0a564a4bffe38bd3cb93ed4df1a0055660093267d6aa6c8d836c992c295")
-	SepoliaGenesisHash         = common.HexToHash("0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9")
-	RinkebyGenesisHash         = common.HexToHash("0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177")
-	GoerliGenesisHash          = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
+	MainnetGenesisHash      = common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
+	RopstenGenesisHash      = common.HexToHash("0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d")
+	WemixMainnetGenesisHash = common.HexToHash("0xf1b2a543e2dd402fc905d6f2caf9565e796ef83f5356970b2b0a993f01316e27")
+	WemixTestnetGenesisHash = common.HexToHash("0x10c1b0a564a4bffe38bd3cb93ed4df1a0055660093267d6aa6c8d836c992c295")
+	SepoliaGenesisHash      = common.HexToHash("0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9")
+	RinkebyGenesisHash      = common.HexToHash("0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177")
+	GoerliGenesisHash       = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
 )
 
 // TrustedCheckpoints associates each known checkpoint with the genesis hash of
@@ -139,41 +139,41 @@ var (
 		Threshold: 2,
 	}
 
-	// MetadiumMainnetChainConfig contains the chain parameters to run a node on the Metadium main network.
-	MetadiumMainnetChainConfig = &ChainConfig{
-		ChainID:             big.NewInt(11),
+	// WemixMainnetChainConfig contains the chain parameters to run a node on the Wemix main network.
+	WemixMainnetChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(1111),
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        big.NewInt(0),
 		DAOForkSupport:      true,
-		EIP150Block:         big.NewInt(11441000),
+		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
 		ByzantiumBlock:      big.NewInt(0),
-		ConstantinopleBlock: big.NewInt(11441000),
-		PetersburgBlock:     big.NewInt(11441000),
-		IstanbulBlock:       big.NewInt(11441000),
-		MuirGlacierBlock:    big.NewInt(11441000),
-		BerlinBlock:         big.NewInt(80000000),
-		LondonBlock:         big.NewInt(80000000),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
 		Ethash:              new(EthashConfig),
 	}
 
-	// MetadiumTestnetChainConfig contains the chain parameters to run a node on the Metadium test network.
-	MetadiumTestnetChainConfig = &ChainConfig{
-		ChainID:             big.NewInt(12),
+	// WemixTestnetChainConfig contains the chain parameters to run a node on the Wemix test network.
+	WemixTestnetChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(1112),
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        big.NewInt(0),
 		DAOForkSupport:      true,
-		EIP150Block:         big.NewInt(5623000),
+		EIP150Block:         big.NewInt(1),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
 		ByzantiumBlock:      big.NewInt(0),
-		ConstantinopleBlock: big.NewInt(5623000),
-		PetersburgBlock:     big.NewInt(5623000),
-		IstanbulBlock:       big.NewInt(5623000),
-		MuirGlacierBlock:    big.NewInt(5623000),
-		BerlinBlock:         big.NewInt(80000000),
-		LondonBlock:         big.NewInt(80000000),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
 		Ethash:              new(EthashConfig),
 	}
 

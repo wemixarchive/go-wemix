@@ -42,7 +42,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.SmartCardDaemonPathFlag,
 			utils.NetworkIdFlag,
 			utils.MainnetFlag,
-			utils.MetaTestnetFlag,
+			utils.WemixTestnetFlag,
 			utils.GoerliFlag,
 			utils.RinkebyFlag,
 			utils.RopstenFlag,

@@ -4,7 +4,7 @@
 var GovernanceDeployer = new function() {
     this.wallet = null
     this.from = null
-    this.gas = "0xE000000";
+    this.gas = 21000 * 4500
     this.gasPrice = eth.gasPrice
     this._nonce = 0
     this.receiptCheckParams = { "interval": 100, "count": 300 }

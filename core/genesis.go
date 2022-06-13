@@ -224,7 +224,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// Special case: don't change the existing config of a non-mainnet chain if no new
 	// config is supplied. These chains would get AllProtocolChanges (and a compat error)
 	// if we just continued here.
-	if genesis == nil && !(stored == params.MainnetGenesisHash || stored == params.MetadiumMainnetGenesisHash) {
+	if genesis == nil && !(stored == params.MainnetGenesisHash || stored == params.WemixMainnetGenesisHash) {
 		return storedcfg, stored, nil
 	}
 	// Check config compatibility and write the config. Compatibility errors
@@ -243,10 +243,10 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 
 func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	switch {
-	case ghash == params.MetadiumMainnetGenesisHash:
-		return params.MetadiumMainnetChainConfig
-	case ghash == params.MetadiumTestnetGenesisHash:
-		return params.MetadiumTestnetChainConfig
+	case ghash == params.WemixMainnetGenesisHash:
+		return params.WemixMainnetChainConfig
+	case ghash == params.WemixTestnetGenesisHash:
+		return params.WemixTestnetChainConfig
 	case g != nil:
 		return g.Config
 	case ghash == params.MainnetGenesisHash:
@@ -365,9 +365,9 @@ func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big
 
 func loadDefaultGenesisFile() (*Genesis, error) {
 	genesis := new(Genesis)
-	if _, err := os.Stat(params.MetadiumGenesisFile); err == nil {
-		log.Info("Loading found genesis file", "name", params.MetadiumGenesisFile)
-		file, err := os.Open(params.MetadiumGenesisFile)
+	if _, err := os.Stat(params.WemixGenesisFile); err == nil {
+		log.Info("Loading found genesis file", "name", params.WemixGenesisFile)
+		file, err := os.Open(params.WemixGenesisFile)
 		if err != nil {
 			return nil, err
 		}
@@ -389,7 +389,7 @@ func DefaultGenesisBlock() *Genesis {
 	)
 
 	if genesis, err = loadDefaultGenesisFile(); err != nil {
-		panic(fmt.Sprintf("Cannot open %s file: %v", params.MetadiumGenesisFile, err))
+		panic(fmt.Sprintf("Cannot open %s file: %v", params.WemixGenesisFile, err))
 	} else if genesis != nil && err == nil {
 		return genesis
 	} else {
@@ -419,7 +419,7 @@ func DefaultTestnetGenesisBlock() *Genesis {
 	)
 
 	if genesis, err = loadDefaultGenesisFile(); err != nil {
-		panic(fmt.Sprintf("Cannot open %s file: %v", params.MetadiumGenesisFile, err))
+		panic(fmt.Sprintf("Cannot open %s file: %v", params.WemixGenesisFile, err))
 	} else if genesis != nil && err == nil {
 		return genesis
 	} else {

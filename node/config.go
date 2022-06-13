@@ -233,7 +233,7 @@ func DefaultIPCEndpoint(clientIdentifier string) string {
 			panic("empty executable name")
 		}
 	}
-	config := &Config{DataDir: DefaultDataDir(), IPCPath: "geth.ipc"}
+	config := &Config{DataDir: DefaultDataDir(), IPCPath: "gwemix.ipc"}
 	return config.IPCEndpoint()
 }
 

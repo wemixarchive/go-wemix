@@ -145,7 +145,7 @@ var (
 		utils.NodeKeyHexFlag,
 		utils.DNSDiscoveryFlag,
 		utils.MainnetFlag,
-		utils.MetaTestnetFlag,
+		utils.WemixTestnetFlag,
 		utils.DeveloperFlag,
 		utils.DeveloperPeriodFlag,
 		utils.DeveloperGasLimitFlag,
@@ -307,8 +307,8 @@ func main() {
 func prepare(ctx *cli.Context) {
 	// If we're running a known preset, log it for convenience.
 	switch {
-	case ctx.GlobalIsSet(utils.MetaTestnetFlag.Name):
-		log.Info("Starting Geth on Metadium testnet...")
+	case ctx.GlobalIsSet(utils.WemixTestnetFlag.Name):
+		log.Info("Starting Geth on Wemix testnet...")
 
 	case ctx.GlobalIsSet(utils.RopstenFlag.Name):
 		log.Info("Starting Geth on Ropsten testnet...")
