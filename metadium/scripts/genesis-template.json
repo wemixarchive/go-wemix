@@ -8,7 +8,7 @@
     "coinbase"    : "0xb4388353fd0f3b3a017e09f2b857052ff219e663",
     "difficulty"  : "0x1",
     "extraData"   : "0xea5f92fc954e4e45ac5773d5472bf8ab0b888979a5e65d49bac65e1b4345e82a745e255d1018d7a6de7ae8fd3a04b0e8eca4359f0fd35c2d0c45d29f7ffa0290",
-    "gasLimit"    : "0x10000000",
+    "gasLimit"    : "105000000",
     "nonce"       : "0x0000000000000042",
     "mixhash"     : "0x0000000000000000000000000000000000000000000000000000000000000000",
     "parentHash"  : "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -17,7 +17,7 @@
     "minerNodeSig": "0x0",
     "config": {
         "berlinBlock": 0,
-        "chainId": 11,
+        "chainId": 1111,
         "homesteadBlock": 0,
         "eip150Block": 0,
         "eip155Block": 0,
