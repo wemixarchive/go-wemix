@@ -13,18 +13,19 @@ import (
 var (
 	ErrNotInitialized = errors.New("not initialized")
 
-	IsMinerFunc            func() bool
-	AmPartnerFunc          func() bool
-	IsPartnerFunc          func(string) bool
-	AmHubFunc              func(string) int
-	LogBlockFunc           func(int64, common.Hash)
-	CalculateRewardsFunc   func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
-	VerifyRewardsFunc      func(*big.Int, string) error
-	SignBlockFunc          func(hash common.Hash) (nodeid, sig []byte, err error)
-	VerifyBlockSigFunc     func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
-	RequirePendingTxsFunc  func() bool
-	VerifyBlockRewardsFunc func(height *big.Int) interface{}
-	SuggestGasPriceFunc    func() *big.Int
+	IsMinerFunc                 func() bool
+	AmPartnerFunc               func() bool
+	IsPartnerFunc               func(string) bool
+	AmHubFunc                   func(string) int
+	LogBlockFunc                func(int64, common.Hash)
+	CalculateRewardsFunc        func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
+	VerifyRewardsFunc           func(*big.Int, string) error
+	SignBlockFunc               func(hash common.Hash) (nodeid, sig []byte, err error)
+	VerifyBlockSigFunc          func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
+	RequirePendingTxsFunc       func() bool
+	VerifyBlockRewardsFunc      func(height *big.Int) interface{}
+	SuggestGasPriceFunc         func() *big.Int
+	GetBlockBuildParametersFunc func(height *big.Int) (blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier int, gasLimit, gasTarget *big.Int, err error)
 )
 
 func IsMiner() bool {
@@ -120,9 +121,18 @@ func VerifyBlockRewards(height *big.Int) interface{} {
 
 func SuggestGasPrice() *big.Int {
 	if SuggestGasPriceFunc == nil {
-		return big.NewInt(80 * params.GWei)
+		return big.NewInt(100 * params.GWei)
 	} else {
 		return SuggestGasPriceFunc()
+	}
+}
+
+func GetBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier int, gasLimit, gasTarget *big.Int, err error) {
+	if GetBlockBuildParametersFunc == nil {
+		// default values
+		return 1, 4, 4, big.NewInt(21000 * 5000), big.NewInt(21000 * 1500), nil
+	} else {
+		return GetBlockBuildParametersFunc(height)
 	}
 }
 

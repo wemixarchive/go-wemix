@@ -250,18 +250,35 @@ var GovernanceDeployer = new function() {
         // Just changing address doesn't work here. Address is embedded in
         // the methods. Have to re-construct temporary EnvStorageImp here.
         var tmpEnvStorageImp = web3.eth.contract(envStorageImp.abi).at(envStorage.address)
-        txs[txs.length] = this.sendTx(envStorage.address, null,
-            tmpEnvStorageImp.initialize.getData(
-                // blocksPer
+        var envNames = [
+            web3.sha3("blocksPer"),
+            web3.sha3("ballotDurationMin"), web3.sha3("ballotDurationMax"),
+            web3.sha3("stakingMin"), web3.sha3("stakingMax"),
+            web3.sha3("gasPrice"),
+            web3.sha3("MaxIdleBlockInterval"),
+            web3.sha3("blockCreationTime"),
+            web3.sha3("blockRewardAmount"),
+            web3.sha3("maxPriorityFeePerGas"),
+            web3.sha3("blockRewardDistributionBlockProducer"),
+            web3.sha3("blockRewardDistributionStakingReward"),
+            web3.sha3("blockRewardDistributionEcoSystem"),
+            web3.sha3("blockRewardDistributionMaintenance"),
+            web3.sha3("blockGasLimit"),
+            web3.sha3("baseFeeMaxChangeDenominator"),
+            web3.sha3("elasticityMultiplier") ],
+            envValues = [
                 1,
-                // ballotDurationMin, ...Max
                 86400, 604800,
-                // stakingMin, ...Max
                 4980000000000000000000000, 39840000000000000000000000,
-                // gasPrice
-                80000000000,
-                // maxIdleBlockInterval
-                5))
+                100000000000, // 100 gwei
+                5,
+                1,
+                1000000000000000000, // 1 meta
+                100000000000, // 100 gwei
+                250, 250, 250, 250,
+                21000 * 5000, 4, 4 ]
+        txs[txs.length] = this.sendTx(envStorage.address, null,
+            tmpEnvStorageImp.initialize.getData(envNames, envValues))
 
         if (!this.checkReceipt(txs[0]))
             throw "Failed to initialize with initOnce. Tx is " + txs[0]
