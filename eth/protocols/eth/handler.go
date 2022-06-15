@@ -216,6 +216,28 @@ var eth66 = map[uint64]msgHandler{
 	TransactionsExMsg: handleTransactionsEx,
 }
 
+var eth67 = map[uint64]msgHandler{
+	NewBlockHashesMsg:             handleNewBlockhashes,
+	NewBlockMsg:                   handleNewBlock,
+	TransactionsMsg:               handleTransactions,
+	NewPooledTransactionHashesMsg: handleNewPooledTransactionHashes,
+	GetBlockHeadersMsg:            handleGetBlockHeaders66,
+	BlockHeadersMsg:               handleBlockHeaders66,
+	GetBlockBodiesMsg:             handleGetBlockBodies66,
+	BlockBodiesMsg:                handleBlockBodies66,
+	GetReceiptsMsg:                handleGetReceipts66,
+	ReceiptsMsg:                   handleReceipts66,
+	GetPooledTransactionsMsg:      handleGetPooledTransactions66,
+	PooledTransactionsMsg:         handlePooledTransactions66,
+	// wemix message handlers - not eth/66 yet
+	GetPendingTxsMsg:  handleGetPendingTxs,
+	GetStatusExMsg:    handleGetStatusEx,
+	StatusExMsg:       handleStatusEx,
+	EtcdAddMemberMsg:  handleEtcdAddMember,
+	EtcdClusterMsg:    handleEtcdCluster,
+	TransactionsExMsg: handleTransactionsEx,
+}
+
 // handleMessage is invoked whenever an inbound message is received from a remote
 // peer. The remote connection is torn down upon returning any error.
 func handleMessage(backend Backend, peer *Peer) error {
@@ -232,6 +254,9 @@ func handleMessage(backend Backend, peer *Peer) error {
 	var handlers = eth65
 	if peer.Version() >= ETH66 {
 		handlers = eth66
+	}
+	if peer.Version() >= ETH67 {
+		handlers = eth67
 	}
 
 	// Track the amount of time it takes to serve the request and run the handler
