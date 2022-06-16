@@ -1365,8 +1365,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if w.chainConfig.IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
 		if !w.chainConfig.IsLondon(parent.Number()) {
-			_, _, elasticityMultiplier, _, _, _ := metaminer.GetBlockBuildParameters(parent.Number())
-			parentGasLimit := parent.GasLimit() * uint64(elasticityMultiplier)
+			parentGasLimit := parent.GasLimit() * uint64(baseFeeElasticityMultiplier)
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, blockGasLimitMax.Uint64())
 		}
 	}

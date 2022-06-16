@@ -115,6 +115,9 @@ func CalcGasLimit(parentGasLimit, desiredLimit uint64) uint64 {
 	if params.FixedGasLimit != 0 {
 		return params.FixedGasLimit
 	} else if !metaminer.IsPoW() {
+		if desiredLimit == 0 { // NxtMeta: governance is not initialized yet, inherit parent's gas limit
+			return parentGasLimit
+		}
 		return desiredLimit
 	}
 

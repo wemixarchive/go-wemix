@@ -1251,7 +1251,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 	// default values
 	blockInterval = 15
 	baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier = 8, 4
-	gasLimitMax = big.NewInt(21000 * 10000)
+	gasLimitMax = big.NewInt(0) // to inherit parent gas limit
 	gasLimit = big.NewInt(21000 * 1500)
 
 	if admin == nil {
@@ -1278,6 +1278,9 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 	gasLimit = gasLimitAndBaseFee[0]
 	baseFeeMaxChangeDenominator = gasLimitAndBaseFee[1].Int64()
 	baseFeeElasticityMultiplier = gasLimitAndBaseFee[2].Int64()
+
+	// TODO: set it
+	gasLimitMax = big.NewInt(21000 * 10000)
 
 	// cache it
 	blockBuildParamsLock.Lock()
