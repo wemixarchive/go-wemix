@@ -95,7 +95,13 @@ type environment struct {
 	receipts []*types.Receipt
 	uncles   map[common.Hash]*types.Header
 
-	till *time.Time // nxtmeta: until when to block generation holds
+	// nxtmeta parameters
+	till                        *time.Time // until when to block generation holds
+	blockInterval               int64
+	baseFeeMaxChangeDenominator int64
+	baseFeeElasticityMultiplier int64
+	blockGasLimitMax            *big.Int
+	blockGasLimit               *big.Int
 }
 
 // copy creates a deep copy of environment.
@@ -1309,6 +1315,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if parent == nil {
 		return nil, fmt.Errorf("missing parent")
 	}
+	blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier, blockGasLimitMax, blockGasLimit, _ := metaminer.GetBlockBuildParameters(parent.Number())
 	// Sanity check the timestamp correctness, recap the timestamp
 	// to parent+1 if the mutation is allowed.
 	timestamp := genParams.timestamp
@@ -1324,7 +1331,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 
 	if true {
 		// nxtmeta
-		timestamp, till = w.timeIt()
+		timestamp, till = w.timeIt(int64(blockInterval))
 	} else {
 		// metadium
 		ts := w.ancestorTimes(num)
@@ -1342,7 +1349,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     num,
-		GasLimit:   core.CalcGasLimit(parent.GasLimit(), w.config.GasCeil),
+		GasLimit:   core.CalcGasLimit(parent.GasLimit(), blockGasLimitMax.Uint64()),
 		Fees:       big.NewInt(0),
 		Time:       timestamp,
 		Coinbase:   genParams.coinbase,
@@ -1358,8 +1365,9 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if w.chainConfig.IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
 		if !w.chainConfig.IsLondon(parent.Number()) {
-			parentGasLimit := parent.GasLimit() * params.ElasticityMultiplier
-			header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
+			_, _, elasticityMultiplier, _, _, _ := metaminer.GetBlockBuildParameters(parent.Number())
+			parentGasLimit := parent.GasLimit() * uint64(elasticityMultiplier)
+			header.GasLimit = core.CalcGasLimit(parentGasLimit, blockGasLimitMax.Uint64())
 		}
 	}
 	// Run the consensus preparation with the default or customized consensus engine.
@@ -1376,6 +1384,11 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		return nil, err
 	}
 	env.till = &till
+	env.blockInterval = blockInterval
+	env.baseFeeMaxChangeDenominator = baseFeeMaxChangeDenominator
+	env.baseFeeElasticityMultiplier = baseFeeElasticityMultiplier
+	env.blockGasLimitMax = blockGasLimitMax
+	env.blockGasLimit = blockGasLimit
 	// Accumulate the uncles for the sealing work only if it's allowed.
 	if !genParams.noUncle {
 		commitUncles := func(blocks map[common.Hash]*types.Block) {
@@ -1439,13 +1452,14 @@ func (w *worker) refreshPending(locked bool) {
 	defer w.mu.RUnlock()
 
 	parent := w.chain.CurrentBlock()
+	blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier, blockGasLimitMax, blockGasLimit, _ := metaminer.GetBlockBuildParameters(parent.Number())
 
 	num := parent.Number()
 	num.Add(num, common.Big1)
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     num,
-		GasLimit:   core.CalcGasLimit(parent.GasLimit(), w.config.GasCeil),
+		GasLimit:   core.CalcGasLimit(parent.GasLimit(), blockGasLimitMax.Uint64()),
 		Extra:      w.extra,
 		Time:       uint64(time.Now().Unix()),
 		Fees:       big.NewInt(0),
@@ -1456,6 +1470,11 @@ func (w *worker) refreshPending(locked bool) {
 		return
 	}
 	if env, err := w.makeEnv(parent, header, header.Coinbase); err == nil {
+		env.blockInterval = blockInterval
+		env.baseFeeMaxChangeDenominator = baseFeeMaxChangeDenominator
+		env.baseFeeElasticityMultiplier = baseFeeElasticityMultiplier
+		env.blockGasLimitMax = blockGasLimitMax
+		env.blockGasLimit = blockGasLimit
 		w.updateSnapshot(env)
 	}
 }
@@ -1472,7 +1491,7 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 	return w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
 }
 
-func (w *worker) timeIt() (timestamp uint64, till time.Time) {
+func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) {
 	maxPeekBack := int64(86400)   // don't look back further than this
 	tooBehindMultiple := int64(2) // ignore if > tooBehindMultiple * height * blockInterval
 
@@ -1499,10 +1518,10 @@ func (w *worker) timeIt() (timestamp uint64, till time.Time) {
 		height = uint64(n)
 		stamp = h.Time
 		dt = nowInSeconds - int64(stamp)
-		if heightToPeek*params.BlockInterval < dt && dt < tooBehindMultiple*heightToPeek*params.BlockInterval {
+		if heightToPeek*blockInterval < dt && dt < tooBehindMultiple*heightToPeek*blockInterval {
 			// behind
 			offset = -1
-		} else if dt < heightToPeek*params.BlockInterval {
+		} else if dt < heightToPeek*blockInterval {
 			// ahead
 			offset = 1
 		}
@@ -1545,7 +1564,7 @@ func (w *worker) timeIt() (timestamp uint64, till time.Time) {
 		till = time.UnixMilli(tms)
 		log.Debug("Metadium time-it", "behind", timestamp, "duration", tms-nowInMilliSeconds)
 	case 1: // ahead, i.e. too many blocks, need to slow down
-		tms := nowInMilliSeconds + params.BlockInterval*1000 + params.BlockMinBuildTime
+		tms := nowInMilliSeconds + blockInterval*1000 + params.BlockMinBuildTime
 		if tms/1000 > nowInSeconds+1 {
 			// make sure time stamp doesn't jump by 2
 			tms = (nowInSeconds+2)*1000 - params.BlockTrailTime
@@ -1553,7 +1572,7 @@ func (w *worker) timeIt() (timestamp uint64, till time.Time) {
 		till = time.UnixMilli(tms)
 		log.Debug("Metadium time-it", "ahead", timestamp, "duration", tms-nowInMilliSeconds)
 	default: // on schedule
-		tms := nowInMilliSeconds + params.BlockInterval*1000 - params.BlockTrailTime
+		tms := nowInMilliSeconds + blockInterval*1000 - params.BlockTrailTime
 		if tms/1000 > nowInSeconds+1 {
 			// make sure time stamp doesn't jump by 2
 			tms = (nowInSeconds+2)*1000 - params.BlockTrailTime

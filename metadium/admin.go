@@ -73,18 +73,18 @@ type metaAdmin struct {
 	etcdPort    int
 	etcdTimeout time.Duration
 
-	lastBlock     int
-	modifiedBlock int
+	lastBlock     int64
+	modifiedBlock int64
 
-	blockInterval               int
-	blocksPer                   int
+	blockInterval               int64
+	blocksPer                   int64
 	blockReward                 *big.Int
 	gasPrice                    *big.Int
 	maxPriorityFeePerGas        *big.Int
+	gasLimitMax                 *big.Int
 	gasLimit                    *big.Int
-	gasTarget                   *big.Int
-	baseFeeMaxChangeDenominator int
-	elasticityMultiplier        int
+	baseFeeMaxChangeDenominator int64
+	elasticityMultiplier        int64
 
 	self *metaNode
 
@@ -92,13 +92,23 @@ type metaAdmin struct {
 	nodes map[string]*metaNode
 
 	// # of blocks consecutively mined by this node
-	blocksMined int
+	blocksMined int64
 }
 
 // latest block generated
 type metaWork struct {
 	Height int64       `json:"height"`
 	Hash   common.Hash `json:"hash"`
+}
+
+// block build parameters for caching
+type blockBuildParameters struct {
+	height                      uint64
+	blockInterval               int64
+	baseFeeMaxChangeDenominator int64
+	baseFeeElasticityMultiplier int64
+	gasLimitMax                 *big.Int
+	gasLimit                    *big.Int
 }
 
 var (
@@ -115,6 +125,10 @@ var (
 
 	etcdCompactFrequency = int64(100)
 	etcdCompactWindow    = int64(100)
+
+	// cached block build parameters
+	blockBuildParamsLock = &sync.Mutex{}
+	blockBuildParams     *blockBuildParameters
 )
 
 func (n *metaNode) eq(m *metaNode) bool {
@@ -227,13 +241,13 @@ func (ma *metaAdmin) getAdminAddresses() (registry, gov, staking, envStorage *co
 	return
 }
 
-func (ma *metaAdmin) getInt(ctx context.Context, contract *metclient.RemoteContract, block *big.Int, name string) (int, error) {
+func (ma *metaAdmin) getInt(ctx context.Context, contract *metclient.RemoteContract, block *big.Int, name string) (int64, error) {
 	var v *big.Int
 	err := metclient.CallContract(ctx, contract, name, nil, &v, block)
 	if err != nil {
 		return 0, err
 	} else {
-		return int(v.Int64()), nil
+		return v.Int64(), nil
 	}
 }
 
@@ -248,14 +262,15 @@ func (ma *metaAdmin) getEnvStorageContract(ctx context.Context, height *big.Int)
 	}
 	name := metclient.ToBytes32("EnvStorage")
 	input := []interface{}{name}
-	var addr *common.Address
+	var addr common.Address
+
 	if err := metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
 		return nil, err
 	}
 	env := &metclient.RemoteContract{
 		Cli: ma.cli,
 		Abi: ma.envStorage.Abi,
-		To:  addr,
+		To:  &addr,
 	}
 	return env, nil
 }
@@ -279,7 +294,7 @@ func (ma *metaAdmin) getNodes() []*metaNode {
 // 3. nodes []*metaNode: copies of map[string]*metaNode, not references,
 //   sorted by id, i.e. mining order
 // 'locked' indicates whether ma.lock is held by the caller or not
-func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNode, []*metaNode) {
+func (ma *metaAdmin) getMinerNodes(height int64, locked bool) (*metaNode, *metaNode, []*metaNode) {
 	var nodes []*metaNode
 	if !locked {
 		ma.lock.Lock()
@@ -310,7 +325,7 @@ func (ma *metaAdmin) getMinerNodes(height int, locked bool) (*metaNode, *metaNod
 
 	_, leaderNode := ma.etcdLeader(locked)
 	var miner, next *metaNode
-	ix := height / admin.blocksPer % len(nodes)
+	ix := int(height/admin.blocksPer) % len(nodes)
 	i := ix
 	for j := 0; j < len(nodes); j++ {
 		if miner != nil && next != nil {
@@ -337,13 +352,13 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 		addr            common.Address
 		name, enode, ip []byte
 		port            *big.Int
-		count           int
+		count           int64
 		input, output   []interface{}
 		err             error
 	)
 
 	count, err = ma.getInt(ctx, ma.gov, block, "getNodeLength")
-	for i := 1; i <= count; i++ {
+	for i := int64(1); i <= count; i++ {
 		input = []interface{}{big.NewInt(int64(i))}
 		output = []interface{}{&name, &enode, &ip, &port}
 		if err = metclient.CallContract(ctx, ma.gov, "getNode", input, &output, block); err != nil {
@@ -377,7 +392,7 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rewardPoolAccount, maintenanceAccount *common.Address, members []*metaMember, err error) {
 	var (
 		addr  common.Address
-		count int
+		count int64
 		stake *big.Int
 		input []interface{}
 	)
@@ -406,7 +421,7 @@ func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rew
 		return
 	}
 
-	for i := 1; i <= count; i++ {
+	for i := int64(1); i <= count; i++ {
 		input = []interface{}{big.NewInt(int64(i))}
 		err = metclient.CallContract(ctx, ma.gov, "getReward", input,
 			&addr, block)
@@ -431,11 +446,11 @@ func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rew
 
 // temporary internal structure to collect data from governance contracts
 type govdata struct {
-	blockNum, modifiedBlock                                          int
-	blockInterval, blocksPer, maxIdleBlockInterval                   int
-	blockReward, gasPrice, maxPriorityFeePerGas, gasLimit, gasTarget *big.Int
-	baseFeeMaxChangeDenominator, elasticityMultiplier                int
-	nodes, addedNodes, updatedNodes, deletedNodes                    []*metaNode
+	blockNum, modifiedBlock                                            int64
+	blockInterval, blocksPer, maxIdleBlockInterval                     int64
+	blockReward, gasPrice, maxPriorityFeePerGas, gasLimitMax, gasLimit *big.Int
+	baseFeeMaxChangeDenominator, elasticityMultiplier                  int64
+	nodes, addedNodes, updatedNodes, deletedNodes                      []*metaNode
 }
 
 func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
@@ -448,7 +463,7 @@ func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
 	if err != nil {
 		return
 	}
-	data.blockNum = int(block.Number.Int64())
+	data.blockNum = block.Number.Int64()
 	if !refresh && data.blockNum <= ma.lastBlock {
 		return
 	}
@@ -477,7 +492,7 @@ func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
 	data.maxIdleBlockInterval, err = ma.getInt(ctx, ma.envStorage, block.Number, "getMaxIdleBlockInterval")
 	if err != nil {
 		// TODO: ignore this error for now
-		data.maxIdleBlockInterval = int(params.MaxIdleBlockInterval)
+		data.maxIdleBlockInterval = int64(params.MaxIdleBlockInterval)
 		//return
 	}
 	err = metclient.CallContract(ctx, ma.envStorage, "getBlockRewardAmount", nil, &data.blockReward, block.Number)
@@ -498,11 +513,10 @@ func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
 		return
 	}
 	data.gasLimit = gasLimitAndBaseFee[0]
-	data.baseFeeMaxChangeDenominator = int(gasLimitAndBaseFee[1].Int64())
-	data.elasticityMultiplier = int(gasLimitAndBaseFee[2].Int64())
+	data.baseFeeMaxChangeDenominator = gasLimitAndBaseFee[1].Int64()
+	data.elasticityMultiplier = gasLimitAndBaseFee[2].Int64()
 
-	// TODO: should come from the governance
-	data.gasTarget = big.NewInt(21000 * 1500)
+	data.gasLimitMax = big.NewInt(21000 * 10000)
 
 	data.nodes, err = ma.getMetaNodes(ctx, block.Number)
 	if err != nil {
@@ -667,8 +681,8 @@ func (ma *metaAdmin) update() {
 		ma.blockReward = data.blockReward
 		ma.gasPrice = data.gasPrice
 		ma.maxPriorityFeePerGas = data.maxPriorityFeePerGas
+		ma.gasLimitMax = data.gasLimitMax
 		ma.gasLimit = data.gasLimit
-		ma.gasTarget = data.gasTarget
 		ma.baseFeeMaxChangeDenominator = data.baseFeeMaxChangeDenominator
 		ma.elasticityMultiplier = data.elasticityMultiplier
 
@@ -953,7 +967,7 @@ func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalanc
 
 	// determine coinbase
 	if len(members) > 0 {
-		mix := int(num.Int64()) / ma.blocksPer % len(members)
+		mix := int(num.Int64()/ma.blocksPer) % len(members)
 		coinbase = &common.Address{}
 		coinbase.SetBytes(members[mix].Addr.Bytes())
 	}
@@ -1176,10 +1190,10 @@ func LogBlock(height int64, hash common.Hash) {
 	admin.blocksMined++
 	height++
 	if admin.blocksMined >= admin.blocksPer &&
-		int(height)%admin.blocksPer == 0 {
+		height%admin.blocksPer == 0 {
 		// time to yield leader role
 
-		_, next, _ := admin.getMinerNodes(int(height), true)
+		_, next, _ := admin.getMinerNodes(height, true)
 		if next.Id == admin.self.Id {
 			log.Debug("Metadium - yield to self", "mined", admin.blocksMined,
 				"new miner", "self")
@@ -1220,12 +1234,25 @@ func suggestGasPrice() *big.Int {
 	return fee
 }
 
-func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier int, gasLimit, gasTarget *big.Int, err error) {
+func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier int64, gasLimitMax, gasLimit *big.Int, err error) {
+	blockBuildParamsLock.Lock()
+	if blockBuildParams != nil && blockBuildParams.height == height.Uint64() {
+		// use chached
+		blockInterval = blockBuildParams.blockInterval
+		baseFeeMaxChangeDenominator = blockBuildParams.baseFeeMaxChangeDenominator
+		baseFeeElasticityMultiplier = blockBuildParams.baseFeeElasticityMultiplier
+		gasLimitMax = blockBuildParams.gasLimitMax
+		gasLimit = blockBuildParams.gasLimit
+		blockBuildParamsLock.Unlock()
+		return
+	}
+	blockBuildParamsLock.Unlock()
+
 	// default values
-	blockInterval = 1
-	baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier = 4, 4
-	gasLimit = big.NewInt(21000 * 5000)
-	gasTarget = big.NewInt(21000 * 1500)
+	blockInterval = 15
+	baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier = 8, 4
+	gasLimitMax = big.NewInt(21000 * 10000)
+	gasLimit = big.NewInt(21000 * 1500)
 
 	if admin == nil {
 		return
@@ -1241,7 +1268,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 	if err = metclient.CallContract(ctx, env, "getBlockCreationTime", nil, &v, height); err != nil {
 		return
 	}
-	blockInterval = int(v.Int64())
+	blockInterval = v.Int64()
 
 	gasLimitAndBaseFee := make([]*big.Int, 3, 3)
 	err = metclient.CallContract(ctx, env, "getGasLimitAndBaseFee", nil, &gasLimitAndBaseFee, height)
@@ -1249,8 +1276,20 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 		return
 	}
 	gasLimit = gasLimitAndBaseFee[0]
-	baseFeeMaxChangeDenominator = int(gasLimitAndBaseFee[1].Int64())
-	baseFeeElasticityMultiplier = int(gasLimitAndBaseFee[2].Int64())
+	baseFeeMaxChangeDenominator = gasLimitAndBaseFee[1].Int64()
+	baseFeeElasticityMultiplier = gasLimitAndBaseFee[2].Int64()
+
+	// cache it
+	blockBuildParamsLock.Lock()
+	blockBuildParams = &blockBuildParameters{
+		height:                      height.Uint64(),
+		blockInterval:               blockInterval,
+		baseFeeMaxChangeDenominator: baseFeeMaxChangeDenominator,
+		baseFeeElasticityMultiplier: baseFeeElasticityMultiplier,
+		gasLimitMax:                 gasLimitMax,
+		gasLimit:                    gasLimit,
+	}
+	blockBuildParamsLock.Unlock()
 	return
 }
 
@@ -1276,7 +1315,7 @@ func (ma *metaAdmin) miners() string {
 	if err != nil {
 		return ""
 	}
-	height := int(block.Number.Int64())
+	height := block.Number.Int64()
 
 	_, _, nodes := ma.getMinerNodes(height+1, false)
 	return ma.toMiningPeers(nodes)
@@ -1306,8 +1345,8 @@ func Info() interface{} {
 			"blockReward":                 admin.blockReward,
 			"gasPrice":                    admin.gasPrice,
 			"maxPriorityFeePerGas":        admin.maxPriorityFeePerGas,
+			"blockGasLimitMax":            admin.gasLimitMax,
 			"blockGasLimit":               admin.gasLimit,
-			"blockGasTarget":              admin.gasTarget,
 			"baseFeeMaxChangeDenominator": admin.baseFeeMaxChangeDenominator,
 			"baseFeeElasticityMultiplier": admin.elasticityMultiplier,
 			"self":                        self,
@@ -1332,7 +1371,7 @@ func getMinerStatus() *metaapi.MetadiumMinerStatus {
 	if err != nil {
 		return nil
 	}
-	height := int(header.Number.Int64())
+	height := header.Number.Int64()
 
 	_, _, nodes := admin.getMinerNodes(height+1, false)
 	miningPeers := admin.toMiningPeers(nodes)

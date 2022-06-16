@@ -4,7 +4,7 @@
 var GovernanceDeployer = new function() {
     this.wallet = null
     this.from = null
-    this.gas = 21000 * 4500
+    this.gas = 21000 * 1400
     this.gasPrice = eth.gasPrice
     this._nonce = 0
     this.receiptCheckParams = { "interval": 100, "count": 300 }
@@ -276,7 +276,7 @@ var GovernanceDeployer = new function() {
                 1000000000000000000, // 1 meta
                 100000000000, // 100 gwei
                 250, 250, 250, 250,
-                21000 * 5000, 4, 4 ]
+                21000 * 1500, 4, 4 ]
         txs[txs.length] = this.sendTx(envStorage.address, null,
             tmpEnvStorageImp.initialize.getData(envNames, envValues))
 

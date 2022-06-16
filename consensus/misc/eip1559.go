@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
+	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -30,10 +31,11 @@ import (
 // - gas limit check
 // - basefee check
 func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Header) error {
+	_, _, elasticityMultiplier, _, _, _ := metaminer.GetBlockBuildParameters(parent.Number)
 	// Verify that the gas limit remains within allowed bounds
 	parentGasLimit := parent.GasLimit
 	if !config.IsLondon(parent.Number) {
-		parentGasLimit = parent.GasLimit * params.ElasticityMultiplier
+		parentGasLimit = parent.GasLimit * uint64(elasticityMultiplier)
 	}
 	if err := VerifyGaslimit(parentGasLimit, header.GasLimit); err != nil {
 		return err
@@ -57,12 +59,19 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 	if !config.IsLondon(parent.Number) {
 		return new(big.Int).SetUint64(params.InitialBaseFee)
 	}
+	_, baseFeeMaxChangeDenominator, elasticityMultiplier, _, gasLimit, _ := metaminer.GetBlockBuildParameters(parent.Number)
 
 	var (
-		parentGasTarget          = parent.GasLimit / params.ElasticityMultiplier
+		// NB: NxtMeta, gas used instead of gas limit for base fee calculation
+		// parentGasTarget          = parent.GasLimit / uint64(elasticityMultiplier)
+		parentGasTarget          = parent.GasUsed / uint64(elasticityMultiplier)
 		parentGasTargetBig       = new(big.Int).SetUint64(parentGasTarget)
-		baseFeeChangeDenominator = new(big.Int).SetUint64(params.BaseFeeChangeDenominator)
+		baseFeeChangeDenominator = new(big.Int).SetInt64(baseFeeMaxChangeDenominator)
 	)
+	if parentGasTarget < gasLimit.Uint64() {
+		parentGasTarget = gasLimit.Uint64()
+		parentGasTargetBig = parentGasTargetBig.SetUint64(parentGasTarget)
+	}
 	// If the parent gasUsed is the same as the target, the baseFee remains unchanged.
 	if parent.GasUsed == parentGasTarget {
 		return new(big.Int).Set(parent.BaseFee)
