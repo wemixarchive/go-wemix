@@ -20,6 +20,7 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -181,6 +182,24 @@ func (ma *metaAdmin) getGenesisInfo() (string, common.Address, error) {
 	return nodeId, block.Coinbase, nil
 }
 
+func (ma *metaAdmin) getRegistryAddress(ctx context.Context, cli *ethclient.Client, registryAbi abi.ABI, height *big.Int) (*common.Address, error) {
+	contract := &metclient.RemoteContract{
+		Cli: cli,
+		Abi: registryAbi,
+	}
+	for i := uint64(0); i < 10; i++ {
+		addr := crypto.CreateAddress(ma.bootAccount, i)
+		contract.To = &addr
+
+		var v *big.Int
+		err := metclient.CallContract(ctx, contract, "magic", nil, &v, height)
+		if err == nil && v.Cmp(magic) == 0 {
+			return &addr, nil
+		}
+	}
+	return nil, metaminer.ErrNotInitialized
+}
+
 // it should be the first transaction of the coinbase of the genesis block
 func (ma *metaAdmin) getAdminAddresses() (registry, gov, staking, envStorage *common.Address, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -194,24 +213,11 @@ func (ma *metaAdmin) getAdminAddresses() (registry, gov, staking, envStorage *co
 	if ma.registry != nil && ma.registry.To != nil {
 		registry = ma.registry.To
 	} else {
-		for i := uint64(0); i < 10; i++ {
-			addr := crypto.CreateAddress(ma.bootAccount, i)
-			contract.To = &addr
-
-			var v *big.Int
-			err = metclient.CallContract(ctx, contract, "magic", nil, &v, nil)
-			if err == nil && v.Cmp(magic) == 0 {
-				registry = &addr
-				break
-			}
-		}
-	}
-
-	if registry == nil {
-		if err == nil {
+		registry, err = ma.getRegistryAddress(ctx, ma.cli, ma.registry.Abi, nil)
+		if err != nil {
 			err = ethereum.NotFound
+			return
 		}
-		return
 	}
 	contract.To = registry
 
@@ -252,7 +258,7 @@ func (ma *metaAdmin) getInt(ctx context.Context, contract *metclient.RemoteContr
 }
 
 func (ma *metaAdmin) getEnvStorageContract(ctx context.Context, height *big.Int) (*metclient.RemoteContract, error) {
-	if ma.registry == nil || ma.registry.To == nil {
+	if ma.registry == nil {
 		return nil, metaminer.ErrNotInitialized
 	}
 	reg := &metclient.RemoteContract{
@@ -260,6 +266,14 @@ func (ma *metaAdmin) getEnvStorageContract(ctx context.Context, height *big.Int)
 		Abi: ma.registry.Abi,
 		To:  ma.registry.To,
 	}
+	if ma.registry.To == nil {
+		addr, err := ma.getRegistryAddress(ctx, ma.cli, ma.registry.Abi, height)
+		if err != nil {
+			return nil, metaminer.ErrNotInitialized
+		}
+		reg.To = addr
+	}
+
 	name := metclient.ToBytes32("EnvStorage")
 	input := []interface{}{name}
 	var addr common.Address
@@ -1235,6 +1249,8 @@ func suggestGasPrice() *big.Int {
 }
 
 func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier int64, gasLimitMax, gasLimit *big.Int, err error) {
+	err = metaminer.ErrNotInitialized
+
 	blockBuildParamsLock.Lock()
 	if blockBuildParams != nil && blockBuildParams.height == height.Uint64() {
 		// use chached
@@ -1244,6 +1260,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 		gasLimitMax = blockBuildParams.gasLimitMax
 		gasLimit = blockBuildParams.gasLimit
 		blockBuildParamsLock.Unlock()
+		err = nil
 		return
 	}
 	blockBuildParamsLock.Unlock()
@@ -1262,10 +1279,12 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 
 	var env *metclient.RemoteContract
 	if env, err = admin.getEnvStorageContract(ctx, height); err != nil {
+		err = metaminer.ErrNotInitialized
 		return
 	}
 	var v *big.Int
 	if err = metclient.CallContract(ctx, env, "getBlockCreationTime", nil, &v, height); err != nil {
+		err = metaminer.ErrNotInitialized
 		return
 	}
 	blockInterval = v.Int64()
@@ -1273,6 +1292,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 	gasLimitAndBaseFee := make([]*big.Int, 3, 3)
 	err = metclient.CallContract(ctx, env, "getGasLimitAndBaseFee", nil, &gasLimitAndBaseFee, height)
 	if err != nil {
+		err = metaminer.ErrNotInitialized
 		return
 	}
 	gasLimit = gasLimitAndBaseFee[0]
@@ -1293,6 +1313,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 		gasLimit:                    gasLimit,
 	}
 	blockBuildParamsLock.Unlock()
+	err = nil
 	return
 }
 
