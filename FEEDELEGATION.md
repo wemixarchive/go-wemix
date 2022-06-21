@@ -356,7 +356,7 @@ result:
 * internal/ethapi/api.go
 
 ``` go
-func (s *PrivateAccountAPI) SignRawFeeDelegateTransaction(ctx context.Context, args TransactionArgs, input hexutil.Bytes, passwd string) (*SignTransactionResult, error) {
+func (s *PersonalAccountAPI) SignRawFeeDelegateTransaction(ctx context.Context, args TransactionArgs, input hexutil.Bytes, passwd string) (*SignTransactionResult, error) {
 	if args.FeePayer == nil {
 		return nil, fmt.Errorf("missing FeePayer")
 	}
