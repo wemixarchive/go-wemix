@@ -77,15 +77,15 @@ type metaAdmin struct {
 	lastBlock     int64
 	modifiedBlock int64
 
-	blockInterval               int64
-	blocksPer                   int64
-	blockReward                 *big.Int
-	gasPrice                    *big.Int
-	maxPriorityFeePerGas        *big.Int
-	gasLimitMax                 *big.Int
-	gasLimit                    *big.Int
-	baseFeeMaxChangeDenominator int64
-	elasticityMultiplier        int64
+	blockInterval        int64
+	blocksPer            int64
+	blockReward          *big.Int
+	gasPrice             *big.Int
+	maxPriorityFeePerGas *big.Int
+	maxBaseFee           *big.Int
+	gasLimit             *big.Int
+	baseFeeMaxChangeRate int64
+	gasTargetPercentage  int64
 
 	self *metaNode
 
@@ -104,12 +104,12 @@ type metaWork struct {
 
 // block build parameters for caching
 type blockBuildParameters struct {
-	height                      uint64
-	blockInterval               int64
-	baseFeeMaxChangeDenominator int64
-	baseFeeElasticityMultiplier int64
-	gasLimitMax                 *big.Int
-	gasLimit                    *big.Int
+	height               uint64
+	blockInterval        int64
+	maxBaseFee           *big.Int
+	gasLimit             *big.Int
+	baseFeeMaxChangeRate int64
+	gasTargetPercentage  int64
 }
 
 var (
@@ -460,11 +460,12 @@ func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rew
 
 // temporary internal structure to collect data from governance contracts
 type govdata struct {
-	blockNum, modifiedBlock                                            int64
-	blockInterval, blocksPer, maxIdleBlockInterval                     int64
-	blockReward, gasPrice, maxPriorityFeePerGas, gasLimitMax, gasLimit *big.Int
-	baseFeeMaxChangeDenominator, elasticityMultiplier                  int64
-	nodes, addedNodes, updatedNodes, deletedNodes                      []*metaNode
+	blockNum, modifiedBlock                        int64
+	blockInterval, blocksPer, maxIdleBlockInterval int64
+	blockReward, gasPrice, maxPriorityFeePerGas    *big.Int
+	maxBaseFee, gasLimit                           *big.Int
+	baseFeeMaxChangeRate, gasTargetPercentage      int64
+	nodes, addedNodes, updatedNodes, deletedNodes  []*metaNode
 }
 
 func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
@@ -527,10 +528,14 @@ func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
 		return
 	}
 	data.gasLimit = gasLimitAndBaseFee[0]
-	data.baseFeeMaxChangeDenominator = gasLimitAndBaseFee[1].Int64()
-	data.elasticityMultiplier = gasLimitAndBaseFee[2].Int64()
+	data.baseFeeMaxChangeRate = gasLimitAndBaseFee[1].Int64()
+	data.gasTargetPercentage = gasLimitAndBaseFee[2].Int64()
 
-	data.gasLimitMax = big.NewInt(21000 * 10000)
+	// err = metclient.CallContract(ctx, ma.envStorage, "getMaxBaseFee", nil, &data.maxBaseFee, block.Number)
+	// if err != nil {
+	// 	return
+	// }
+	data.maxBaseFee = big.NewInt(500 * params.GWei)
 
 	data.nodes, err = ma.getMetaNodes(ctx, block.Number)
 	if err != nil {
@@ -695,10 +700,10 @@ func (ma *metaAdmin) update() {
 		ma.blockReward = data.blockReward
 		ma.gasPrice = data.gasPrice
 		ma.maxPriorityFeePerGas = data.maxPriorityFeePerGas
-		ma.gasLimitMax = data.gasLimitMax
+		ma.maxBaseFee = data.maxBaseFee
 		ma.gasLimit = data.gasLimit
-		ma.baseFeeMaxChangeDenominator = data.baseFeeMaxChangeDenominator
-		ma.elasticityMultiplier = data.elasticityMultiplier
+		ma.baseFeeMaxChangeRate = data.baseFeeMaxChangeRate
+		ma.gasTargetPercentage = data.gasTargetPercentage
 
 		_nodes := map[string]*metaNode{}
 		for _, i := range data.nodes {
@@ -1248,17 +1253,17 @@ func suggestGasPrice() *big.Int {
 	return fee
 }
 
-func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier int64, gasLimitMax, gasLimit *big.Int, err error) {
+func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, gasLimit *big.Int, baseFeeMaxChangeRate, gasTargetPercentage int64, err error) {
 	err = metaminer.ErrNotInitialized
 
 	blockBuildParamsLock.Lock()
 	if blockBuildParams != nil && blockBuildParams.height == height.Uint64() {
 		// use chached
 		blockInterval = blockBuildParams.blockInterval
-		baseFeeMaxChangeDenominator = blockBuildParams.baseFeeMaxChangeDenominator
-		baseFeeElasticityMultiplier = blockBuildParams.baseFeeElasticityMultiplier
-		gasLimitMax = blockBuildParams.gasLimitMax
+		maxBaseFee = blockBuildParams.maxBaseFee
 		gasLimit = blockBuildParams.gasLimit
+		baseFeeMaxChangeRate = blockBuildParams.baseFeeMaxChangeRate
+		gasTargetPercentage = blockBuildParams.gasTargetPercentage
 		blockBuildParamsLock.Unlock()
 		err = nil
 		return
@@ -1267,9 +1272,10 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 
 	// default values
 	blockInterval = 15
-	baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier = 8, 4
-	gasLimitMax = big.NewInt(0) // to inherit parent gas limit
-	gasLimit = big.NewInt(21000 * 1500)
+	maxBaseFee = big.NewInt(0)
+	gasLimit = big.NewInt(0)
+	baseFeeMaxChangeRate = 0
+	gasTargetPercentage = 100
 
 	if admin == nil {
 		return
@@ -1290,27 +1296,29 @@ func getBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDe
 	blockInterval = v.Int64()
 
 	gasLimitAndBaseFee := make([]*big.Int, 3, 3)
-	err = metclient.CallContract(ctx, env, "getGasLimitAndBaseFee", nil, &gasLimitAndBaseFee, height)
-	if err != nil {
+	if err = metclient.CallContract(ctx, env, "getGasLimitAndBaseFee", nil, &gasLimitAndBaseFee, height); err != nil {
 		err = metaminer.ErrNotInitialized
 		return
 	}
 	gasLimit = gasLimitAndBaseFee[0]
-	baseFeeMaxChangeDenominator = gasLimitAndBaseFee[1].Int64()
-	baseFeeElasticityMultiplier = gasLimitAndBaseFee[2].Int64()
+	baseFeeMaxChangeRate = gasLimitAndBaseFee[1].Int64()
+	gasTargetPercentage = gasLimitAndBaseFee[2].Int64()
 
-	// TODO: set it
-	gasLimitMax = big.NewInt(21000 * 10000)
+	// if err = metclient.CallContract(ctx, env, "getMaxBaseFee", nil, &maxBaseFee, height); err != nil {
+	//	err = metaminer.ErrNotInitialized
+	//	return
+	// }
+	maxBaseFee = big.NewInt(500 * params.GWei)
 
 	// cache it
 	blockBuildParamsLock.Lock()
 	blockBuildParams = &blockBuildParameters{
-		height:                      height.Uint64(),
-		blockInterval:               blockInterval,
-		baseFeeMaxChangeDenominator: baseFeeMaxChangeDenominator,
-		baseFeeElasticityMultiplier: baseFeeElasticityMultiplier,
-		gasLimitMax:                 gasLimitMax,
-		gasLimit:                    gasLimit,
+		height:               height.Uint64(),
+		blockInterval:        blockInterval,
+		maxBaseFee:           maxBaseFee,
+		gasLimit:             gasLimit,
+		baseFeeMaxChangeRate: baseFeeMaxChangeRate,
+		gasTargetPercentage:  gasTargetPercentage,
 	}
 	blockBuildParamsLock.Unlock()
 	err = nil
@@ -1359,25 +1367,25 @@ func Info() interface{} {
 		})
 
 		info := &map[string]interface{}{
-			"consensus":                   params.ConsensusMethod,
-			"registry":                    admin.registry.To,
-			"governance":                  admin.gov.To,
-			"staking":                     admin.staking.To,
-			"modifiedblock":               admin.modifiedBlock,
-			"blocksPer":                   admin.blocksPer,
-			"blockInterval":               admin.blockInterval,
-			"blockReward":                 admin.blockReward,
-			"gasPrice":                    admin.gasPrice,
-			"maxPriorityFeePerGas":        admin.maxPriorityFeePerGas,
-			"blockGasLimitMax":            admin.gasLimitMax,
-			"blockGasLimit":               admin.gasLimit,
-			"baseFeeMaxChangeDenominator": admin.baseFeeMaxChangeDenominator,
-			"baseFeeElasticityMultiplier": admin.elasticityMultiplier,
-			"self":                        self,
-			"nodes":                       nodes,
-			"miners":                      admin.miners(),
-			"etcd":                        admin.etcdInfo(),
-			"maxIdle":                     params.MaxIdleBlockInterval,
+			"consensus":            params.ConsensusMethod,
+			"registry":             admin.registry.To,
+			"governance":           admin.gov.To,
+			"staking":              admin.staking.To,
+			"modifiedblock":        admin.modifiedBlock,
+			"blocksPer":            admin.blocksPer,
+			"blockInterval":        admin.blockInterval,
+			"blockReward":          admin.blockReward,
+			"gasPrice":             admin.gasPrice,
+			"maxPriorityFeePerGas": admin.maxPriorityFeePerGas,
+			"blockGasLimit":        admin.gasLimit,
+			"maxBaseFee":           admin.maxBaseFee,
+			"baseFeeMaxChangeRate": admin.baseFeeMaxChangeRate,
+			"gasTargetPercentage":  admin.gasTargetPercentage,
+			"self":                 self,
+			"nodes":                nodes,
+			"miners":               admin.miners(),
+			"etcd":                 admin.etcdInfo(),
+			"maxIdle":              params.MaxIdleBlockInterval,
 		}
 		return info
 	}

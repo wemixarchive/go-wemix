@@ -25,7 +25,7 @@ var (
 	RequirePendingTxsFunc       func() bool
 	VerifyBlockRewardsFunc      func(height *big.Int) interface{}
 	SuggestGasPriceFunc         func() *big.Int
-	GetBlockBuildParametersFunc func(height *big.Int) (blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier int64, gasLimitMax, gasLimit *big.Int, err error)
+	GetBlockBuildParametersFunc func(height *big.Int) (blockInterval int64, maxBaseFee, gasLimit *big.Int, baseFeeMaxChangeRate, gasTargetPercentage int64, err error)
 )
 
 func IsMiner() bool {
@@ -127,10 +127,10 @@ func SuggestGasPrice() *big.Int {
 	}
 }
 
-func GetBlockBuildParameters(height *big.Int) (blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier int64, gasLimitMax, gasLimit *big.Int, err error) {
+func GetBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, gasLimit *big.Int, baseFeeMaxChangeRate, gasTargetPercentage int64, err error) {
 	if GetBlockBuildParametersFunc == nil {
 		// default values
-		return 1, 4, 4, big.NewInt(21000 * 10000), big.NewInt(21000 * 1500), nil
+		return 15, big.NewInt(0), big.NewInt(0), 0, 100, ErrNotInitialized
 	} else {
 		return GetBlockBuildParametersFunc(height)
 	}

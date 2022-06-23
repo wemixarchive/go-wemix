@@ -276,7 +276,7 @@ var GovernanceDeployer = new function() {
                 1000000000000000000, // 1 meta
                 100000000000, // 100 gwei
                 250, 250, 250, 250,
-                21000 * 1500, 4, 4 ]
+                21000 * 5000, 46, 30 ]
         txs[txs.length] = this.sendTx(envStorage.address, null,
             tmpEnvStorageImp.initialize.getData(envNames, envValues))
 

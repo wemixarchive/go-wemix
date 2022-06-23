@@ -96,12 +96,11 @@ type environment struct {
 	uncles   map[common.Hash]*types.Header
 
 	// nxtmeta parameters
-	till                        *time.Time // until when to block generation holds
-	blockInterval               int64
-	baseFeeMaxChangeDenominator int64
-	baseFeeElasticityMultiplier int64
-	blockGasLimitMax            *big.Int
-	blockGasLimit               *big.Int
+	till                 *time.Time // until when to block generation holds
+	blockInterval        int64
+	blockGasLimit        *big.Int
+	baseFeeMaxChangeRate int64
+	gasTargetPercentage  int64
 }
 
 // copy creates a deep copy of environment.
@@ -1315,7 +1314,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if parent == nil {
 		return nil, fmt.Errorf("missing parent")
 	}
-	blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier, blockGasLimitMax, blockGasLimit, _ := metaminer.GetBlockBuildParameters(parent.Number())
+	blockInterval, _, blockGasLimit, baseFeeMaxChangeRate, gasTargetPercentage, err := metaminer.GetBlockBuildParameters(parent.Number())
 	// Sanity check the timestamp correctness, recap the timestamp
 	// to parent+1 if the mutation is allowed.
 	timestamp := genParams.timestamp
@@ -1349,7 +1348,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     num,
-		GasLimit:   core.CalcGasLimit(parent.GasLimit(), blockGasLimitMax.Uint64()),
+		GasLimit:   core.CalcGasLimit(parent.GasLimit(), blockGasLimit.Uint64()),
 		Fees:       big.NewInt(0),
 		Time:       timestamp,
 		Coinbase:   genParams.coinbase,
@@ -1365,8 +1364,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if w.chainConfig.IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
 		if !w.chainConfig.IsLondon(parent.Number()) {
-			parentGasLimit := parent.GasLimit() * uint64(baseFeeElasticityMultiplier)
-			header.GasLimit = core.CalcGasLimit(parentGasLimit, blockGasLimitMax.Uint64())
+			header.GasLimit = parent.GasLimit()
 		}
 	}
 	// Run the consensus preparation with the default or customized consensus engine.
@@ -1384,10 +1382,9 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 	env.till = &till
 	env.blockInterval = blockInterval
-	env.baseFeeMaxChangeDenominator = baseFeeMaxChangeDenominator
-	env.baseFeeElasticityMultiplier = baseFeeElasticityMultiplier
-	env.blockGasLimitMax = blockGasLimitMax
 	env.blockGasLimit = blockGasLimit
+	env.baseFeeMaxChangeRate = baseFeeMaxChangeRate
+	env.gasTargetPercentage = gasTargetPercentage
 	// Accumulate the uncles for the sealing work only if it's allowed.
 	if !genParams.noUncle {
 		commitUncles := func(blocks map[common.Hash]*types.Block) {
@@ -1451,14 +1448,14 @@ func (w *worker) refreshPending(locked bool) {
 	defer w.mu.RUnlock()
 
 	parent := w.chain.CurrentBlock()
-	blockInterval, baseFeeMaxChangeDenominator, baseFeeElasticityMultiplier, blockGasLimitMax, blockGasLimit, _ := metaminer.GetBlockBuildParameters(parent.Number())
 
+	blockInterval, _, blockGasLimit, baseFeeMaxChangeRate, gasTargetPercentage, _ := metaminer.GetBlockBuildParameters(parent.Number())
 	num := parent.Number()
 	num.Add(num, common.Big1)
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     num,
-		GasLimit:   core.CalcGasLimit(parent.GasLimit(), blockGasLimitMax.Uint64()),
+		GasLimit:   core.CalcGasLimit(parent.GasLimit(), blockGasLimit.Uint64()),
 		Extra:      w.extra,
 		Time:       uint64(time.Now().Unix()),
 		Fees:       big.NewInt(0),
@@ -1470,10 +1467,9 @@ func (w *worker) refreshPending(locked bool) {
 	}
 	if env, err := w.makeEnv(parent, header, header.Coinbase); err == nil {
 		env.blockInterval = blockInterval
-		env.baseFeeMaxChangeDenominator = baseFeeMaxChangeDenominator
-		env.baseFeeElasticityMultiplier = baseFeeElasticityMultiplier
-		env.blockGasLimitMax = blockGasLimitMax
 		env.blockGasLimit = blockGasLimit
+		env.baseFeeMaxChangeRate = baseFeeMaxChangeRate
+		env.gasTargetPercentage = gasTargetPercentage
 		w.updateSnapshot(env)
 	}
 }
