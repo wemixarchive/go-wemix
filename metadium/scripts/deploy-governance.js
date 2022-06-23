@@ -194,7 +194,8 @@ var GovernanceDeployer = new function() {
         var code = Staking_contract.getData(registry.address, initData.stakes,
                                             {data: Staking_data})
         staking = this.deployContract(code)
-        ballotStorage = this.deployContract(BallotStorage_data)
+        code = BallotStorage_contract.getData(registry.address, {data: BallotStorage_data})
+        ballotStorage = this.deployContract(code)
         code = EnvStorage_contract.getData(registry.address, envStorageImp.address,
                                            {data: EnvStorage_data})
         envStorage = this.deployContract(code)
