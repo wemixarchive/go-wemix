@@ -83,10 +83,10 @@ type Message interface {
 // ExecutionResult includes all output after executing given evm
 // message no matter the execution itself is successful or not.
 type ExecutionResult struct {
-	UsedGas    uint64 // Total used gas but include the refunded gas
-	Fee        uint64 // Fee
-	Err        error  // Any error encountered during the execution(listed in core/vm/errors.go)
-	ReturnData []byte // Returned data from evm(function result or data supplied with revert opcode)
+	UsedGas    uint64   // Total used gas but include the refunded gas
+	Fee        *big.Int // Fee
+	Err        error    // Any error encountered during the execution(listed in core/vm/errors.go)
+	ReturnData []byte   // Returned data from evm(function result or data supplied with revert opcode)
 }
 
 // Unwrap returns the internal evm error which allows us for further
@@ -339,6 +339,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
 	}
 	bigFee := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip)
+
 	// In metadium, block reward and fees are combined and distributed as
 	// agreed in the governance contract
 	if metaminer.IsPoW() {
@@ -347,7 +348,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),
-		Fee:        bigFee.Uint64(),
+		Fee:        bigFee,
 		Err:        vmerr,
 		ReturnData: ret,
 	}, nil
