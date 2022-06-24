@@ -1487,6 +1487,10 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 }
 
 func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) {
+	if blockInterval /= 1000; blockInterval <= 0 {
+		blockInterval = 1
+	}
+
 	maxPeekBack := int64(86400)   // don't look back further than this
 	tooBehindMultiple := int64(2) // ignore if > tooBehindMultiple * height * blockInterval
 
@@ -1560,9 +1564,9 @@ func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) 
 		log.Debug("Metadium time-it", "behind", timestamp, "duration", tms-nowInMilliSeconds)
 	case 1: // ahead, i.e. too many blocks, need to slow down
 		tms := nowInMilliSeconds + blockInterval*1000 + params.BlockMinBuildTime
-		if tms/1000 > nowInSeconds+1 {
-			// make sure time stamp doesn't jump by 2
-			tms = (nowInSeconds+2)*1000 - params.BlockTrailTime
+		if tms/1000 > nowInSeconds+blockInterval {
+			// make sure time stamp doesn't jump by blockInterval + 2
+			tms = (nowInSeconds+blockInterval+1)*1000 - params.BlockTrailTime
 		}
 		till = time.UnixMilli(tms)
 		log.Debug("Metadium time-it", "ahead", timestamp, "duration", tms-nowInMilliSeconds)
