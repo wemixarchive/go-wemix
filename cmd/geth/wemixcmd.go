@@ -29,24 +29,23 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
-	"gopkg.in/urfave/cli.v1"
+	cli "github.com/urfave/cli/v2"
 )
 
 // gwemix wemix new-account
 var (
-	wemixCommand = cli.Command{
+	wemixCommand = &cli.Command{
 		Name:      "wemix",
 		Usage:     "Wemix helper commands",
 		ArgsUsage: "",
-		Category:  "WEMIX COMMANDS",
 		Description: `
 
 Wemix helper commands, create a new account, a new node id, a new genesis file, or a new admin contract file.`,
-		Subcommands: []cli.Command{
+		Subcommands: []*cli.Command{
 			{
 				Name:   "new-account",
 				Usage:  "Create a new account",
-				Action: utils.MigrateFlags(newAccount),
+				Action: newAccount,
 				Flags: []cli.Flag{
 					utils.PasswordFileFlag,
 					outFlag,
@@ -61,7 +60,7 @@ To give password in command line, use "--password <(echo <password>)".
 			{
 				Name:   "new-nodekey",
 				Usage:  "Create a new node key",
-				Action: utils.MigrateFlags(newNodeKey),
+				Action: newNodeKey,
 				Flags: []cli.Flag{
 					outFlag,
 				},
@@ -74,7 +73,7 @@ Creates a new node key and saves it in the given file name.
 			{
 				Name:   "nodeid",
 				Usage:  "Print node id from node key",
-				Action: utils.MigrateFlags(nodeKey2Id),
+				Action: nodeKey2Id,
 				Description: `
     geth wemix new-nodekey <file>
 
@@ -84,7 +83,7 @@ Print node id from node key.
 			{
 				Name:      "genesis",
 				Usage:     "Create a new genesis file",
-				Action:    utils.MigrateFlags(genGenesis),
+				Action:    genGenesis,
 				ArgsUsage: "<file-name>",
 				Flags: []cli.Flag{
 					dataFileFlag,
@@ -103,7 +102,7 @@ Data consists of "<account> <tokens>" or "<node id>".`,
 			{
 				Name:   "admin-contract",
 				Usage:  "Create an admin contract",
-				Action: utils.MigrateFlags(genAdminContract),
+				Action: genAdminContract,
 				Flags: []cli.Flag{
 					dataFileFlag,
 					adminTemplateFlag,
@@ -123,7 +122,7 @@ The first node becomes the boot miner who's allowed to generate blocks before ad
 			{
 				Name:   "deploy-contract",
 				Usage:  "Deploy a contract",
-				Action: utils.MigrateFlags(deployContract),
+				Action: deployContract,
 				Flags: []cli.Flag{
 					utils.PasswordFileFlag,
 					urlFlag,
@@ -138,7 +137,7 @@ Deploy a contract from a contract file in .js or .json format.`,
 			{
 				Name:   "download-genesis",
 				Usage:  "Download genesis file a peer",
-				Action: utils.MigrateFlags(downloadGenesis),
+				Action: downloadGenesis,
 				Flags: []cli.Flag{
 					urlFlag,
 					outFlag,
@@ -151,7 +150,7 @@ Download a genesis file from a peer to initialize.`,
 			{
 				Name:   "deploy-governance",
 				Usage:  "Deploy governance contracts",
-				Action: utils.MigrateFlags(deployGovernanceContracts),
+				Action: deployGovernanceContracts,
 				Flags: []cli.Flag{
 					utils.PasswordFileFlag,
 					urlFlag,
@@ -168,31 +167,31 @@ To give password in command line, use "--password <(echo <password>)".
 		},
 	}
 
-	dataFileFlag = cli.StringFlag{
+	dataFileFlag = &cli.StringFlag{
 		Name:  "data",
 		Usage: "data file",
 	}
-	genesisTemplateFlag = cli.StringFlag{
+	genesisTemplateFlag = &cli.StringFlag{
 		Name:  "genesis",
 		Usage: "genesis template file",
 	}
-	adminTemplateFlag = cli.StringFlag{
+	adminTemplateFlag = &cli.StringFlag{
 		Name:  "admin",
 		Usage: "admin contract template file",
 	}
-	outFlag = cli.StringFlag{
+	outFlag = &cli.StringFlag{
 		Name:  "out",
 		Usage: "out file",
 	}
-	gasFlag = cli.IntFlag{
+	gasFlag = &cli.IntFlag{
 		Name:  "gas",
 		Usage: "gas amount",
 	}
-	gasPriceFlag = cli.IntFlag{
+	gasPriceFlag = &cli.IntFlag{
 		Name:  "gasprice",
 		Usage: "gas price",
 	}
-	urlFlag = cli.StringFlag{
+	urlFlag = &cli.StringFlag{
 		Name:  "url",
 		Usage: "url of gwemix node",
 	}
@@ -244,10 +243,10 @@ func newNodeKey(ctx *cli.Context) error {
 }
 
 func nodeKey2Id(ctx *cli.Context) error {
-	if len(ctx.Args()) != 1 {
+	if ctx.NArg() != 1 {
 		utils.Fatalf("Nodekey file name is not given.")
 	}
-	nodeKey, err := crypto.LoadECDSA(ctx.Args()[0])
+	nodeKey, err := crypto.LoadECDSA(ctx.Args().First())
 	if err != nil {
 		return err
 	}
@@ -505,11 +504,12 @@ func deployContract(ctx *cli.Context) error {
 	gas := ctx.Int(gasFlag.Name)
 	gasPrice := ctx.Int(gasPriceFlag.Name)
 
-	if len(url) == 0 || len(ctx.Args()) != 3 {
+	if len(url) == 0 || ctx.NArg() != 3 {
 		return fmt.Errorf("Invalid Arguments")
 	}
 
-	accountFile, contractName, contractFile := ctx.Args()[0], ctx.Args()[1], ctx.Args()[2]
+	args := ctx.Args().Slice()
+	accountFile, contractName, contractFile := args[0], args[1], args[2]
 
 	var acct *keystore.Key
 	acct, err = metclient.LoadAccount(passwd, accountFile)
@@ -628,10 +628,10 @@ func parseSize(size string) (int, error) {
 
 // logrot frontend
 func logrota(ctx *cli.Context) error {
-	if !ctx.GlobalIsSet(utils.LogFlag.Name) {
+	if !ctx.IsSet(utils.LogFlag.Name) {
 		return nil
 	}
-	logflag := ctx.GlobalString(utils.LogFlag.Name)
+	logflag := ctx.String(utils.LogFlag.Name)
 	if logflag == "" {
 		return nil
 	}
