@@ -1114,17 +1114,17 @@ func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]
 	for i := 0; i < len(rp.distributionMethod); i++ {
 		dm.Add(dm, rp.distributionMethod[i])
 	}
-	if dm.Int64() != 1000 {
+	if dm.Int64() != 10000 {
 		return nil, metaminer.ErrNotInitialized
 	}
 
-	v1000 := big.NewInt(1000)
+	v10000 := big.NewInt(10000)
 	minerAmount := new(big.Int).Set(rp.rewardAmount)
-	minerAmount.Div(minerAmount.Mul(minerAmount, rp.distributionMethod[0]), v1000)
+	minerAmount.Div(minerAmount.Mul(minerAmount, rp.distributionMethod[0]), v10000)
 	stakerAmount := new(big.Int).Set(rp.rewardAmount)
-	stakerAmount.Div(stakerAmount.Mul(stakerAmount, rp.distributionMethod[1]), v1000)
+	stakerAmount.Div(stakerAmount.Mul(stakerAmount, rp.distributionMethod[1]), v10000)
 	ecoSystemAmount := new(big.Int).Set(rp.rewardAmount)
-	ecoSystemAmount.Div(ecoSystemAmount.Mul(ecoSystemAmount, rp.distributionMethod[2]), v1000)
+	ecoSystemAmount.Div(ecoSystemAmount.Mul(ecoSystemAmount, rp.distributionMethod[2]), v10000)
 	// the rest goes to maintenance
 	maintenanceAmount := new(big.Int).Set(rp.rewardAmount)
 	maintenanceAmount.Sub(maintenanceAmount, minerAmount)
