@@ -44,10 +44,15 @@ var GovernanceDeployer = new function() {
                 throw "Invalid address " + a.addr
             data.accounts[i].addr = web3.toChecksumAddress(a.addr)
         }
-        if (data.pool) {
-            if (!web3.isAddress(data.pool))
-                throw "Invalid pool address " + data.pool
-            data.pool = web3.toChecksumAddress(data.pool)
+        if (data.staker) {
+            if (!web3.isAddress(data.staker))
+                throw "Invalid staker address " + data.staker
+            data.staker = web3.toChecksumAddress(data.staker)
+        }
+        if (data.ecosystem) {
+            if (!web3.isAddress(data.ecosystem))
+                throw "Invalid ecosystem address " + data.ecosystem
+            data.ecosystem = web3.toChecksumAddress(data.ecosystem)
         }
         if (data.maintenance) {
             if (!web3.isAddress(data.maintenance))
@@ -62,9 +67,9 @@ var GovernanceDeployer = new function() {
         return web3.padLeft(web3.toHex(num).substr(2), 64, "0")
     }
 
-    // { "nodes": string, "stakes": string, "pool": address, "maitenance": address } getInitialGovernanceMembersAndNodes(json data)
+    // { "nodes": string, "stakes": string, "staker": address, "ecosystem": address, "maintenance": address } getInitialGovernanceMembersAndNodes(json data)
     this.getInitialGovernanceMembersAndNodes = function(data) {
-        var nodes = "0x", stakes = "0x", pool, maintenance
+        var nodes = "0x", stakes = "0x"
 
         for (var i = 0, l = data.members.length; i < l; i++) {
             var m = data.members[i], id, addr
@@ -85,7 +90,8 @@ var GovernanceDeployer = new function() {
         return {
             "nodes": nodes,
             "stakes": stakes,
-            "pool": data.pool,
+            "staker": data.staker,
+            "ecosystem": data.ecosystem,
             "maintenance": data.maintenance
         }
     }
@@ -224,10 +230,14 @@ var GovernanceDeployer = new function() {
         txs[txs.length] = this.sendTx(registry.address, null,
             registry.setContractDomain.getData(
                 "GovernanceContract", gov.address))
-        if (initData.pool)
+        if (initData.staker)
             txs[txs.length] = this.sendTx(registry.address, null,
                 registry.setContractDomain.getData(
-                    "RewardPool", initData.pool))
+                    "StakingReward", initData.staker))
+        if (initData.ecosystem)
+            txs[txs.length] = this.sendTx(registry.address, null,
+                registry.setContractDomain.getData(
+                    "Ecosystem", initData.ecosystem))
         if (initData.maintenance)
             txs[txs.length] = this.sendTx(registry.address, null,
                 registry.setContractDomain.getData(
@@ -262,7 +272,7 @@ var GovernanceDeployer = new function() {
             web3.sha3("maxPriorityFeePerGas"),
             web3.sha3("blockRewardDistributionBlockProducer"),
             web3.sha3("blockRewardDistributionStakingReward"),
-            web3.sha3("blockRewardDistributionEcoSystem"),
+            web3.sha3("blockRewardDistributionEcosystem"),
             web3.sha3("blockRewardDistributionMaintenance"),
             web3.sha3("blockGasLimit"),
             web3.sha3("baseFeeMaxChangeDenominator"),
@@ -273,11 +283,11 @@ var GovernanceDeployer = new function() {
                 4980000000000000000000000, 39840000000000000000000000,
                 100000000000, // 100 gwei
                 5,
-                1,
+                1000,
                 1000000000000000000, // 1 meta
                 100000000000, // 100 gwei
-                250, 250, 250, 250,
-                21000 * 5000, 46, 30 ]
+                400, 100, 250, 250, // NCPs, WEMIX Staker, Eco System, Maintenance
+                5000 * 21000, 46, 30 ]
         txs[txs.length] = this.sendTx(envStorage.address, null,
             tmpEnvStorageImp.initialize.getData(envNames, envValues))
 

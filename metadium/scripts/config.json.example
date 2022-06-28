@@ -1,6 +1,7 @@
 {
-  "extraData": "Our vision is to create a free world through self-sovereign identity.",
-  "pool": "0xf00d9928ed1dada205aec56ab85e0e2ab5670ad5",
+  "extraData": "The beginning of Wemix3.0 testnet on July 1st, 2022",
+  "staker": "0xf00d9928ed1dada205aec56ab85e0e2ab5670ad5",
+  "ecosystem": "0x1be19928ed1dada205aec56ab85e0e2ab5670ad5",
   "maintenance": "0x900d9928ed1dada205aec56ab85e0e2ab5670ad5",
   "members": [
     {

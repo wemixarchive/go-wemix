@@ -112,6 +112,15 @@ type blockBuildParameters struct {
 	gasTargetPercentage  int64
 }
 
+// reward related parameters
+type rewardParameters struct {
+	rewardAmount                   *big.Int
+	staker, ecoSystem, maintenance *common.Address
+	members                        []*metaMember
+	distributionMethod             []*big.Int
+	blocksPer                      int64
+}
+
 var (
 	// "Metadium Registry"
 	magic, _        = big.NewInt(0).SetString("0x4d6574616469756d205265676973747279", 0)
@@ -257,36 +266,53 @@ func (ma *metaAdmin) getInt(ctx context.Context, contract *metclient.RemoteContr
 	}
 }
 
-func (ma *metaAdmin) getEnvStorageContract(ctx context.Context, height *big.Int) (*metclient.RemoteContract, error) {
+// TODO: error handling
+func (ma *metaAdmin) getRegGovEnvContracts(ctx context.Context, height *big.Int) (reg, gov, env *metclient.RemoteContract, err error) {
 	if ma.registry == nil {
-		return nil, metaminer.ErrNotInitialized
+		err = metaminer.ErrNotInitialized
+		return
 	}
-	reg := &metclient.RemoteContract{
+	reg = &metclient.RemoteContract{
 		Cli: ma.cli,
 		Abi: ma.registry.Abi,
-		To:  ma.registry.To,
 	}
-	if ma.registry.To == nil {
-		addr, err := ma.getRegistryAddress(ctx, ma.cli, ma.registry.Abi, height)
-		if err != nil {
-			return nil, metaminer.ErrNotInitialized
+	env = &metclient.RemoteContract{
+		Cli: ma.cli,
+		Abi: ma.envStorage.Abi,
+	}
+	gov = &metclient.RemoteContract{
+		Cli: ma.cli,
+		Abi: ma.gov.Abi,
+	}
+	if ma.registry.To != nil {
+		reg.To = ma.registry.To
+	} else {
+		var addr *common.Address
+		if addr, err = ma.getRegistryAddress(ctx, ma.cli, reg.Abi, height); err != nil {
+			err = metaminer.ErrNotInitialized
+			return
 		}
 		reg.To = addr
 	}
 
-	name := metclient.ToBytes32("EnvStorage")
-	input := []interface{}{name}
 	var addr common.Address
+	input := []interface{}{metclient.ToBytes32("GovernanceContract")}
+	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
+		err = metaminer.ErrNotInitialized
+		return
+	}
+	gov.To = &common.Address{}
+	gov.To.SetBytes(addr.Bytes())
 
-	if err := metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
-		return nil, err
+	input = []interface{}{metclient.ToBytes32("EnvStorage")}
+	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
+		err = metaminer.ErrNotInitialized
+		return
 	}
-	env := &metclient.RemoteContract{
-		Cli: ma.cli,
-		Abi: ma.envStorage.Abi,
-		To:  &addr,
-	}
-	return env, nil
+	env.To = &common.Address{}
+	env.To.SetBytes(addr.Bytes())
+
+	return
 }
 
 // returns []*metaNode from map[string]*metaNode
@@ -401,6 +427,71 @@ func (ma *metaAdmin) getMetaNodes(ctx context.Context, block *big.Int) ([]*metaN
 		return nodes[i].Name < nodes[j].Name
 	})
 	return nodes, err
+}
+
+func (ma *metaAdmin) getRewardParams(ctx context.Context, height *big.Int) (*rewardParameters, error) {
+	rp := &rewardParameters{}
+	reg, gov, env, err := ma.getRegGovEnvContracts(ctx, height)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = metclient.CallContract(ctx, env, "getBlockRewardAmount", nil, &rp.rewardAmount, height); err != nil {
+		return nil, err
+	}
+
+	rp.distributionMethod = make([]*big.Int, 4, 4)
+	if err = metclient.CallContract(ctx, env, "getBlockRewardDistributionMethod", nil, &rp.distributionMethod, height); err != nil {
+		return nil, err
+	}
+
+	var addr common.Address
+	input := []interface{}{metclient.ToBytes32("StakingReward")}
+	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
+		return nil, err
+	}
+	rp.staker = &common.Address{}
+	rp.staker.SetBytes(addr.Bytes())
+
+	input = []interface{}{metclient.ToBytes32("Ecosystem")}
+	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
+		return nil, err
+	}
+	rp.ecoSystem = &common.Address{}
+	rp.ecoSystem.SetBytes(addr.Bytes())
+
+	input = []interface{}{metclient.ToBytes32("Maintenance")}
+	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
+		return nil, err
+	}
+	rp.maintenance = &common.Address{}
+	rp.maintenance.SetBytes(addr.Bytes())
+
+	rp.blocksPer, err = ma.getInt(ctx, env, height, "getBlocksPer")
+	if err != nil {
+		return nil, err
+	}
+
+	if count, err := ma.getInt(ctx, gov, height, "getMemberLength"); err != nil {
+		return nil, err
+	} else {
+		for i := int64(1); i <= count; i++ {
+			input = []interface{}{big.NewInt(int64(i))}
+			if err = metclient.CallContract(ctx, gov, "getReward", input, &addr, height); err != nil {
+				return nil, err
+			}
+			input = []interface{}{addr}
+			// NB. no staking consideration
+			// if err = metclient.CallContract(ctx, staking, "lockedBalanceOf", input, &stake, height); err != nil {
+			//	return nil, err
+			// }
+			rp.members = append(rp.members, &metaMember{
+				Addr: addr,
+			})
+		}
+	}
+
+	return rp, nil
 }
 
 func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rewardPoolAccount, maintenanceAccount *common.Address, members []*metaMember, err error) {
@@ -869,37 +960,7 @@ type reward struct {
 	Reward *big.Int       `json:"reward"`
 }
 
-/*
-// to get around 64 bit boundary. big.Float didn't help here.
-func distributeRewardsOld(six int, members []*metaMember, rewards []reward, amount int64) {
-	n := len(members)
-	var u int64
-	for i := 0; i < n; i++ {
-		rewards[i].Addr = members[i].Addr
-		u += int64(members[i].Stake.Int64())
-	}
-
-	var h, l uint64 = uint64(amount) >> 32, uint64(amount) & uint64(0x0FFFFFFFF)
-	var hd, ld float64 = float64(h) / float64(u), float64(l) / float64(u) // slopes
-	var hv, lv, vi float64 = 0, 0, 0
-	var s, vj uint64
-
-	for i := 0; i < n; i++ {
-		s = uint64(members[six].Stake.Int64())
-		vi = hv + hd*float64(s)
-		vj = uint64(math.Floor(vi+.5)-math.Floor(hv+.5)) << 32
-		hv = vi
-		vi = lv + ld*float64(s)
-		vj += uint64(math.Floor(vi+.5) - math.Floor(lv+.5))
-		lv = vi
-		rewards[six].Reward = vj
-
-		six = (six + 1) % n
-	}
-}
-*/
-
-func distributeRewards(six int, rewardPoolAccount, maintenanceAccount *common.Address, members []*metaMember, rewards []reward, amount *big.Int) {
+func distributeRewards_old(six int, rewardPoolAccount, maintenanceAccount *common.Address, members []*metaMember, rewards []reward, amount *big.Int) {
 	n := len(members)
 
 	v0 := big.NewInt(0)
@@ -969,7 +1030,7 @@ func distributeRewards(six int, rewardPoolAccount, maintenanceAccount *common.Ad
 	}
 }
 
-func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (coinbase *common.Address, rewards []byte, err error) {
+func (ma *metaAdmin) calculateRewards_old(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (coinbase *common.Address, rewards []byte, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1005,7 +1066,7 @@ func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalanc
 	}
 
 	rr := make([]reward, n)
-	distributeRewards(six, rewardPoolAccount, maintenanceAccount, members, rr,
+	distributeRewards_old(six, rewardPoolAccount, maintenanceAccount, members, rr,
 		new(big.Int).Add(blockReward, fees))
 
 	if addBalance != nil {
@@ -1041,6 +1102,111 @@ func (ma *metaAdmin) verifyRewards(r1, r2 []byte) error {
 	}
 
 	return nil
+}
+
+// new rewards
+// TODO: needs to check errors or inconsistencies
+//   - incorrect parametesr, i.e. distribution methods values don't add up to 1000
+//   - missing addresses
+//   - etc.
+func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]reward, error) {
+	dm := new(big.Int)
+	for i := 0; i < len(rp.distributionMethod); i++ {
+		dm.Add(dm, rp.distributionMethod[i])
+	}
+	if dm.Int64() != 1000 {
+		return nil, metaminer.ErrNotInitialized
+	}
+
+	v1000 := big.NewInt(1000)
+	minerAmount := new(big.Int).Set(rp.rewardAmount)
+	minerAmount.Div(minerAmount.Mul(minerAmount, rp.distributionMethod[0]), v1000)
+	stakerAmount := new(big.Int).Set(rp.rewardAmount)
+	stakerAmount.Div(stakerAmount.Mul(stakerAmount, rp.distributionMethod[1]), v1000)
+	ecoSystemAmount := new(big.Int).Set(rp.rewardAmount)
+	ecoSystemAmount.Div(ecoSystemAmount.Mul(ecoSystemAmount, rp.distributionMethod[2]), v1000)
+	// the rest goes to maintenance
+	maintenanceAmount := new(big.Int).Set(rp.rewardAmount)
+	maintenanceAmount.Sub(maintenanceAmount, minerAmount)
+	maintenanceAmount.Sub(maintenanceAmount, stakerAmount)
+	maintenanceAmount.Sub(maintenanceAmount, ecoSystemAmount)
+
+	// fees go to maintenance
+	maintenanceAmount.Add(maintenanceAmount, fees)
+
+	var rewards []reward
+	if n := len(rp.members); n > 0 {
+		v0, v1 := big.NewInt(0), big.NewInt(1)
+		vn := big.NewInt(int64(n))
+		b := new(big.Int).Set(minerAmount)
+		d := new(big.Int)
+		d.Div(b, vn)
+		for i := 0; i < n; i++ {
+			rewards = append(rewards, reward{
+				Addr:   rp.members[i].Addr,
+				Reward: new(big.Int).Set(d),
+			})
+		}
+		d.Mul(d, vn)
+		b.Sub(b, d)
+		for i, ix := 0, height.Int64()%int64(n); b.Cmp(v0) > 0; i, ix = i+1, (ix+1)%int64(n) {
+			rewards[ix].Reward.Add(rewards[ix].Reward, v1)
+			b.Sub(b, v1)
+		}
+	}
+	rewards = append(rewards, reward{
+		Addr:   *rp.staker,
+		Reward: stakerAmount,
+	})
+	rewards = append(rewards, reward{
+		Addr:   *rp.ecoSystem,
+		Reward: ecoSystemAmount,
+	})
+	rewards = append(rewards, reward{
+		Addr:   *rp.maintenance,
+		Reward: maintenanceAmount,
+	})
+	return rewards, nil
+}
+
+func (ma *metaAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (coinbase *common.Address, rewards []byte, err error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rp, err := ma.getRewardParams(ctx, big.NewInt(num.Int64()-1))
+	if err != nil {
+		// all goes to the coinbase
+		err = metaminer.ErrNotInitialized
+		return
+	}
+
+	// TODO: need more basic checks
+	if rp.staker == nil && rp.ecoSystem == nil && rp.maintenance == nil && len(rp.members) == 0 {
+		err = metaminer.ErrNotInitialized
+		return
+	}
+
+	// determine coinbase
+	if len(rp.members) > 0 {
+		mix := int(num.Int64()/ma.blocksPer) % len(rp.members)
+		coinbase = &common.Address{}
+		coinbase.SetBytes(rp.members[mix].Addr.Bytes())
+	}
+
+	rr, errr := distributeRewards(num, rp, fees)
+	if errr != nil {
+		err = errr
+		return
+	}
+
+	if addBalance != nil {
+		for _, i := range rr {
+			addBalance(i.Addr, i.Reward)
+		}
+	}
+
+	rewards, err = json.Marshal(rr)
+	return
 }
 
 func calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
@@ -1284,7 +1450,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 	defer cancel()
 
 	var env *metclient.RemoteContract
-	if env, err = admin.getEnvStorageContract(ctx, height); err != nil {
+	if _, _, env, err = admin.getRegGovEnvContracts(ctx, height); err != nil {
 		err = metaminer.ErrNotInitialized
 		return
 	}
