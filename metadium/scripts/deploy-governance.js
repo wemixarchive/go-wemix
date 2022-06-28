@@ -265,7 +265,6 @@ var GovernanceDeployer = new function() {
             web3.sha3("blocksPer"),
             web3.sha3("ballotDurationMin"), web3.sha3("ballotDurationMax"),
             web3.sha3("stakingMin"), web3.sha3("stakingMax"),
-            web3.sha3("gasPrice"),
             web3.sha3("MaxIdleBlockInterval"),
             web3.sha3("blockCreationTime"),
             web3.sha3("blockRewardAmount"),
@@ -274,19 +273,20 @@ var GovernanceDeployer = new function() {
             web3.sha3("blockRewardDistributionStakingReward"),
             web3.sha3("blockRewardDistributionEcosystem"),
             web3.sha3("blockRewardDistributionMaintenance"),
+            web3.sha3("maxBaseFee"),
             web3.sha3("blockGasLimit"),
-            web3.sha3("baseFeeMaxChangeDenominator"),
-            web3.sha3("elasticityMultiplier") ],
+            web3.sha3("baseFeeMaxChangeRate"),
+            web3.sha3("gasTargetPercentage") ],
             envValues = [
                 1,
                 86400, 604800,
                 4980000000000000000000000, 39840000000000000000000000,
-                100000000000, // 100 gwei
                 5,
                 1000,
-                1000000000000000000, // 1 meta
-                100000000000, // 100 gwei
-                4000, 1000, 2500, 2500, // NCPs, WEMIX Staker, Eco System, Maintenance
+                web3.toWei(1, 'ether'),    // mint amount: 1 wemix
+                web3.toWei(100, 'gwei'),   // tip: 100 gwei
+                4000, 1000, 2500, 2500,    // NCPs, WEMIX Staker, Eco System, Maintenance
+                web3.toWei(50000, 'gwei'), // maxBaseFee * 21000 -> 1.05 wemix
                 5000 * 21000, 46, 30 ]
         txs[txs.length] = this.sendTx(envStorage.address, null,
             tmpEnvStorageImp.initialize.getData(envNames, envValues))

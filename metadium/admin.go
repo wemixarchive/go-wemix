@@ -80,7 +80,6 @@ type metaAdmin struct {
 	blockInterval        int64
 	blocksPer            int64
 	blockReward          *big.Int
-	gasPrice             *big.Int
 	maxPriorityFeePerGas *big.Int
 	maxBaseFee           *big.Int
 	gasLimit             *big.Int
@@ -553,7 +552,7 @@ func (ma *metaAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rew
 type govdata struct {
 	blockNum, modifiedBlock                        int64
 	blockInterval, blocksPer, maxIdleBlockInterval int64
-	blockReward, gasPrice, maxPriorityFeePerGas    *big.Int
+	blockReward, maxPriorityFeePerGas              *big.Int
 	maxBaseFee, gasLimit                           *big.Int
 	baseFeeMaxChangeRate, gasTargetPercentage      int64
 	nodes, addedNodes, updatedNodes, deletedNodes  []*metaNode
@@ -605,10 +604,6 @@ func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
 	if err != nil {
 		return
 	}
-	err = metclient.CallContract(ctx, ma.envStorage, "getGasPrice", nil, &data.gasPrice, block.Number)
-	if err != nil {
-		return
-	}
 	err = metclient.CallContract(ctx, ma.envStorage, "getMaxPriorityFeePerGas", nil, &data.maxPriorityFeePerGas, block.Number)
 	if err != nil {
 		return
@@ -622,11 +617,10 @@ func (ma *metaAdmin) getGovData(refresh bool) (data *govdata, err error) {
 	data.baseFeeMaxChangeRate = gasLimitAndBaseFee[1].Int64()
 	data.gasTargetPercentage = gasLimitAndBaseFee[2].Int64()
 
-	// err = metclient.CallContract(ctx, ma.envStorage, "getMaxBaseFee", nil, &data.maxBaseFee, block.Number)
-	// if err != nil {
-	// 	return
-	// }
-	data.maxBaseFee = big.NewInt(500 * params.GWei)
+	err = metclient.CallContract(ctx, ma.envStorage, "getMaxBaseFee", nil, &data.maxBaseFee, block.Number)
+	if err != nil {
+		return
+	}
 
 	data.nodes, err = ma.getMetaNodes(ctx, block.Number)
 	if err != nil {
@@ -721,7 +715,6 @@ func StartAdmin(stack *node.Node, datadir string) {
 		rpcCli:      rpcCli,
 		cli:         cli,
 		blocksPer:   100,
-		gasPrice:    big.NewInt(100 * params.GWei),
 		etcdDir:     path.Join(datadir, "etcd"),
 		etcdTimeout: 30 * time.Second,
 	}
@@ -789,7 +782,6 @@ func (ma *metaAdmin) update() {
 		ma.blockInterval = data.blockInterval
 		ma.blocksPer = data.blocksPer
 		ma.blockReward = data.blockReward
-		ma.gasPrice = data.gasPrice
 		ma.maxPriorityFeePerGas = data.maxPriorityFeePerGas
 		ma.maxBaseFee = data.maxBaseFee
 		ma.gasLimit = data.gasLimit
@@ -839,10 +831,10 @@ func (ma *metaAdmin) update() {
 				"0x"+data.maxPriorityFeePerGas.Text(16))
 			if err != nil || !*v {
 				log.Info("Metadium: set minimum gas price failed",
-					"gas price", data.gasPrice, "error", err)
+					"maxPriorityFeePerGas", data.maxPriorityFeePerGas, "error", err)
 			} else {
 				log.Info("Metadium: Successfully set",
-					"gas price", data.gasPrice)
+					"maxPriorityFeePerGas", data.maxPriorityFeePerGas)
 			}
 
 			if ma.self != nil && !bytes.Equal(ma.self.Addr[:], nilAddress[:]) {
@@ -1541,7 +1533,6 @@ func Info() interface{} {
 			"blocksPer":            admin.blocksPer,
 			"blockInterval":        admin.blockInterval,
 			"blockReward":          admin.blockReward,
-			"gasPrice":             admin.gasPrice,
 			"maxPriorityFeePerGas": admin.maxPriorityFeePerGas,
 			"blockGasLimit":        admin.gasLimit,
 			"maxBaseFee":           admin.maxBaseFee,
