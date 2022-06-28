@@ -1461,6 +1461,13 @@ func (w *worker) refreshPending(locked bool) {
 		Fees:       big.NewInt(0),
 	}
 	header.Coinbase = w.coinbase
+	// Set baseFee and GasLimit if we are on an EIP-1559 chain
+	if w.chainConfig.IsLondon(header.Number) {
+		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
+		if !w.chainConfig.IsLondon(parent.Number()) {
+			header.GasLimit = parent.GasLimit()
+		}
+	}
 	if err := w.engine.Prepare(w.chain, header); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
