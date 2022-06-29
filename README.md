@@ -40,7 +40,7 @@ This is default behavior in non-linux environment, e.g. in MacOS X.
 
 ## Join the Wemix Mainnet or Testnet
 
-One can use the following command lines to join the Wemix networks. Note that the default RPC port for `gwemix` is 8588, and p2p port is 8589. As with `geth`, if `--datadir` is missing, ~/.wemix is the data directory.
+One can use the following command lines to join the Wemix networks. Note that the default HTTP port for `gwemix` is 8588, p2p port 8589 and WS port 8598. As with `geth`, if `--datadir` is missing, ~/.wemix is the data directory.
 
 ### Wemix Mainnet
 

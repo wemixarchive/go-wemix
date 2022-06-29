@@ -33,7 +33,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
-// gmet wemix new-account
+// gwemix wemix new-account
 var (
 	wemixCommand = cli.Command{
 		Name:      "wemix",
@@ -195,7 +195,7 @@ To give password in command line, use "--password <(echo <password>)".
 	}
 	urlFlag = cli.StringFlag{
 		Name:  "url",
-		Usage: "url of gmet node",
+		Usage: "url of gwemix node",
 	}
 )
 
