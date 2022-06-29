@@ -61,7 +61,7 @@ func (ec *Client) Close() {
 
 // Blockchain Access
 
-// ChainId retrieves the current chain ID for transaction replay protection.
+// ChainID retrieves the current chain ID for transaction replay protection.
 func (ec *Client) ChainID(ctx context.Context) (*big.Int, error) {
 	var result hexutil.Big
 	err := ec.c.CallContext(ctx, &result, "eth_chainId")
@@ -86,6 +86,13 @@ func (ec *Client) BlockByHash(ctx context.Context, hash common.Hash) (*types.Blo
 // if you don't need all transactions or uncle headers.
 func (ec *Client) BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
 	return ec.getBlock(ctx, "eth_getBlockByNumber", toBlockNumArg(number), true)
+}
+
+// BlockNumber returns the most recent block number
+func (ec *Client) BlockNumber(ctx context.Context) (uint64, error) {
+	var result hexutil.Uint64
+	err := ec.c.CallContext(ctx, &result, "eth_blockNumber")
+	return uint64(result), err
 }
 
 type rpcBlock struct {
@@ -227,6 +234,8 @@ func (ec *Client) TransactionSender(ctx context.Context, tx *types.Transaction, 
 	if err == nil {
 		return sender, nil
 	}
+
+	// It was not found in cache, ask the server.
 	var meta struct {
 		Hash common.Hash
 		From common.Address
@@ -278,21 +287,6 @@ func (ec *Client) TransactionReceipt(ctx context.Context, txHash common.Hash) (*
 	return r, err
 }
 
-func toBlockNumArg(number *big.Int) string {
-	if number == nil {
-		return "latest"
-	}
-	return hexutil.EncodeBig(number)
-}
-
-type rpcProgress struct {
-	StartingBlock hexutil.Uint64
-	CurrentBlock  hexutil.Uint64
-	HighestBlock  hexutil.Uint64
-	PulledStates  hexutil.Uint64
-	KnownStates   hexutil.Uint64
-}
-
 // SyncProgress retrieves the current progress of the sync algorithm. If there's
 // no sync currently running, it returns nil.
 func (ec *Client) SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
@@ -305,17 +299,11 @@ func (ec *Client) SyncProgress(ctx context.Context) (*ethereum.SyncProgress, err
 	if err := json.Unmarshal(raw, &syncing); err == nil {
 		return nil, nil // Not syncing (always false)
 	}
-	var progress *rpcProgress
-	if err := json.Unmarshal(raw, &progress); err != nil {
+	var p *rpcProgress
+	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, err
 	}
-	return &ethereum.SyncProgress{
-		StartingBlock: uint64(progress.StartingBlock),
-		CurrentBlock:  uint64(progress.CurrentBlock),
-		HighestBlock:  uint64(progress.HighestBlock),
-		PulledStates:  uint64(progress.PulledStates),
-		KnownStates:   uint64(progress.KnownStates),
-	}, nil
+	return p.toSyncProgress(), nil
 }
 
 // SubscribeNewHead subscribes to notifications about the current blockchain head
@@ -452,8 +440,6 @@ func (ec *Client) PendingTransactionCount(ctx context.Context) (uint, error) {
 	return uint(num), err
 }
 
-// TODO: SubscribePendingTransactions (needs server side)
-
 // Contract Calling
 
 // CallContract executes a message call transaction, which is directly executed in the VM
@@ -465,6 +451,17 @@ func (ec *Client) PendingTransactionCount(ctx context.Context) (uint, error) {
 func (ec *Client) CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 	var hex hexutil.Bytes
 	err := ec.c.CallContext(ctx, &hex, "eth_call", toCallArg(msg), toBlockNumArg(blockNumber))
+	if err != nil {
+		return nil, err
+	}
+	return hex, nil
+}
+
+// CallContractAtHash is almost the same as CallContract except that it selects
+// the block by block hash instead of block height.
+func (ec *Client) CallContractAtHash(ctx context.Context, msg ethereum.CallMsg, blockHash common.Hash) ([]byte, error) {
+	var hex hexutil.Bytes
+	err := ec.c.CallContext(ctx, &hex, "eth_call", toCallArg(msg), rpc.BlockNumberOrHashWithHash(blockHash, false))
 	if err != nil {
 		return nil, err
 	}
@@ -492,6 +489,16 @@ func (ec *Client) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
 	return (*big.Int)(&hex), nil
 }
 
+// SuggestGasTipCap retrieves the currently suggested gas tip cap after 1559 to
+// allow a timely execution of a transaction.
+func (ec *Client) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
+	var hex hexutil.Big
+	if err := ec.c.CallContext(ctx, &hex, "eth_maxPriorityFeePerGas"); err != nil {
+		return nil, err
+	}
+	return (*big.Int)(&hex), nil
+}
+
 // EstimateGas tries to estimate the gas needed to execute a specific transaction based on
 // the current pending state of the backend blockchain. There is no guarantee that this is
 // the true gas limit requirement as other transactions may be added or removed by miners,
@@ -510,7 +517,7 @@ func (ec *Client) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64
 // If the transaction was a contract creation use the TransactionReceipt method to get the
 // contract address after the transaction has been mined.
 func (ec *Client) SendTransaction(ctx context.Context, tx *types.Transaction) error {
-	data, err := rlp.EncodeToBytes(tx)
+	data, err := tx.MarshalBinary()
 	if err != nil {
 		return err
 	}
@@ -526,7 +533,18 @@ func (ec *Client) SendTransactions(ctx context.Context, txs types.Transactions) 
 	if err != nil {
 		return err
 	}
-	return ec.c.CallContext(ctx, nil, "eth_sendRawTransactions", common.ToHex(data))
+	return ec.c.CallContext(ctx, nil, "eth_sendRawTransactions", hexutil.Encode(data))
+}
+
+func toBlockNumArg(number *big.Int) string {
+	if number == nil {
+		return "latest"
+	}
+	pending := big.NewInt(-1)
+	if number.Cmp(pending) == 0 {
+		return "pending"
+	}
+	return hexutil.EncodeBig(number)
 }
 
 func toCallArg(msg ethereum.CallMsg) interface{} {
@@ -547,4 +565,52 @@ func toCallArg(msg ethereum.CallMsg) interface{} {
 		arg["gasPrice"] = (*hexutil.Big)(msg.GasPrice)
 	}
 	return arg
+}
+
+// rpcProgress is a copy of SyncProgress with hex-encoded fields.
+type rpcProgress struct {
+	StartingBlock hexutil.Uint64
+	CurrentBlock  hexutil.Uint64
+	HighestBlock  hexutil.Uint64
+
+	PulledStates hexutil.Uint64
+	KnownStates  hexutil.Uint64
+
+	SyncedAccounts      hexutil.Uint64
+	SyncedAccountBytes  hexutil.Uint64
+	SyncedBytecodes     hexutil.Uint64
+	SyncedBytecodeBytes hexutil.Uint64
+	SyncedStorage       hexutil.Uint64
+	SyncedStorageBytes  hexutil.Uint64
+	HealedTrienodes     hexutil.Uint64
+	HealedTrienodeBytes hexutil.Uint64
+	HealedBytecodes     hexutil.Uint64
+	HealedBytecodeBytes hexutil.Uint64
+	HealingTrienodes    hexutil.Uint64
+	HealingBytecode     hexutil.Uint64
+}
+
+func (p *rpcProgress) toSyncProgress() *ethereum.SyncProgress {
+	if p == nil {
+		return nil
+	}
+	return &ethereum.SyncProgress{
+		StartingBlock:       uint64(p.StartingBlock),
+		CurrentBlock:        uint64(p.CurrentBlock),
+		HighestBlock:        uint64(p.HighestBlock),
+		PulledStates:        uint64(p.PulledStates),
+		KnownStates:         uint64(p.KnownStates),
+		SyncedAccounts:      uint64(p.SyncedAccounts),
+		SyncedAccountBytes:  uint64(p.SyncedAccountBytes),
+		SyncedBytecodes:     uint64(p.SyncedBytecodes),
+		SyncedBytecodeBytes: uint64(p.SyncedBytecodeBytes),
+		SyncedStorage:       uint64(p.SyncedStorage),
+		SyncedStorageBytes:  uint64(p.SyncedStorageBytes),
+		HealedTrienodes:     uint64(p.HealedTrienodes),
+		HealedTrienodeBytes: uint64(p.HealedTrienodeBytes),
+		HealedBytecodes:     uint64(p.HealedBytecodes),
+		HealedBytecodeBytes: uint64(p.HealedBytecodeBytes),
+		HealingTrienodes:    uint64(p.HealingTrienodes),
+		HealingBytecode:     uint64(p.HealingBytecode),
+	}
 }

@@ -1,0 +1,34 @@
+version: "3"
+services:
+  wemix1:
+    container_name: wemix1
+    hostname: wemix1
+    stdin_open: true
+    tty: true
+    build: .
+    image: wemix/multinode-demo:latest
+    volumes:
+      - ".:/opt"
+    entrypoint: ["/usr/local/wemix/bin/gwemix-demo.sh", "start-leader", "wemix1", "wemix2", "wemix3"]
+  wemix2:
+    container_name: wemix2
+    hostname: wemix2
+    stdin_open: true
+    tty: true
+    image: wemix/multinode-demo:latest
+    depends_on:
+      - wemix1
+    volumes:
+      - ".:/opt"
+    entrypoint: ["/usr/local/wemix/bin/gwemix-demo.sh", "start"]
+  wemix3:
+    container_name: wemix3
+    hostname: wemix3
+    stdin_open: true
+    tty: true
+    image: wemix/multinode-demo:latest
+    depends_on:
+      - wemix1
+    volumes:
+      - ".:/opt"
+    entrypoint: ["/usr/local/wemix/bin/gwemix-demo.sh", "start"]

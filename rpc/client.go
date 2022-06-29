@@ -17,7 +17,6 @@
 package rpc
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,7 +74,7 @@ type BatchElem struct {
 // Client represents a connection to an RPC server.
 type Client struct {
 	idgen    func() ID // for subscriptions
-	isHTTP   bool
+	isHTTP   bool      // connection type: http, ws or ipc
 	services *serviceRegistry
 
 	idCounter uint32
@@ -85,7 +84,7 @@ type Client struct {
 
 	// writeConn is used for writing to the connection on the caller's goroutine. It should
 	// only be accessed outside of dispatch, with the write lock held. The write lock is
-	// taken by sending on requestOp and released by sending on sendDone.
+	// taken by sending on reqInit and released by sending on reqSent.
 	writeConn jsonWriter
 
 	// for dispatch
@@ -110,7 +109,9 @@ type clientConn struct {
 }
 
 func (c *Client) newClientConn(conn ServerCodec) *clientConn {
-	ctx := context.WithValue(context.Background(), clientContextKey{}, c)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, clientContextKey{}, c)
+	ctx = context.WithValue(ctx, peerInfoContextKey{}, conn.peerInfo())
 	handler := newHandler(ctx, conn, c.idgen, c.services)
 	return &clientConn{conn, handler}
 }
@@ -205,8 +206,8 @@ func newClient(initctx context.Context, connect reconnectFunc) (*Client, error) 
 func initClient(conn ServerCodec, idgen func() ID, services *serviceRegistry) *Client {
 	_, isHTTP := conn.(*httpConn)
 	c := &Client{
-		idgen:       idgen,
 		isHTTP:      isHTTP,
+		idgen:       idgen,
 		services:    services,
 		writeConn:   conn,
 		close:       make(chan struct{}),
@@ -260,6 +261,19 @@ func (c *Client) Close() {
 	}
 }
 
+// SetHeader adds a custom HTTP header to the client's requests.
+// This method only works for clients using HTTP, it doesn't have
+// any effect for clients using another transport.
+func (c *Client) SetHeader(key, value string) {
+	if !c.isHTTP {
+		return
+	}
+	conn := c.writeConn.(*httpConn)
+	conn.mu.Lock()
+	conn.headers.Set(key, value)
+	conn.mu.Unlock()
+}
+
 // Call performs a JSON-RPC call with the given arguments and unmarshals into
 // result if no error occurred.
 //
@@ -276,6 +290,9 @@ func (c *Client) Call(result interface{}, method string, args ...interface{}) er
 // The result must be a pointer so that package json can unmarshal into it. You
 // can also pass nil, in which case the result is ignored.
 func (c *Client) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
+	if result != nil && reflect.TypeOf(result).Kind() != reflect.Ptr {
+		return fmt.Errorf("call result parameter must be pointer or nil interface: %v", result)
+	}
 	msg, err := c.newMessage(method, args...)
 	if err != nil {
 		return err
@@ -326,7 +343,10 @@ func (c *Client) BatchCall(b []BatchElem) error {
 //
 // Note that batch calls may not be executed atomically on the server side.
 func (c *Client) BatchCallContext(ctx context.Context, b []BatchElem) error {
-	msgs := make([]*jsonrpcMessage, len(b))
+	var (
+		msgs = make([]*jsonrpcMessage, len(b))
+		byID = make(map[string]int, len(b))
+	)
 	op := &requestOp{
 		ids:  make([]json.RawMessage, len(b)),
 		resp: make(chan *jsonrpcMessage, len(b)),
@@ -338,6 +358,7 @@ func (c *Client) BatchCallContext(ctx context.Context, b []BatchElem) error {
 		}
 		msgs[i] = msg
 		op.ids[i] = msg.ID
+		byID[string(msg.ID)] = i
 	}
 
 	var err error
@@ -357,13 +378,7 @@ func (c *Client) BatchCallContext(ctx context.Context, b []BatchElem) error {
 		// Find the element corresponding to this response.
 		// The element is guaranteed to be present because dispatch
 		// only sends valid IDs to our channel.
-		var elem *BatchElem
-		for i := range msgs {
-			if bytes.Equal(msgs[i].ID, resp.ID) {
-				elem = &b[i]
-				break
-			}
-		}
+		elem := &b[byID[string(resp.ID)]]
 		if resp.Error != nil {
 			elem.Error = resp.Error
 			continue
@@ -388,17 +403,17 @@ func (c *Client) Notify(ctx context.Context, method string, args ...interface{})
 
 	if c.isHTTP {
 		return c.sendHTTP(ctx, op, msg)
-	} else {
-		return c.send(ctx, op, msg)
 	}
+	return c.send(ctx, op, msg)
 }
 
-// EthSubscribe registers a subscripion under the "eth" namespace.
+// EthSubscribe registers a subscription under the "eth" namespace.
 func (c *Client) EthSubscribe(ctx context.Context, channel interface{}, args ...interface{}) (*ClientSubscription, error) {
 	return c.Subscribe(ctx, "eth", channel, args...)
 }
 
-// ShhSubscribe registers a subscripion under the "shh" namespace.
+// ShhSubscribe registers a subscription under the "shh" namespace.
+// Deprecated: use Subscribe(ctx, "shh", ...).
 func (c *Client) ShhSubscribe(ctx context.Context, channel interface{}, args ...interface{}) (*ClientSubscription, error) {
 	return c.Subscribe(ctx, "shh", channel, args...)
 }
@@ -419,7 +434,7 @@ func (c *Client) Subscribe(ctx context.Context, namespace string, channel interf
 	// Check type of channel first.
 	chanVal := reflect.ValueOf(channel)
 	if chanVal.Kind() != reflect.Chan || chanVal.Type().ChanDir()&reflect.SendDir == 0 {
-		panic("first argument to Subscribe must be a writable channel")
+		panic(fmt.Sprintf("channel argument of Subscribe has type %T, need writable channel", channel))
 	}
 	if chanVal.IsNil() {
 		panic("channel given to Subscribe must not be nil")
@@ -465,7 +480,7 @@ func (c *Client) newMessage(method string, paramsIn ...interface{}) (*jsonrpcMes
 func (c *Client) send(ctx context.Context, op *requestOp, msg interface{}) error {
 	select {
 	case c.reqInit <- op:
-		err := c.write(ctx, msg)
+		err := c.write(ctx, msg, false)
 		c.reqSent <- err
 		return err
 	case <-ctx.Done():
@@ -477,9 +492,9 @@ func (c *Client) send(ctx context.Context, op *requestOp, msg interface{}) error
 	}
 }
 
-func (c *Client) write(ctx context.Context, msg interface{}) error {
-	// The previous write failed. Try to establish a new connection.
+func (c *Client) write(ctx context.Context, msg interface{}, retry bool) error {
 	if c.writeConn == nil {
+		// The previous write failed. Try to establish a new connection.
 		if err := c.reconnect(ctx); err != nil {
 			return err
 		}
@@ -487,6 +502,9 @@ func (c *Client) write(ctx context.Context, msg interface{}) error {
 	err := c.writeConn.writeJSON(ctx, msg)
 	if err != nil {
 		c.writeConn = nil
+		if !retry {
+			return c.write(ctx, msg, true)
+		}
 	}
 	return err
 }

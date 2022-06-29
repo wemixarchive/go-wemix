@@ -129,7 +129,6 @@ func (to *TxOrderer) Peek() *types.Transaction {
 			continue
 		}
 	}
-	return nil
 }
 
 func (to *TxOrderer) Shift() {
@@ -148,6 +147,12 @@ func (to *TxOrderer) MarkCommitted(tx *types.Transaction) {
 	to.lock.Lock()
 	defer to.lock.Unlock()
 	to.committedTxs[tx.Hash()] = tx
+}
+
+func (to *TxOrderer) CommittedLength() int {
+	to.lock.Lock()
+	defer to.lock.Unlock()
+	return len(to.committedTxs)
 }
 
 func (to *TxOrderer) NextForPrefetch() *types.Transaction {
@@ -181,7 +186,6 @@ func (to *TxOrderer) NextForPrefetch() *types.Transaction {
 			continue
 		}
 	}
-	return nil
 }
 
 // EOF

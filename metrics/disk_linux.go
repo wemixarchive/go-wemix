@@ -105,9 +105,9 @@ func ReadProcDiskStats(device string, stats *DiskStats) error {
 			continue
 		}
 
-		r_count,   e1 := strconv.ParseInt(parts[3], 10, 64)
+		r_count, e1 := strconv.ParseInt(parts[3], 10, 64)
 		r_sectors, e2 := strconv.ParseInt(parts[5], 10, 64)
-		w_count,   e3 := strconv.ParseInt(parts[7], 10, 64)
+		w_count, e3 := strconv.ParseInt(parts[7], 10, 64)
 		w_sectors, e4 := strconv.ParseInt(parts[9], 10, 64)
 		if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
 			continue

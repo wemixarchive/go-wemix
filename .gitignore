@@ -52,6 +52,6 @@ profile.cov
 
 vendor/*
 
-# Metadium
-/metadium/admin_abi.go
-/metadium/governance_abi.go
+# Wemix
+/wemix/admin_abi.go
+/wemix/governance_abi.go

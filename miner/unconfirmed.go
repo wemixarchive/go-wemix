@@ -24,7 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 // chainRetriever is used by the unconfirmed block set to verify whether a previously
@@ -52,7 +52,7 @@ type unconfirmedBlocks struct {
 	chain  chainRetriever // Blockchain to verify canonical status through
 	depth  uint           // Depth after which to discard previous blocks
 	blocks *ring.Ring     // Block infos to allow canonical chain cross checks
-	lock   sync.RWMutex   // Protects the fields from concurrent access
+	lock   sync.Mutex     // Protects the fields from concurrent access
 }
 
 // newUnconfirmedBlocks returns new data structure to track currently unconfirmed blocks.
@@ -85,7 +85,7 @@ func (set *unconfirmedBlocks) Insert(index uint64, hash common.Hash) {
 	}
 	// Display a log for the user to notify of a new mined block unconfirmed
 	header := set.chain.GetHeaderByNumber(index)
-	go metaminer.LogBlock(header.Number.Int64(), hash)
+	go wemixminer.LogBlock(header.Number.Int64(), hash)
 	log.Info("🔨 mined potential block", "number", index, "hash", hash, "elapsed", common.PrettyDuration(time.Since(time.Unix(int64(header.Time), 0))))
 }
 
