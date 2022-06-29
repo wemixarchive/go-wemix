@@ -182,7 +182,7 @@ var eth65 = map[uint64]msgHandler{
 	NewPooledTransactionHashesMsg: handleNewPooledTransactionHashes,
 	GetPooledTransactionsMsg:      handleGetPooledTransactions,
 	PooledTransactionsMsg:         handlePooledTransactions,
-	// metadium message handlers - not eth/66 yet
+	// wemix message handlers - not eth/66 yet
 	GetPendingTxsMsg:  handleGetPendingTxs,
 	GetStatusExMsg:    handleGetStatusEx,
 	StatusExMsg:       handleStatusEx,
@@ -207,7 +207,7 @@ var eth66 = map[uint64]msgHandler{
 	ReceiptsMsg:              handleReceipts66,
 	GetPooledTransactionsMsg: handleGetPooledTransactions66,
 	PooledTransactionsMsg:    handlePooledTransactions66,
-	// metadium message handlers - not eth/66 yet
+	// wemix message handlers - not eth/66 yet
 	GetPendingTxsMsg:  handleGetPendingTxs,
 	GetStatusExMsg:    handleGetStatusEx,
 	StatusExMsg:       handleStatusEx,

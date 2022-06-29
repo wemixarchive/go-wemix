@@ -26,9 +26,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rlp"
+	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
 )
 
 const (
@@ -379,12 +379,12 @@ func (p *Peer) ReplyReceiptsRLP(id uint64, receipts []rlp.RawValue) error {
 }
 
 // SendStatusEx sends this node's miner status
-func (p *Peer) SendStatusEx(status *metaapi.MetadiumMinerStatus) error {
+func (p *Peer) SendStatusEx(status *wemixapi.WemixMinerStatus) error {
 	return p2p.Send(p.rw, StatusExMsg, status)
 }
 
 // ReplyStatusEx is the eth/66 response to GetStatusEx
-func (p *Peer) ReplyStatusEx(id uint64, status *metaapi.MetadiumMinerStatus) error {
+func (p *Peer) ReplyStatusEx(id uint64, status *wemixapi.WemixMinerStatus) error {
 	return p2p.Send(p.rw, StatusExMsg, StatusExPacket66{
 		RequestId:      id,
 		StatusExPacket: StatusExPacket(*status),

@@ -219,7 +219,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 		Flags: metricsFlags,
 	},
 	{
-		Name: "METADIUM",
+		Name: "WEMIX",
 		Flags: []cli.Flag{
 			utils.ConsensusMethodFlag,
 			utils.FixedDifficultyFlag,

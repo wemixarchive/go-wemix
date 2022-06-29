@@ -31,10 +31,10 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -42,7 +42,7 @@ import (
 var (
 	FrontierBlockReward           = big.NewInt(5e+18) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward          = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
-	MetadiumBlockReward           = big.NewInt(0)     // Block reward in wei for Metadium
+	WemixBlockReward              = big.NewInt(0)     // Block reward in wei for Wemix
 	ConstantinopleBlockReward     = big.NewInt(2e+18) // Block reward in wei for successfully mining a block upward from Constantinople
 	maxUncles                     = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTimeSeconds = int64(15)         // Max seconds from current time allowed for blocks, before they're considered future blocks
@@ -273,7 +273,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 			return consensus.ErrFutureBlock
 		}
 	}
-	if metaminer.IsPoW() && header.Time <= parent.Time {
+	if wemixminer.IsPoW() && header.Time <= parent.Time {
 		return errOlderBlockTime
 	}
 	// Verify the block's difficulty based on its timestamp and parent's difficulty
@@ -320,8 +320,8 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	if err := misc.VerifyForkHashes(chain.Config(), header, uncle); err != nil {
 		return err
 	}
-	// Metadium: Check if it's generated and signed by a registered node
-	if !metaminer.IsPoW() && !metaminer.VerifyBlockSig(header.Number, header.MinerNodeId, header.Root, header.MinerNodeSig) {
+	// Wemix: Check if it's generated and signed by a registered node
+	if !wemixminer.IsPoW() && !wemixminer.VerifyBlockSig(header.Number, header.MinerNodeId, header.Root, header.MinerNodeSig) {
 		return consensus.ErrUnauthorized
 	}
 	return nil
@@ -338,7 +338,7 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainHeaderReader, time uin
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
 func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
-	if !metaminer.IsPoW() {
+	if !wemixminer.IsPoW() {
 		return big1
 	}
 
@@ -548,7 +548,7 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainHeaderReader, header *type
 		digest []byte
 		result []byte
 	)
-	if metaminer.IsPoW() {
+	if wemixminer.IsPoW() {
 		// If fast-but-heavy PoW verification was requested, use an ethash dataset
 		if fulldag {
 			dataset := ethash.dataset(number, true)
@@ -622,8 +622,8 @@ func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 	}
 
 	// sign header.Root with node's private key
-	if !metaminer.IsPoW() {
-		nodeId, sig, err := metaminer.SignBlock(header.Root)
+	if !wemixminer.IsPoW() {
+		nodeId, sig, err := wemixminer.SignBlock(header.Root)
 		if err != nil {
 			return nil, err
 		} else {
@@ -682,7 +682,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		blockReward = ConstantinopleBlockReward
 	}
 
-	if metaminer.IsPoW() {
+	if wemixminer.IsPoW() {
 		// Accumulate the rewards for the miner and any included uncles
 		reward := new(big.Int).Set(blockReward)
 		r := new(big.Int)
@@ -698,8 +698,8 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		}
 		state.AddBalance(header.Coinbase, reward)
 	} else {
-		blockReward = MetadiumBlockReward
-		coinbase, rewards, err := metaminer.CalculateRewards(
+		blockReward = WemixBlockReward
+		coinbase, rewards, err := wemixminer.CalculateRewards(
 			header.Number, blockReward, header.Fees,
 			func(addr common.Address, amt *big.Int) {
 				state.AddBalance(addr, amt)
@@ -710,7 +710,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 				header.Coinbase = *coinbase
 			}
 		} else {
-			if err == metaminer.ErrNotInitialized {
+			if err == wemixminer.ErrNotInitialized {
 				reward := new(big.Int)
 				reward.Add(blockReward, header.Fees)
 				state.AddBalance(header.Coinbase, reward)

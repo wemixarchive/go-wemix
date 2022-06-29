@@ -3,8 +3,8 @@ package eth
 import (
 	"fmt"
 
-	metaapi "github.com/ethereum/go-ethereum/metadium/api"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
+	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 func handleGetPendingTxs(backend Backend, msg Decoder, peer *Peer) error {
@@ -13,12 +13,12 @@ func handleGetPendingTxs(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleGetStatusEx(backend Backend, msg Decoder, peer *Peer) error {
-	if !metaminer.AmPartner() || !metaminer.IsPartner(peer.ID()) {
+	if !wemixminer.AmPartner() || !wemixminer.IsPartner(peer.ID()) {
 		return nil
 	}
 
 	go func() {
-		statusEx := metaapi.GetMinerStatus()
+		statusEx := wemixapi.GetMinerStatus()
 		statusEx.LatestBlockTd = backend.Chain().GetTd(statusEx.LatestBlockHash,
 			statusEx.LatestBlockHeight.Uint64())
 		if err := peer.SendStatusEx(statusEx); err != nil {
@@ -30,10 +30,10 @@ func handleGetStatusEx(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleStatusEx(backend Backend, msg Decoder, peer *Peer) error {
-	if !metaminer.AmPartner() || !metaminer.IsPartner(peer.ID()) {
+	if !wemixminer.AmPartner() || !wemixminer.IsPartner(peer.ID()) {
 		return nil
 	}
-	var status metaapi.MetadiumMinerStatus
+	var status wemixapi.WemixMinerStatus
 	if err := msg.Decode(&status); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
@@ -42,19 +42,19 @@ func handleStatusEx(backend Backend, msg Decoder, peer *Peer) error {
 		if _, td := peer.Head(); status.LatestBlockTd.Cmp(td) > 0 {
 			peer.SetHead(status.LatestBlockHash, status.LatestBlockTd)
 		}
-		metaapi.GotStatusEx(&status)
+		wemixapi.GotStatusEx(&status)
 	}()
 
 	return nil
 }
 
 func handleEtcdAddMember(backend Backend, msg Decoder, peer *Peer) error {
-	if !metaminer.AmPartner() || !metaminer.IsPartner(peer.ID()) {
+	if !wemixminer.AmPartner() || !wemixminer.IsPartner(peer.ID()) {
 		return nil
 	}
 
 	go func() {
-		cluster, _ := metaapi.EtcdAddMember(peer.ID())
+		cluster, _ := wemixapi.EtcdAddMember(peer.ID())
 		if err := peer.SendEtcdCluster(cluster); err != nil {
 			// ignore the error
 		}
@@ -64,7 +64,7 @@ func handleEtcdAddMember(backend Backend, msg Decoder, peer *Peer) error {
 }
 
 func handleEtcdCluster(backend Backend, msg Decoder, peer *Peer) error {
-	if !metaminer.AmPartner() || !metaminer.IsPartner(peer.ID()) {
+	if !wemixminer.AmPartner() || !wemixminer.IsPartner(peer.ID()) {
 		return nil
 	}
 	var cluster string
@@ -72,7 +72,7 @@ func handleEtcdCluster(backend Backend, msg Decoder, peer *Peer) error {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
-	go metaapi.GotEtcdCluster(cluster)
+	go wemixapi.GotEtcdCluster(cluster)
 
 	return nil
 }

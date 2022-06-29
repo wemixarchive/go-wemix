@@ -72,7 +72,7 @@ func offlineWalletNewId() string {
 			[]byte(uuid.NewRandom().String())))
 }
 
-// from metadium/metclient/util.go
+// from wemix/metclient/util.go
 // if password
 // - || "": read password from stdin
 // @<file-name>: <file-name> file has password

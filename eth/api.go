@@ -36,12 +36,12 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
-	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
+	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
 )
 
 // PublicEthereumAPI provides an API to access Ethereum full node-related
@@ -283,40 +283,40 @@ func (api *PrivateAdminAPI) RequestEtcdAddMember(id enode.ID) error {
 
 // Initializes an etcd cluster
 func (api *PrivateAdminAPI) EtcdInit() error {
-	return metaapi.EtcdInit()
+	return wemixapi.EtcdInit()
 }
 
 // Manually adds a node to an etcd cluster.
 // TODO: to be removed
 func (api *PrivateAdminAPI) EtcdAddMember(name string) (string, error) {
-	return metaapi.EtcdAddMember(name)
+	return wemixapi.EtcdAddMember(name)
 }
 
 // Manually removes a node from an etcd cluster
 // TODO: to be removed
 func (api *PrivateAdminAPI) EtcdRemoveMember(name string) (string, error) {
-	return metaapi.EtcdRemoveMember(name)
+	return wemixapi.EtcdRemoveMember(name)
 }
 
 // Manually join an etcd network
 // TODO: to be removed
 func (api *PrivateAdminAPI) EtcdJoin(cluster string) error {
-	return metaapi.EtcdJoin(cluster)
+	return wemixapi.EtcdJoin(cluster)
 }
 
 // Manually move leader in case the leader is misbehaving
 func (api *PrivateAdminAPI) EtcdMoveLeader(name string) error {
-	return metaapi.EtcdMoveLeader(name)
+	return wemixapi.EtcdMoveLeader(name)
 }
 
 // Get the latest logged work
 func (api *PrivateAdminAPI) EtcdGetWork() (string, error) {
-	return metaapi.EtcdGetWork()
+	return wemixapi.EtcdGetWork()
 }
 
 // Remove the latest logged work
 func (api *PrivateAdminAPI) EtcdDeleteWork() error {
-	return metaapi.EtcdDeleteWork()
+	return wemixapi.EtcdDeleteWork()
 }
 
 // Synchronize with the given peer

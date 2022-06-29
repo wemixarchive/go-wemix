@@ -25,10 +25,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/debug"
 	"github.com/ethereum/go-ethereum/log"
-	metaapi "github.com/ethereum/go-ethereum/metadium/api"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rpc"
+	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
 )
 
 // apis returns the collection of built-in RPC APIs.
@@ -336,15 +336,15 @@ func (api *publicAdminAPI) Datadir() string {
 	return api.node.DataDir()
 }
 
-// MetadiumInfo retrieves the information about Metadium
-func (api *publicAdminAPI) MetadiumInfo() interface{} {
-	return metaapi.Info()
+// WemixInfo retrieves the information about Wemix
+func (api *publicAdminAPI) WemixInfo() interface{} {
+	return wemixapi.Info()
 }
 
-// MetadiumNodes returns the status of miners
+// WemixNodes returns the status of miners
 // 'node' can a name, node id or ip address
-func (api *publicAdminAPI) MetadiumNodes(node string, timeout int) interface{} {
-	return metaapi.GetMiners(node, timeout)
+func (api *publicAdminAPI) WemixNodes(node string, timeout int) interface{} {
+	return wemixapi.GetMiners(node, timeout)
 }
 
 // publicWeb3API offers helper utils

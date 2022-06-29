@@ -1,6 +1,6 @@
 // spinlock.go
 
-package metadium
+package wemix
 
 import (
 	"runtime"

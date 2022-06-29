@@ -26,8 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 var emptyCodeHash = crypto.Keccak256Hash(nil)
@@ -340,9 +340,9 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 	bigFee := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip)
 
-	// In metadium, block reward and fees are combined and distributed as
+	// In wemix, block reward and fees are combined and distributed as
 	// agreed in the governance contract
-	if metaminer.IsPoW() {
+	if wemixminer.IsPoW() {
 		st.state.AddBalance(st.evm.Context.Coinbase, bigFee)
 	}
 

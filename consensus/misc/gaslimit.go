@@ -20,14 +20,14 @@ import (
 	"errors"
 	"fmt"
 
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 // VerifyGaslimit verifies the header gas limit according increase/decrease
 // in relation to the parent gas limit.
 func VerifyGaslimit(parentGasLimit, headerGasLimit uint64) error {
-	if !metaminer.IsPoW() {
+	if !wemixminer.IsPoW() {
 		return nil
 	}
 	// Verify that the gas limit remains within allowed bounds

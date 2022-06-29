@@ -1,9 +1,9 @@
-// metadium_genesis.go
+// wemix_genesis.go
 
 package core
 
 var (
-	metadiumMainnetGenesisJson = `
+	wemixMainnetGenesisJson = `
 {
   "alloc": {
     "0x000877F43163F4556Ae0E069721F74Cfd1A124A8": {
@@ -12312,7 +12312,7 @@ var (
   "timestamp": "0x00"
 }`
 
-	metadiumTestnetGenesisJson = `
+	wemixTestnetGenesisJson = `
 {
   "alloc": {
     "0x0A181237Dc34Dd0806E37381F4Cf211148b63E07": {

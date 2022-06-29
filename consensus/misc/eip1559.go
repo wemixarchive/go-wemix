@@ -23,16 +23,16 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
 	"github.com/ethereum/go-ethereum/params"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 // VerifyEip1559Header verifies some header attributes which were changed in EIP-1559,
 // - gas limit check
 // - basefee check
 func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Header) error {
-	_, _, _, _, gasTargetPercentage, err := metaminer.GetBlockBuildParameters(parent.Number)
-	if err == metaminer.ErrNotInitialized {
+	_, _, _, _, gasTargetPercentage, err := wemixminer.GetBlockBuildParameters(parent.Number)
+	if err == wemixminer.ErrNotInitialized {
 		return nil
 	}
 	// Verify that the gas limit remains within allowed bounds
@@ -62,9 +62,9 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 	if !config.IsLondon(parent.Number) {
 		return new(big.Int).SetUint64(params.InitialBaseFee)
 	}
-	// NB: in Metadium both elasticityMultiplier & baseFeeChangeDenominator are percentage numbers
-	_, maxBaseFee, _, baseFeeMaxChangeRate, gasTargetPercentage, err := metaminer.GetBlockBuildParameters(parent.Number)
-	if err == metaminer.ErrNotInitialized {
+	// NB: in Wemix both elasticityMultiplier & baseFeeChangeDenominator are percentage numbers
+	_, maxBaseFee, _, baseFeeMaxChangeRate, gasTargetPercentage, err := wemixminer.GetBlockBuildParameters(parent.Number)
+	if err == wemixminer.ErrNotInitialized {
 		return new(big.Int).Set(parent.BaseFee)
 	}
 	var (

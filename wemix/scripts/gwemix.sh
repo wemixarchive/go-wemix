@@ -1,6 +1,6 @@
 #!/bin/bash
 
-[ "$META_DIR" = "" ] && META_DIR=/opt
+[ "$WEMIX_DIR" = "" ] && WEMIX_DIR=/opt
 
 CHAIN_ID=101
 CONSENSUS_METHOD=2
@@ -12,14 +12,14 @@ BLOCKS_PER_TURN=10
 function get_data_dir ()
 {
     if [ ! "$1" = "" ]; then
-	d=${META_DIR}/$1
+	d=${WEMIX_DIR}/$1
 	if [ -x "$d/bin/gwemix" ]; then
 	    echo $d
 	fi
     else
-	for i in $(/bin/ls -1 ${META_DIR}); do
-	    if [ -x "${META_DIR}/$i/bin/gwemix" ]; then
-		echo ${META_DIR}/$i
+	for i in $(/bin/ls -1 ${WEMIX_DIR}); do
+	    if [ -x "${WEMIX_DIR}/$i/bin/gwemix" ]; then
+		echo ${WEMIX_DIR}/$i
 		return
 	    fi
 	done
@@ -57,7 +57,7 @@ function init ()
     [ -d "$d/geth" ] || mkdir -p "$d/geth"
     [ -d "$d/logs" ] || mkdir -p "$d/logs"
 
-    ${GWEMIX} metadium genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
+    ${GWEMIX} wemix genesis --data "$CONFIG" --genesis "$d/conf/genesis-template.json" --out "$d/genesis.json"
     [ $? = 0 ] || return $?
 
     echo "PORT=8588
@@ -93,23 +93,23 @@ function init_gov ()
 	return 1
     fi
 
-    if [ ! -f "${d}/conf/MetadiumGovernance.js" ]; then
-	echo "Cannot find ${d}/conf/MetadiumGovernance.js"
+    if [ ! -f "${d}/conf/WemixGovernance.js" ]; then
+	echo "Cannot find ${d}/conf/WemixGovernance.js"
 	return 1
     fi
 
     PORT=$(grep PORT ${d}/.rc | sed -e 's/PORT=//')
     [ "$PORT" = "" ] && PORT=8588
 
-    exec ${GWEMIX} attach http://localhost:${PORT} --preload "$d/conf/MetadiumGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'")'
-#    ${GWEMIX} metadium deploy-governance --url http://localhost:${PORT} --gasprice 1 --gas 0xF000000 "$d/conf/MetadiumGovernance.js" "$CONFIG" "${ACCT}"
+    exec ${GWEMIX} attach http://localhost:${PORT} --preload "$d/conf/WemixGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'")'
+#    ${GWEMIX} wemix deploy-governance --url http://localhost:${PORT} --gasprice 1 --gas 0xF000000 "$d/conf/WemixGovernance.js" "$CONFIG" "${ACCT}"
 }
 
 function wipe ()
 {
     d=$(get_data_dir "$1")
     if [ ! -x "$d/bin/gwemix" ]; then
-	echo "Is '$1' nxtmeta data directory?"
+	echo "Is '$1' wemix data directory?"
 	return
     fi
 
@@ -120,8 +120,8 @@ function wipe ()
 
 function wipe_all ()
 {
-    for i in `/bin/ls -1 ${META_DIR}/`; do
-	if [ ! -d "${META_DIR}/$i" -o ! -x "${META_DIR}/$i/bin/gwemix" ]; then
+    for i in `/bin/ls -1 ${WEMIX_DIR}/`; do
+	if [ ! -d "${WEMIX_DIR}/$i" -o ! -x "${WEMIX_DIR}/$i/bin/gwemix" ]; then
 	    continue
 	fi
 	wipe $i
@@ -144,8 +144,8 @@ function clean ()
 
 function clean_all ()
 {
-    for i in `/bin/ls -1 ${META_DIR}/`; do
-	if [ ! -d "${META_DIR}/$i" -o ! -d "${META_DIR}/$i/geth" ]; then
+    for i in `/bin/ls -1 ${WEMIX_DIR}/`; do
+	if [ ! -d "${WEMIX_DIR}/$i" -o ! -d "${WEMIX_DIR}/$i/geth" ]; then
 	    continue
 	fi
 	clean $i
@@ -210,8 +210,8 @@ function start ()
 
 function start_all ()
 {
-    for i in `/bin/ls -1 ${META_DIR}/`; do
-	if [ ! -d "${META_DIR}/$i" -o ! -f "${META_DIR}/$i/bin/gwemix" ]; then
+    for i in `/bin/ls -1 ${WEMIX_DIR}/`; do
+	if [ ! -d "${WEMIX_DIR}/$i" -o ! -f "${WEMIX_DIR}/$i/bin/gwemix" ]; then
 	    continue
 	fi
 	start $i
@@ -236,7 +236,7 @@ function do_nodes ()
 	if [ "$1" = "$LHN" -o "$1" = "${LHN/.*/}" ]; then
 	    $0 ${CMD} $2
 	else
-	    ssh -f $1 ${META_DIR}/$2/bin/gwemix.sh ${CMD} $2
+	    ssh -f $1 ${WEMIX_DIR}/$2/bin/gwemix.sh ${CMD} $2
 	fi
 	shift
 	shift

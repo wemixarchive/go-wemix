@@ -795,7 +795,7 @@ var (
 		Value: metrics.DefaultConfig.InfluxDBOrganization,
 	}
 
-	// Metadium flags
+	// Wemix flags
 	ConsensusMethodFlag = cli.IntFlag{
 		Name:  "consensusmethod",
 		Usage: "Wemix consensus method (integer, 1=PoW, 2=PoA, 3=ETCD, 4=PBFT)",
@@ -852,27 +852,27 @@ var (
 		Value: params.Hub,
 	}
 	BlockInterval = cli.Int64Flag{
-		Name:  "metadium.block.interval",
+		Name:  "wemix.block.interval",
 		Usage: "Block generation interval in seconds",
 		Value: params.BlockInterval,
 	}
 	BlockTimeAdjBlocks = cli.Int64Flag{
-		Name:  "metadium.block.timeadjblocks",
+		Name:  "wemix.block.timeadjblocks",
 		Usage: "Block interval to ajdust timestamp",
 		Value: params.BlockTimeAdjBlocks,
 	}
 	BlockMinBuildTime = cli.Int64Flag{
-		Name:  "metadium.block.minbuildtime",
+		Name:  "wemix.block.minbuildtime",
 		Usage: "Minimum block generation time in ms",
 		Value: params.BlockMinBuildTime,
 	}
 	BlockMinBuildTxs = cli.Int64Flag{
-		Name:  "metadium.block.minbuildtxs",
+		Name:  "wemix.block.minbuildtxs",
 		Usage: "Minimum txs in a block with pending txs",
 		Value: params.BlockMinBuildTxs,
 	}
 	BlockTrailTime = cli.Int64Flag{
-		Name:  "metadium.block.trailtime",
+		Name:  "wemix.block.trailtime",
 		Usage: "Time to leave for block data transfer in ms",
 		Value: params.BlockTrailTime,
 	}
@@ -1803,8 +1803,8 @@ func SetDNSDiscoveryDefaults(cfg *ethconfig.Config, genesis common.Hash) {
 	}
 }
 
-// SetMetadiumConfig applies metadium related command line flags to the config.
-func SetMetadiumConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
+// SetWemixConfig applies wemix related command line flags to the config.
+func SetWemixConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	if ctx.GlobalIsSet(ConsensusMethodFlag.Name) {
 		params.ConsensusMethod = ctx.GlobalInt(ConsensusMethodFlag.Name)
 	}

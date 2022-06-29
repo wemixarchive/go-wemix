@@ -1,6 +1,6 @@
 /* etcdutil.go */
 
-package metadium
+package wemix
 
 import (
 	"bytes"
@@ -22,16 +22,16 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/log"
-	metaapi "github.com/ethereum/go-ethereum/metadium/api"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
+	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 var (
 	etcdLock = &SpinLock{0}
 )
 
-func (ma *metaAdmin) etcdMemberExists(name, cluster string) (bool, error) {
-	var node *metaNode
+func (ma *wemixAdmin) etcdMemberExists(name, cluster string) (bool, error) {
+	var node *wemixNode
 	ma.lock.Lock()
 	for _, i := range ma.nodes {
 		if i.Name == name || i.Id == name || i.Ip == name {
@@ -64,8 +64,8 @@ func (ma *metaAdmin) etcdMemberExists(name, cluster string) (bool, error) {
 }
 
 // fill the missing name in cluster string when a member is just added, like
-// "=http://1.1.1.1:8590,meta2=http:/1.1.1.2:8590"
-func (ma *metaAdmin) etcdFixCluster(cluster string) (string, error) {
+// "=http://1.1.1.1:8590,wemix2=http:/1.1.1.2:8590"
+func (ma *wemixAdmin) etcdFixCluster(cluster string) (string, error) {
 	if ma.self == nil {
 		return "", ethereum.NotFound
 	}
@@ -100,7 +100,7 @@ func (ma *metaAdmin) etcdFixCluster(cluster string) (string, error) {
 	return bb.String(), nil
 }
 
-func (ma *metaAdmin) etcdNewConfig(newCluster bool) *embed.Config {
+func (ma *wemixAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	// LPUrls: listening peer urls
 	// APUrls: advertised peer urls
 	// LCUrls: listening client urls
@@ -128,11 +128,11 @@ func (ma *metaAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	return cfg
 }
 
-func (ma *metaAdmin) etcdIsRunning() bool {
+func (ma *wemixAdmin) etcdIsRunning() bool {
 	return ma.etcd != nil && ma.etcdCli != nil
 }
 
-func (ma *metaAdmin) etcdGetCluster() string {
+func (ma *wemixAdmin) etcdGetCluster() string {
 	if !ma.etcdIsRunning() {
 		return ""
 	}
@@ -155,7 +155,7 @@ func (ma *metaAdmin) etcdGetCluster() string {
 }
 
 // returns new cluster string if adding the member is successful
-func (ma *metaAdmin) etcdAddMember(name string) (string, error) {
+func (ma *wemixAdmin) etcdAddMember(name string) (string, error) {
 	if !ma.etcdIsRunning() {
 		return "", ErrNotRunning
 	}
@@ -164,7 +164,7 @@ func (ma *metaAdmin) etcdAddMember(name string) (string, error) {
 		return ma.etcdGetCluster(), nil
 	}
 
-	var node *metaNode
+	var node *wemixNode
 	ma.lock.Lock()
 	for _, i := range ma.nodes {
 		if i.Name == name || i.Enode == name || i.Id == name || i.Ip == name {
@@ -181,18 +181,18 @@ func (ma *metaAdmin) etcdAddMember(name string) (string, error) {
 	_, err := ma.etcdCli.MemberAdd(context.Background(),
 		[]string{fmt.Sprintf("http://%s:%d", node.Ip, node.Port+1)})
 	if err != nil {
-		log.Error("Metadium: failed to add a new member",
+		log.Error("failed to add a new member",
 			"name", name, "ip", node.Ip, "port", node.Port+1, "error", err)
 		return "", err
 	} else {
-		log.Info("Metadium: a new member added",
+		log.Info("a new member added",
 			"name", name, "ip", node.Ip, "port", node.Port+1, "error", err)
 		return ma.etcdGetCluster(), nil
 	}
 }
 
 // returns new cluster string if removing the member is successful
-func (ma *metaAdmin) etcdRemoveMember(name string) (string, error) {
+func (ma *wemixAdmin) etcdRemoveMember(name string) (string, error) {
 	if !ma.etcdIsRunning() {
 		return "", ErrNotRunning
 	}
@@ -219,7 +219,7 @@ func (ma *metaAdmin) etcdRemoveMember(name string) (string, error) {
 	return ma.etcdGetCluster(), nil
 }
 
-func (ma *metaAdmin) etcdMoveLeader(name string) error {
+func (ma *wemixAdmin) etcdMoveLeader(name string) error {
 	if !ma.etcdIsRunning() {
 		return ErrNotRunning
 	}
@@ -244,7 +244,7 @@ func (ma *metaAdmin) etcdMoveLeader(name string) error {
 	return err
 }
 
-func (ma *metaAdmin) etcdWipe() error {
+func (ma *wemixAdmin) etcdWipe() error {
 	if ma.etcdIsRunning() {
 		ma.etcdCli.Close()
 		ma.etcd.Server.Stop()
@@ -263,7 +263,7 @@ func (ma *metaAdmin) etcdWipe() error {
 	}
 }
 
-func (ma *metaAdmin) etcdInit() error {
+func (ma *wemixAdmin) etcdInit() error {
 	if ma.etcdIsRunning() {
 		return ErrAlreadyRunning
 	} else if ma.self == nil {
@@ -273,10 +273,10 @@ func (ma *metaAdmin) etcdInit() error {
 	cfg := ma.etcdNewConfig(true)
 	etcd, err := embed.StartEtcd(cfg)
 	if err != nil {
-		log.Error("Metadium: failed to initialize etcd", "error", err)
+		log.Error("failed to initialize etcd", "error", err)
 		return err
 	} else {
-		log.Info("Metadium: initialized etcd server")
+		log.Info("initialized etcd server")
 	}
 
 	ma.etcd = etcd
@@ -284,7 +284,7 @@ func (ma *metaAdmin) etcdInit() error {
 	return nil
 }
 
-func (ma *metaAdmin) etcdStart() error {
+func (ma *wemixAdmin) etcdStart() error {
 	if ma.etcdIsRunning() {
 		return ErrAlreadyRunning
 	}
@@ -292,10 +292,10 @@ func (ma *metaAdmin) etcdStart() error {
 	cfg := ma.etcdNewConfig(false)
 	etcd, err := embed.StartEtcd(cfg)
 	if err != nil {
-		log.Error("Metadium: failed to start etcd", "error", err)
+		log.Error("failed to start etcd", "error", err)
 		return err
 	} else {
-		log.Info("Metadium: started etcd server")
+		log.Info("started etcd server")
 	}
 
 	ma.etcd = etcd
@@ -309,14 +309,14 @@ func (ma *metaAdmin) etcdStart() error {
 			}
 			<-etcd.Server.LeaderChangedNotify()
 			if ma.etcd.Server.ID() == ma.etcd.Server.Leader() {
-				metaminer.FeedLeadership()
+				wemixminer.FeedLeadership()
 			}
 		}
 	}()
 	return nil
 }
 
-func (ma *metaAdmin) etcdJoin_old(cluster string) error {
+func (ma *wemixAdmin) etcdJoin_old(cluster string) error {
 	if ma.etcdIsRunning() {
 		return ErrAlreadyRunning
 	}
@@ -325,10 +325,10 @@ func (ma *metaAdmin) etcdJoin_old(cluster string) error {
 	cfg.InitialCluster = cluster
 	etcd, err := embed.StartEtcd(cfg)
 	if err != nil {
-		log.Error("Metadium: failed to join etcd", "error", err)
+		log.Error("failed to join etcd", "error", err)
 		return err
 	} else {
-		log.Info("Metadium: started etcd server")
+		log.Info("started etcd server")
 	}
 
 	ma.etcd = etcd
@@ -336,8 +336,8 @@ func (ma *metaAdmin) etcdJoin_old(cluster string) error {
 	return nil
 }
 
-func (ma *metaAdmin) etcdJoin(name string) error {
-	var node *metaNode
+func (ma *wemixAdmin) etcdJoin(name string) error {
+	var node *wemixNode
 
 	ma.lock.Lock()
 	for _, i := range ma.nodes {
@@ -353,9 +353,9 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 	}
 
 	msgch := make(chan interface{}, 32)
-	metaapi.SetMsgChannel(msgch)
+	wemixapi.SetMsgChannel(msgch)
 	defer func() {
-		metaapi.SetMsgChannel(nil)
+		wemixapi.SetMsgChannel(nil)
 		close(msgch)
 	}()
 
@@ -364,7 +364,7 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 	err := admin.rpcCli.CallContext(ctx, nil, "admin_requestEtcdAddMember", &node.Id)
 	cancel()
 	if err != nil {
-		log.Error("Metadium admin_requestEtcdAddMember failed", "id", node.Id, "error", err)
+		log.Error("admin_requestEtcdAddMember failed", "id", node.Id, "error", err)
 		return err
 	}
 
@@ -382,10 +382,10 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 			cfg.InitialCluster = cluster
 			etcd, err := embed.StartEtcd(cfg)
 			if err != nil {
-				log.Error("Metadium: failed to join etcd", "error", err)
+				log.Error("failed to join etcd", "error", err)
 				return err
 			} else {
-				log.Info("Metadium: started etcd server")
+				log.Info("started etcd server")
 			}
 
 			ma.etcd = etcd
@@ -398,7 +398,7 @@ func (ma *metaAdmin) etcdJoin(name string) error {
 	}
 }
 
-func (ma *metaAdmin) etcdStop() error {
+func (ma *wemixAdmin) etcdStop() error {
 	if !ma.etcdIsRunning() {
 		return ErrNotRunning
 	}
@@ -413,7 +413,7 @@ func (ma *metaAdmin) etcdStop() error {
 	return nil
 }
 
-func (ma *metaAdmin) etcdIsLeader() bool {
+func (ma *wemixAdmin) etcdIsLeader() bool {
 	if !ma.etcdIsRunning() {
 		return false
 	} else {
@@ -422,7 +422,7 @@ func (ma *metaAdmin) etcdIsLeader() bool {
 }
 
 // returns leader id and node
-func (ma *metaAdmin) etcdLeader(locked bool) (uint64, *metaNode) {
+func (ma *wemixAdmin) etcdLeader(locked bool) (uint64, *wemixNode) {
 	if !ma.etcdIsRunning() {
 		return 0, nil
 	}
@@ -430,7 +430,7 @@ func (ma *metaAdmin) etcdLeader(locked bool) (uint64, *metaNode) {
 	lid := uint64(ma.etcd.Server.Leader())
 	for _, i := range ma.etcd.Server.Cluster().Members() {
 		if uint64(i.ID) == lid {
-			var node *metaNode
+			var node *wemixNode
 			if !locked {
 				ma.lock.Lock()
 			}
@@ -450,7 +450,7 @@ func (ma *metaAdmin) etcdLeader(locked bool) (uint64, *metaNode) {
 	return 0, nil
 }
 
-func (ma *metaAdmin) etcdPut(key, value string) (int64, error) {
+func (ma *wemixAdmin) etcdPut(key, value string) (int64, error) {
 	if !ma.etcdIsRunning() {
 		return 0, ErrNotRunning
 	}
@@ -466,7 +466,7 @@ func (ma *metaAdmin) etcdPut(key, value string) (int64, error) {
 	}
 }
 
-func (ma *metaAdmin) etcdGet(key string) (string, error) {
+func (ma *wemixAdmin) etcdGet(key string) (string, error) {
 	if !ma.etcdIsRunning() {
 		return "", ErrNotRunning
 	}
@@ -488,7 +488,7 @@ func (ma *metaAdmin) etcdGet(key string) (string, error) {
 	}
 }
 
-func (ma *metaAdmin) etcdDelete(key string) error {
+func (ma *wemixAdmin) etcdDelete(key string) error {
 	if !ma.etcdIsRunning() {
 		return ErrNotRunning
 	}
@@ -499,7 +499,7 @@ func (ma *metaAdmin) etcdDelete(key string) error {
 	return err
 }
 
-func (ma *metaAdmin) etcdCompact(rev int64) error {
+func (ma *wemixAdmin) etcdCompact(rev int64) error {
 	if !ma.etcdIsRunning() {
 		return ErrNotRunning
 	}
@@ -513,7 +513,7 @@ func (ma *metaAdmin) etcdCompact(rev int64) error {
 	return err
 }
 
-func (ma *metaAdmin) etcdInfo() interface{} {
+func (ma *wemixAdmin) etcdInfo() interface{} {
 	if ma.etcd == nil {
 		return ErrNotRunning
 	}
@@ -600,7 +600,7 @@ func EtcdStart() {
 	admin.etcdStart()
 	if !admin.etcdIsRunning() {
 		// try to join a random peer
-		var node *metaNode
+		var node *wemixNode
 		admin.lock.Lock()
 		if len(admin.nodes) > 0 {
 			ix := rand.Int() % len(admin.nodes)
@@ -615,7 +615,7 @@ func EtcdStart() {
 		admin.lock.Unlock()
 
 		if node != nil && admin.isPeerUp(node.Id) {
-			log.Info("Metadium", "Trying to join", node.Name)
+			log.Info("Wemix", "Trying to join", node.Name)
 			admin.etcdJoin(node.Name)
 		}
 	}

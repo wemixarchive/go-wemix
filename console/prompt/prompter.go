@@ -171,7 +171,7 @@ func (p *terminalPrompter) SetWordCompleter(completer WordCompleter) {
 	p.State.SetWordCompleter(liner.WordCompleter(completer))
 }
 
-// Metadium. For offline wallet use
+// Wemix. For offline wallet use
 func PromptPassword(prompt string) (string, error) {
 	return Stdin.PromptPassword(prompt)
 }

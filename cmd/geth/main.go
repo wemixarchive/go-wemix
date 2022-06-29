@@ -42,9 +42,9 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/log"
-	metadium "github.com/ethereum/go-ethereum/metadium"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/wemix"
 
 	// Force-load the tracer engines to trigger registration
 	_ "github.com/ethereum/go-ethereum/eth/tracers/js"
@@ -209,7 +209,7 @@ var (
 		utils.MetricsInfluxDBOrganizationFlag,
 	}
 
-	metadiumFlags = []cli.Flag{
+	wemixFlags = []cli.Flag{
 		utils.ConsensusMethodFlag,
 		utils.FixedDifficultyFlag,
 		utils.FixedGasLimitFlag,
@@ -233,7 +233,7 @@ func init() {
 	// Initialize the CLI app and start Geth
 	app.Action = geth
 	app.HideVersion = true // we have a command to print the version
-	app.Copyright = "Copyright 2013-2022 The go-ethereum / go-metadium Authors"
+	app.Copyright = "Copyright 2013-2022 The go-ethereum / go-metadium / go-wemix Authors"
 	app.Commands = []cli.Command{
 		// See chaincmd.go:
 		initCommand,
@@ -265,7 +265,7 @@ func init() {
 		utils.ShowDeprecated,
 		// See snapshot.go
 		snapshotCommand,
-		metadiumCommand,
+		wemixCommand,
 	}
 	sort.Sort(cli.CommandsByName(app.Commands))
 
@@ -274,7 +274,7 @@ func init() {
 	app.Flags = append(app.Flags, consoleFlags...)
 	app.Flags = append(app.Flags, debug.Flags...)
 	app.Flags = append(app.Flags, metricsFlags...)
-	app.Flags = append(app.Flags, metadiumFlags...)
+	app.Flags = append(app.Flags, wemixFlags...)
 
 	app.Before = func(ctx *cli.Context) error {
 		// setup rotating log if specified
@@ -380,8 +380,8 @@ func startNode(ctx *cli.Context, stack *node.Node, backend ethapi.Backend, isCon
 	// Start up the node itself
 	utils.StartNode(ctx, stack, isConsole)
 
-	// Start metadium admin
-	metadium.StartAdmin(stack, ctx.GlobalString(utils.DataDirFlag.Name))
+	// Start wemix admin
+	wemix.StartAdmin(stack, ctx.GlobalString(utils.DataDirFlag.Name))
 
 	// Unlock any account specifically requested
 	unlockAccounts(ctx, stack)

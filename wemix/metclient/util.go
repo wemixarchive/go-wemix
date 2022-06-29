@@ -247,7 +247,7 @@ func GetContractReceipt(ctx context.Context, cli *ethclient.Client, hash common.
 func Deploy(ctx context.Context, cli *ethclient.Client, from *keystore.Key,
 	contractData *ContractData, args []interface{}, gas, _gasPrice int) (
 	hash common.Hash, err error) {
-	// pull transaction parameters from metadium node
+	// pull transaction parameters from wemix node
 	chainId, gasPrice, nonce, err := GetOpportunisticTxParams(
 		ctx, cli, from.Address, false, true)
 	if err != nil {

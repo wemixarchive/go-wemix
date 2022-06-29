@@ -200,8 +200,8 @@ web3._extend({
 			params: 1
 		}),
 		new web3._extend.Method({
-			name: 'metadiumNodes',
-			call: 'admin_metadiumNodes',
+			name: 'wemixNodes',
+			call: 'admin_wemixNodes',
 			params: 2,
 			inputFormatter: [null, null]
 		}),
@@ -264,8 +264,8 @@ web3._extend({
 			getter: 'admin_datadir'
 		}),
 		new web3._extend.Property({
-			name: 'metadiumInfo',
-			getter: 'admin_metadiumInfo'
+			name: 'wemixInfo',
+			getter: 'admin_wemixInfo'
 		}),
 	]
 });

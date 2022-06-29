@@ -168,7 +168,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	stored := rawdb.ReadCanonicalHash(db, 0)
 	if (stored == common.Hash{}) {
 		if genesis == nil {
-			log.Info("Writing default metadium main-net genesis block")
+			log.Info("Writing default wemix main-net genesis block")
 			genesis = DefaultGenesisBlock()
 		} else {
 			log.Info("Writing custom genesis block")
@@ -394,8 +394,8 @@ func DefaultGenesisBlock() *Genesis {
 		return genesis
 	} else {
 		genesis = new(Genesis)
-		if err := json.NewDecoder(strings.NewReader(metadiumMainnetGenesisJson)).Decode(genesis); err != nil {
-			panic("Cannot parse default metadium mainnet genesis.")
+		if err := json.NewDecoder(strings.NewReader(wemixMainnetGenesisJson)).Decode(genesis); err != nil {
+			panic("Cannot parse default wemix mainnet genesis.")
 		}
 		return genesis
 	}
@@ -424,8 +424,8 @@ func DefaultTestnetGenesisBlock() *Genesis {
 		return genesis
 	} else {
 		genesis = new(Genesis)
-		if err := json.NewDecoder(strings.NewReader(metadiumTestnetGenesisJson)).Decode(genesis); err != nil {
-			panic("Cannot parse default metadium testnet genesis.")
+		if err := json.NewDecoder(strings.NewReader(wemixTestnetGenesisJson)).Decode(genesis); err != nil {
+			panic("Cannot parse default wemix testnet genesis.")
 		}
 		return genesis
 	}

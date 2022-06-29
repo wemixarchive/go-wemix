@@ -1,4 +1,4 @@
-// Copyright 2019 The go-ethereum / go-metadium Authors
+// Copyright 2019 The go-ethereum / go-metadium / go-wemix Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify

@@ -179,7 +179,7 @@ const (
 	ConsensusMax
 )
 
-// metadium parameters
+// wemix parameters
 var (
 	ConsensusMethod      int    = ConsensusPoA // consensus method
 	FixedDifficulty      uint64 = 1            // 0 means no fixed difficulty

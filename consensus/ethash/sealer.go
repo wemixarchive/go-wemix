@@ -34,7 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 const (
@@ -50,8 +50,8 @@ var (
 // Seal implements consensus.Engine, attempting to find a nonce that satisfies
 // the block's difficulty requirements.
 func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	if !metaminer.IsPoW() {
-		// In Metadium, return immediately
+	if !wemixminer.IsPoW() {
+		// In Wemix, return immediately
 		ethash.lock.Lock()
 		if ethash.rand == nil {
 			seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
@@ -163,7 +163,7 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 		number  = header.Number.Uint64()
 		dataset *dataset
 	)
-	if metaminer.IsPoW() {
+	if wemixminer.IsPoW() {
 		dataset = ethash.dataset(number, false)
 	}
 	// Start generating random nonces until we abort or find a good one
@@ -192,7 +192,7 @@ search:
 			}
 			// Compute the PoW value of this nonce
 			var digest, result []byte
-			if metaminer.IsPoW() {
+			if wemixminer.IsPoW() {
 				digest, result = hashimotoFull(dataset.dataset, hash, nonce)
 			} else {
 				digest, result = hashimeta(hash, nonce)

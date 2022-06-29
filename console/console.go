@@ -139,7 +139,7 @@ func (c *Console) init(preload []string) error {
 		return err
 	}
 
-	// Metadium: set console prompter
+	// Wemix: set console prompter
 	jsre.PromptPassword = prompt.PromptPassword
 
 	// Add bridge overrides for web3.js functionality.

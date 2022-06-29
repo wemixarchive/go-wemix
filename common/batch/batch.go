@@ -86,9 +86,9 @@ func (b *Batch) Run() {
 				// do it
 				e := b.f(data, len(data))
 				if e != nil {
-					log.Error("Metadium Server", "Failed", e)
+					log.Error("Server", "Failed", e)
 				} else {
-					log.Debug("Metadium Server", "Count", len(data))
+					log.Debug("Server", "Count", len(data))
 				}
 				data = nil
 			} else {
@@ -100,9 +100,9 @@ func (b *Batch) Run() {
 					// do it
 					e := b.f(data, b.batchCount)
 					if e != nil {
-						log.Error("Metadium Server", "Failed", e)
+						log.Error("Server", "Failed", e)
 					} else {
-						log.Debug("Metadium Server", "Count", b.batchCount)
+						log.Debug("Server", "Count", b.batchCount)
 					}
 					data = data[b.batchCount:]
 				}
@@ -127,9 +127,9 @@ func (b *Batch) Run() {
 		}
 		e := b.f(data, l)
 		if e != nil {
-			log.Error("Metadium Server", "Failed", e)
+			log.Error("Server", "Failed", e)
 		} else {
-			log.Debug("Metadium Server", "Count", l)
+			log.Debug("Server", "Count", l)
 		}
 		data = data[l:]
 	}

@@ -38,7 +38,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	metaminer "github.com/ethereum/go-ethereum/metadium/miner"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 	"github.com/hashicorp/go-bexpr"
 )
 
@@ -285,5 +285,5 @@ func (*HandlerT) DbStats(device string, b interface{}) []uint64 {
 }
 
 func (*HandlerT) VerifyBlockRewards(block *big.Int) interface{} {
-	return metaminer.VerifyBlockRewards(block)
+	return wemixminer.VerifyBlockRewards(block)
 }

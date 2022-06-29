@@ -1,24 +1,24 @@
-## Go NxtMeta
+## Go Wemix
 
-Golang implementation of the NxtMeta project.
+Golang implementation of the Wemix project.
 
 ## Building
 
-`geth` has been renamed to `gnxt`. Building it is the same as go-ethereum.
+`geth` has been renamed to `gwemix`. Building it is the same as go-ethereum.
 
-    make gnxt
+    make gwemix
 
 For the convenience of installation, other targets have been added to the default target.
 
     make
 
-will build `logrot` (log rotator) and `nxtmeta.tar.gz` in `build` directory, in addtion. `nxtmeta.tar.gz` has the following files.
+will build `logrot` (log rotator) and `gwemix.tar.gz` in `build` directory, in addtion. `gwemix.tar.gz` has the following files.
 
-    bin/gnxt
-    bin/gnxt.sh
+    bin/gwemix
+    bin/gwemix.sh
     bin/solc.sh
     bin/logrot
-    conf/MetadiumGovernance.js
+    conf/WemixGovernance.js
     conf/genesis-template.json
     conf/config.json.example
     
@@ -26,9 +26,9 @@ will build `logrot` (log rotator) and `nxtmeta.tar.gz` in `build` directory, in 
 
 As we use `rocksdb` `C` implementation for better performance, library dependency becomes an issue. To mitigate that, we use a docker image to build our official image.
 
-    make gnxt-linux
+    make wemix-linux
 
-will build gnxt for ubuntu.
+will build gwemix for ubuntu.
 
 ### Build with LevelDB instead of Rocksdb
 
@@ -38,47 +38,47 @@ To avoid library dependency issue, one can forgo `rocksdb` with
 
 This is default behavior in non-linux environment, e.g. in MacOS X.
 
-## Join the NxtMeta Mainnet or Testnet
+## Join the Wemix Mainnet or Testnet
 
-One can use the following command lines to join the NxtMeta networks. Note that the default RPC port for `gnxt` is 8588, and p2p port is 8589. As with `geth`, if `--datadir` is missing, ~/.nxtmeta is the data directory. 
+One can use the following command lines to join the Wemix networks. Note that the default RPC port for `gwemix` is 8588, and p2p port is 8589. As with `geth`, if `--datadir` is missing, ~/.wemix is the data directory.
 
-### NxtMeta Mainnet
+### Wemix Mainnet
 
-    gnxt --syncmode full --datadir {data_folder} --rpc --rpcaddr 0.0.0.0
+    gwemix --syncmode full --datadir {data_folder} --rpc --rpcaddr 0.0.0.0
     
-### NxtMeta Testnet
+### Wemix Testnet
 
-    gnxt --testnet</b> --syncmode full --datadir {data_folder} --rpc --rpcaddr 0.0.0.0
+    gwemix --wemix-testnet --syncmode full --datadir {data_folder} --rpc --rpcaddr 0.0.0.0
 
 ## Setting Up a New Network
 
-One can use `gnxt.sh` script to make setup process a little easier. `gnxt.sh` assumes nxtmeta data directory to be `/opt/<node-name>`
+One can use `gwemix.sh` script to make setup process a little easier. `gwemix.sh` assumes wemix data directory to be `/opt/<node-name>`
 
 ### Initial Network
 
-First create data directory in `/opt/`, say `/opt/meta`. Then, unpack nxtmeta.tar.gz in the directory.
+First create data directory in `/opt/`, say `/opt/wemix`. Then, unpack gwemix.tar.gz in the directory.
 
-    mkdir /opt/meta
-    cd /opt/meta
-    tar xvfz <dir>/nxtmeta.tar.gz
+    mkdir /opt/wemix
+    cd /opt/wemix
+    tar xvfz <dir>/gwemix.tar.gz
 
 Once initial members / accounts and nodes are determined (at least one member / account and node are required), create a configuration file using `conf/config.json.example` as a template, say `config.json`. A member designated as `bootnode` has a special meaning. Only that account can create the governance contracts, and only that node is allowed to generate blocks before governance contracts are established. These are recorded in the genesis block as the `coinbase` and the last 64 bytes of the `extraData`.
 
 #### Account and Node IDs
 
-One can reuse existing accounts and nodes. Account files are in `keystore` directory, and `geth/nodekey` is the node key / id file. Or one can use `gnxt` to create accounts and node keys, and copy them to data directory.
+One can reuse existing accounts and nodes. Account files are in `keystore` directory, and `geth/nodekey` is the node key / id file. Or one can use `gwemix` to create accounts and node keys, and copy them to data directory.
 
 To create a new account file, run the following.
 
-    bin/gnxt metadium new-account --out <account-file-name>
+    bin/gwemix wemix new-account --out <account-file-name>
 
 To create a new node key,
 
-    bin/gnxt metadium new-nodekey --out <node-key-file-name>
+    bin/gwemix wemix new-nodekey --out <node-key-file-name>
 
 To get node id, which is the public key of a `nodekey`.
 
-    bin/gnxt metadium nodeid <node-key-file-name>
+    bin/gwemix wemix nodeid <node-key-file-name>
     
 `idv5` is the one that should be used in config.json file.
 
@@ -97,26 +97,26 @@ The same for accounts
 
 Running the following command generates `genesis.json`.
 
-    bin/gnxt.sh init <node-name> config.json
+    bin/gwemix.sh init <node-name> config.json
 
 e.g.
 
-    bin/gnxt.sh init meta config.json
+    bin/gwemix.sh init wemix config.json
 
 Copy the newly created `genesis.json` to other nodes's data directories.
 
-Now start gnxt.
+Now start gwemix.
 
-    bin/gnxt.sh start
+    bin/gwemix.sh start
 
 It's time to initialize governance contracts. Here we'll do a simple one-stop setup. Note that this is just for test. The real governance setup is a multi step process involving several proposals and votes. We'll prepare detailed governance setup documents later. Fow now, just do the following is enough.
 
-    bin/gnxt.sh init-gov meta config.json <account-file>
+    bin/gwemix.sh init-gov wemix config.json <account-file>
     
 Now start the console, and check if governance contracts are set up or not.
 
-    bin/gnxt.sh console
-    > admin.metadiumInfo
+    bin/gwemix.sh console
+    > admin.wemixInfo
 
 If this shows nodes as configured in config.json, it's time to initialize etcd.
 
@@ -124,47 +124,47 @@ If this shows nodes as configured in config.json, it's time to initialize etcd.
 
 Check if `etcd` is configured successfully.
 
-    > admin.metadiumInfo.etcd
+    > admin.wemixInfo.etcd
 
 #### Other Initial Nodes
 
 Set up the data directory and copy the `genesis` file as follows.
 
-    mkdir /opt/meta
-    cd /opt/meta
+    mkdir /opt/wemix
+    cd /opt/wemix
     mkdir geth
     cp <node-key-file> geth/nodekey
     mkdir keystore
     chmod 0700 keystore
     cp <account-files> keystore/
-    tar xvfz <dir>/nxtmeta.tar.gz
+    tar xvfz <dir>/wemix.tar.gz
     # copy genesis.json
-    bin/gnxt.sh start
+    bin/gwemix.sh start
 
 Once these nodes are setup, the first node will automatically connect and chain synchronization will follow.
 
-### NxtMeta Info
+### Wemix Info
 
-    bin/gnxt.sh console
+    bin/gwemix.sh console
     ...
-    > admin.metadiumInfo
+    > admin.wemixInfo
 
 ### Starting & Stopping Nodes
 
 To start or stop a single node
 
-    bin/gnxt.sh start
-    bin/gnxt.sh stop
+    bin/gwemix.sh start
+    bin/gwemix.sh stop
 
 ### Starting Non-mining Nodes
 
 First download genesis.json from existing nodes to a data directory.
 
-    bin/gnxt metadium download-genesis --url http://<ip> --out genesis.json
+    bin/gwemix wemix download-genesis --url http://<ip> --out genesis.json
 
-After getting enodes of mining nodes, run gnxt as follows.
+After getting enodes of mining nodes, run gwemix as follows.
 
-    bin/gnxt --syncmode full --datadir <data-directory> --bootnodes <enodes> --rpc --rpcaddr 0.0.0.0
+    bin/gwemix --syncmode full --datadir <data-directory> --bootnodes <enodes> --rpc --rpcaddr 0.0.0.0
 
 ### The original go-ethereum README follows...
 

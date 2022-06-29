@@ -1,4 +1,4 @@
-// metadium_config.go
+// wemix_config.go
 
 package params
 
