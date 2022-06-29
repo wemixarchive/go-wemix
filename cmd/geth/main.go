@@ -54,7 +54,7 @@ import (
 )
 
 const (
-	clientIdentifier = "gmet" // Client identifier to advertise over the network
+	clientIdentifier = "gwemix" // Client identifier to advertise over the network
 )
 
 var (
@@ -62,7 +62,7 @@ var (
 	gitCommit = ""
 	gitDate   = ""
 	// The app that holds all commands and flags.
-	app = flags.NewApp(gitCommit, gitDate, "the go-ethereum command line interface")
+	app = flags.NewApp(gitCommit, gitDate, "the go-wemix command line interface")
 	// flags that configure the node
 	nodeFlags = []cli.Flag{
 		utils.IdentityFlag,

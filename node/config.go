@@ -277,8 +277,8 @@ func (c *Config) ExtRPCEnabled() bool {
 func (c *Config) NodeName() string {
 	name := c.name()
 	// Backwards compatibility: previous versions used title-cased "Geth", keep that.
-	if name == "geth" || name == "geth-testnet" || name == "gmet" || name == "gmet-testnet" {
-		name = "Gmet"
+	if name == "geth" || name == "geth-testnet" || name == "gwemix" || name == "gwemix-testnet" {
+		name = "Gwemix"
 	}
 	if c.UserIdent != "" {
 		name += "/" + c.UserIdent
@@ -297,11 +297,11 @@ func (c *Config) name() string {
 		if progname == "" {
 			panic("empty executable name, set Config.Name")
 		}
-		if strings.EqualFold(c.Name, "gmet") {
+		if strings.EqualFold(c.Name, "gwemix") {
 			progname = "geth"
 		}
 		return progname
-	} else if strings.EqualFold(c.Name, "gmet") {
+	} else if strings.EqualFold(c.Name, "gwemix") {
 		return "geth"
 	}
 	return c.Name

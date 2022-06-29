@@ -181,7 +181,7 @@ func (re *JSRE) offlineWalletOpen(call Call) (goja.Value, error) {
 	}
 
 	switch u.Scheme {
-	case "", "geth", "gmet":
+	case "", "geth", "gwemix":
 		id, addr, err := loadGethAccount(password, path)
 		if err != nil {
 			return nil, err
