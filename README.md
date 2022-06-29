@@ -44,11 +44,11 @@ One can use the following command lines to join the Wemix networks. Note that th
 
 ### Wemix Mainnet
 
-    gwemix --syncmode full --datadir {data_folder} --rpc --rpcaddr 0.0.0.0
+    gwemix --syncmode full --datadir {data_folder} --http --http.addr 0.0.0.0
     
 ### Wemix Testnet
 
-    gwemix --wemix-testnet --syncmode full --datadir {data_folder} --rpc --rpcaddr 0.0.0.0
+    gwemix --wemix-testnet --syncmode full --datadir {data_folder} --http --http.addr 0.0.0.0
 
 ## Setting Up a New Network
 
@@ -164,7 +164,7 @@ First download genesis.json from existing nodes to a data directory.
 
 After getting enodes of mining nodes, run gwemix as follows.
 
-    bin/gwemix --syncmode full --datadir <data-directory> --bootnodes <enodes> --rpc --rpcaddr 0.0.0.0
+    bin/gwemix --syncmode full --datadir <data-directory> --bootnodes <enodes> --http --http.addr 0.0.0.0
 
 ### The original go-ethereum README follows...
 
