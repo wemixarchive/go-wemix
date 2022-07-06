@@ -84,7 +84,7 @@ type Header struct {
 	Rewards      []byte         `json:"rewards"          gencodec:"required"`
 	MixDigest    common.Hash    `json:"mixHash"`
 	Nonce        BlockNonce     `json:"nonce"`
-	MinerNodeId  []byte         `json:"minerNode"`
+	MinerNodeId  []byte         `json:"minerNodeId"`
 	MinerNodeSig []byte         `json:"minerNodeSig"`
 
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
