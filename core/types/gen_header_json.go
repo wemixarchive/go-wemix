@@ -16,27 +16,27 @@ var _ = (*headerMarshaling)(nil)
 // MarshalJSON marshals as JSON.
 func (h Header) MarshalJSON() ([]byte, error) {
 	type Header struct {
-		ParentHash   common.Hash   `json:"parentHash"       gencodec:"required"`
-		UncleHash    common.Hash   `json:"sha3Uncles"       gencodec:"required"`
-		Coinbase     common.Address`json:"miner"            gencodec:"required"`
-		Root         common.Hash   `json:"stateRoot"        gencodec:"required"`
-		TxHash       common.Hash   `json:"transactionsRoot" gencodec:"required"`
-		ReceiptHash  common.Hash   `json:"receiptsRoot"     gencodec:"required"`
-		Bloom        Bloom         `json:"logsBloom"        gencodec:"required"`
-		Difficulty   *hexutil.Big  `json:"difficulty"       gencodec:"required"`
-		Number       *hexutil.Big  `json:"number"           gencodec:"required"`
-		GasLimit     hexutil.Uint64 `json:"gasLimit"        gencodec:"required"`
-		GasUsed      hexutil.Uint64 `json:"gasUsed"         gencodec:"required"`
-		Fees         *hexutil.Big   `json:"fees"            gencodec:"required"`
-		Time         hexutil.Uint64 `json:"timestamp"       gencodec:"required"`
-		Extra        hexutil.Bytes `json:"extraData"        gencodec:"required"`
-		Rewards	     []byte        `json:"rewards"          gencodec:"required"`
-		MixDigest    common.Hash   `json:"mixHash"`
-		Nonce        BlockNonce    `json:"nonce"`
-		MinerNodeId  hexutil.Bytes `json:"minderNodeId"`
-		MinerNodeSig hexutil.Bytes `json:"minderNodeId"`
-		BaseFee     *hexutil.Big   `json:"baseFeePerGas" rlp:"optional"`
-		Hash         common.Hash   `json:"hash"`
+		ParentHash   common.Hash    `json:"parentHash"       gencodec:"required"`
+		UncleHash    common.Hash    `json:"sha3Uncles"       gencodec:"required"`
+		Coinbase     common.Address `json:"miner"            gencodec:"required"`
+		Root         common.Hash    `json:"stateRoot"        gencodec:"required"`
+		TxHash       common.Hash    `json:"transactionsRoot" gencodec:"required"`
+		ReceiptHash  common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+		Bloom        Bloom          `json:"logsBloom"        gencodec:"required"`
+		Difficulty   *hexutil.Big   `json:"difficulty"       gencodec:"required"`
+		Number       *hexutil.Big   `json:"number"           gencodec:"required"`
+		GasLimit     hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
+		GasUsed      hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
+		Fees         *hexutil.Big   `json:"fees"             gencodec:"required"`
+		Time         hexutil.Uint64 `json:"timestamp"        gencodec:"required"`
+		Extra        hexutil.Bytes  `json:"extraData"        gencodec:"required"`
+		Rewards      hexutil.Bytes  `json:"rewards"          gencodec:"required"`
+		MixDigest    common.Hash    `json:"mixHash"`
+		Nonce        BlockNonce     `json:"nonce"`
+		MinerNodeId  hexutil.Bytes  `json:"minerNodeId"`
+		MinerNodeSig hexutil.Bytes  `json:"minerNodeSig"`
+		BaseFee      *hexutil.Big   `json:"baseFeePerGas" rlp:"optional"`
+		Hash         common.Hash    `json:"hash"`
 	}
 	var enc Header
 	enc.ParentHash = h.ParentHash
