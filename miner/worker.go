@@ -1513,7 +1513,7 @@ func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) 
 	num.Add(num, common.Big1)
 	now := time.Now()
 	nowInSeconds := now.Unix()
-	nowInMilliSeconds := now.UnixMilli()
+	nowInMilliSeconds := now.UnixNano() / 1e3 // convert to millisecond
 
 	check := func(heightToPeek int64) (offset int, height, stamp uint64, dt int64) {
 		if heightToPeek > maxPeekBack {
@@ -1574,7 +1574,7 @@ func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) 
 			// make sure that no more than 2 blocks have the same timestamp
 			tms = (nowInSeconds + 1) * 1000
 		}
-		till = time.UnixMilli(tms)
+		till = time.Unix(tms/1e3, (tms%1e3)*1e6)
 		log.Debug("time-it", "behind", timestamp, "duration", tms-nowInMilliSeconds)
 	case 1: // ahead, i.e. too many blocks, need to slow down
 		tms := nowInMilliSeconds + blockInterval*1000 + params.BlockMinBuildTime
@@ -1582,7 +1582,7 @@ func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) 
 			// make sure time stamp doesn't jump by blockInterval + 2
 			tms = (nowInSeconds+blockInterval+1)*1000 - params.BlockTrailTime
 		}
-		till = time.UnixMilli(tms)
+		till = time.Unix(tms/1e3, (tms%1e3)*1e6)
 		log.Debug("time-it", "ahead", timestamp, "duration", tms-nowInMilliSeconds)
 	default: // on schedule
 		tms := nowInMilliSeconds + blockInterval*1000 - params.BlockTrailTime
@@ -1590,7 +1590,7 @@ func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) 
 			// make sure time stamp doesn't jump by 2
 			tms = (nowInSeconds+2)*1000 - params.BlockTrailTime
 		}
-		till = time.UnixMilli(tms)
+		till = time.Unix(tms/1e3, (tms%1e3)*1e6) // time.UnixMilli() is av supported until
 		log.Debug("time-it", "on-schedule", timestamp, "duration", tms-nowInMilliSeconds)
 	}
 	return timestamp, till
