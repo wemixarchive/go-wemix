@@ -472,6 +472,8 @@ func (s *Service) login(conn *connWrapper) error {
 	var network string
 	if info := infos.Protocols["eth"]; info != nil {
 		network = fmt.Sprintf("%d", info.(*ethproto.NodeInfo).Network)
+	} else if info := infos.Protocols["meta"]; info != nil {
+		network = fmt.Sprintf("%d", info.(*ethproto.NodeInfo).Network)
 	} else {
 		network = fmt.Sprintf("%d", infos.Protocols["les"].(*les.NodeInfo).Network)
 	}
