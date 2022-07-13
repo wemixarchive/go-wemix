@@ -27,15 +27,15 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		Number       *hexutil.Big   `json:"number"           gencodec:"required"`
 		GasLimit     hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
 		GasUsed      hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
-		Fees         *hexutil.Big   `json:"fees"             gencodec:"required"`
 		Time         hexutil.Uint64 `json:"timestamp"        gencodec:"required"`
 		Extra        hexutil.Bytes  `json:"extraData"        gencodec:"required"`
-		Rewards      hexutil.Bytes  `json:"rewards"          gencodec:"required"`
 		MixDigest    common.Hash    `json:"mixHash"`
 		Nonce        BlockNonce     `json:"nonce"`
-		MinerNodeId  hexutil.Bytes  `json:"minerNodeId"`
-		MinerNodeSig hexutil.Bytes  `json:"minerNodeSig"`
 		BaseFee      *hexutil.Big   `json:"baseFeePerGas" rlp:"optional"`
+		Fees         *hexutil.Big   `json:"fees" rlp:"optional"`
+		Rewards      hexutil.Bytes  `json:"rewards" rlp:"optional"`
+		MinerNodeId  hexutil.Bytes  `json:"minerNodeId" rlp:"optional"`
+		MinerNodeSig hexutil.Bytes  `json:"minerNodeSig" rlp:"optional"`
 		Hash         common.Hash    `json:"hash"`
 	}
 	var enc Header
@@ -50,15 +50,15 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.Number = (*hexutil.Big)(h.Number)
 	enc.GasLimit = hexutil.Uint64(h.GasLimit)
 	enc.GasUsed = hexutil.Uint64(h.GasUsed)
-	enc.Fees = (*hexutil.Big)(h.Fees)
 	enc.Time = hexutil.Uint64(h.Time)
 	enc.Extra = h.Extra
-	enc.Rewards = h.Rewards
 	enc.MixDigest = h.MixDigest
 	enc.Nonce = h.Nonce
+	enc.BaseFee = (*hexutil.Big)(h.BaseFee)
+	enc.Fees = (*hexutil.Big)(h.Fees)
+	enc.Rewards = h.Rewards
 	enc.MinerNodeId = h.MinerNodeId
 	enc.MinerNodeSig = h.MinerNodeSig
-	enc.BaseFee = (*hexutil.Big)(h.BaseFee)
 	enc.Hash = h.Hash()
 	return json.Marshal(&enc)
 }
@@ -77,15 +77,15 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		Number       *hexutil.Big    `json:"number"           gencodec:"required"`
 		GasLimit     *hexutil.Uint64 `json:"gasLimit"         gencodec:"required"`
 		GasUsed      *hexutil.Uint64 `json:"gasUsed"          gencodec:"required"`
-		Fees         *hexutil.Big    `json:"fees"             gencodec:"required"`
 		Time         *hexutil.Uint64 `json:"timestamp"        gencodec:"required"`
 		Extra        *hexutil.Bytes  `json:"extraData"        gencodec:"required"`
-		Rewards      *hexutil.Bytes  `json:"rewards"          gencodec:"required"`
 		MixDigest    *common.Hash    `json:"mixHash"`
 		Nonce        *BlockNonce     `json:"nonce"`
-		MinerNodeId  *hexutil.Bytes  `json:"minerNodeId"`
-		MinerNodeSig *hexutil.Bytes  `json:"minerNodeSig"`
 		BaseFee      *hexutil.Big    `json:"baseFeePerGas" rlp:"optional"`
+		Fees         *hexutil.Big    `json:"fees" rlp:"optional"`
+		Rewards      *hexutil.Bytes  `json:"rewards" rlp:"optional"`
+		MinerNodeId  *hexutil.Bytes  `json:"minerNodeId" rlp:"optional"`
+		MinerNodeSig *hexutil.Bytes  `json:"minerNodeSig" rlp:"optional"`
 	}
 	var dec Header
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -135,10 +135,6 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'gasUsed' for Header")
 	}
 	h.GasUsed = uint64(*dec.GasUsed)
-	if dec.Fees == nil {
-		return errors.New("missing required field 'fees' for Header")
-	}
-	h.Fees = (*big.Int)(dec.Fees)
 	if dec.Time == nil {
 		return errors.New("missing required field 'timestamp' for Header")
 	}
@@ -147,24 +143,26 @@ func (h *Header) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'extraData' for Header")
 	}
 	h.Extra = *dec.Extra
-	if dec.Rewards == nil {
-		return errors.New("missing required field 'rewards' for Header")
-	}
-	h.Rewards = *dec.Rewards
 	if dec.MixDigest != nil {
 		h.MixDigest = *dec.MixDigest
 	}
 	if dec.Nonce != nil {
 		h.Nonce = *dec.Nonce
 	}
+	if dec.BaseFee != nil {
+		h.BaseFee = (*big.Int)(dec.BaseFee)
+	}
+	if dec.Fees != nil {
+		h.Fees = (*big.Int)(dec.Fees)
+	}
+	if dec.Rewards != nil {
+		h.Rewards = *dec.Rewards
+	}
 	if dec.MinerNodeId != nil {
 		h.MinerNodeId = *dec.MinerNodeId
 	}
 	if dec.MinerNodeSig != nil {
 		h.MinerNodeSig = *dec.MinerNodeSig
-	}
-	if dec.BaseFee != nil {
-		h.BaseFee = (*big.Int)(dec.BaseFee)
 	}
 	return nil
 }

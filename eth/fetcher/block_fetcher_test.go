@@ -845,6 +845,11 @@ func TestEmptyBlockShortCircuit(t *testing.T) {
 // block announcements to a node, but that even in the face of such an attack,
 // the fetcher remains operational.
 func TestHashMemoryExhaustionAttack(t *testing.T) {
+	if params.ConsensusMethod == params.ConsensusPoW {
+		// wemix: this test doesn't apply
+		return
+	}
+
 	// Create a tester with instrumented import hooks
 	tester := newTester(false)
 

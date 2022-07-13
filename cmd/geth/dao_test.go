@@ -105,6 +105,11 @@ func TestDAOForkBlockNewChain(t *testing.T) {
 }
 
 func testDAOForkBlockNewChain(t *testing.T, test int, genesis string, expectBlock *big.Int, expectVote bool) {
+	if params.ConsensusMethod == params.ConsensusPoW {
+		// wemix: not applicable
+		return
+	}
+
 	// Create a temporary data directory to use and inspect later
 	datadir := tmpdir(t)
 	defer os.RemoveAll(datadir)

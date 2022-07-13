@@ -85,8 +85,12 @@ func (set *unconfirmedBlocks) Insert(index uint64, hash common.Hash) {
 	}
 	// Display a log for the user to notify of a new mined block unconfirmed
 	header := set.chain.GetHeaderByNumber(index)
-	go wemixminer.LogBlock(header.Number.Int64(), hash)
-	log.Info("🔨 mined potential block", "number", index, "hash", hash, "elapsed", common.PrettyDuration(time.Since(time.Unix(int64(header.Time), 0))))
+	if header == nil {
+		log.Info("🔨 mined potential block", "number", index, "hash", hash)
+	} else {
+		go wemixminer.LogBlock(header.Number.Int64(), hash)
+		log.Info("🔨 mined potential block", "number", index, "hash", hash, "elapsed", common.PrettyDuration(time.Since(time.Unix(int64(header.Time), 0))))
+	}
 }
 
 // Shift drops all unconfirmed blocks from the set which exceed the unconfirmed sets depth

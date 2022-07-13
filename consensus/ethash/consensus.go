@@ -712,7 +712,9 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		} else {
 			if err == wemixminer.ErrNotInitialized {
 				reward := new(big.Int)
-				reward.Add(blockReward, header.Fees)
+				if header.Fees != nil {
+					reward.Add(blockReward, header.Fees)
+				}
 				state.AddBalance(header.Coinbase, reward)
 				return nil
 			}

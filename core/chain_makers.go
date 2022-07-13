@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 // BlockGen creates blocks for testing.
@@ -308,7 +309,12 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 	if chain.Config().IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(chain.Config(), parent.Header())
 		if !chain.Config().IsLondon(parent.Number()) {
-			header.GasLimit = parent.GasLimit()
+			if wemixminer.IsPoW() {
+				parentGasLimit := parent.GasLimit() * params.ElasticityMultiplier
+				header.GasLimit = CalcGasLimit(parentGasLimit, parentGasLimit)
+			} else {
+				header.GasLimit = parent.GasLimit()
+			}
 		}
 	}
 	return header

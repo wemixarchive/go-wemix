@@ -31,14 +31,20 @@ import (
 // - gas limit check
 // - basefee check
 func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Header) error {
-	_, _, _, _, gasTargetPercentage, err := wemixminer.GetBlockBuildParameters(parent.Number)
-	if err == wemixminer.ErrNotInitialized {
-		return nil
-	}
 	// Verify that the gas limit remains within allowed bounds
 	parentGasLimit := parent.GasLimit
-	if !config.IsLondon(parent.Number) {
-		parentGasLimit = parent.GasLimit * uint64(gasTargetPercentage) / 100
+	if wemixminer.IsPoW() {
+		if !config.IsLondon(parent.Number) {
+			parentGasLimit = parent.GasLimit * params.ElasticityMultiplier
+		}
+	} else {
+		_, _, _, _, gasTargetPercentage, err := wemixminer.GetBlockBuildParameters(parent.Number)
+		if err == wemixminer.ErrNotInitialized {
+			return nil
+		}
+		if !config.IsLondon(parent.Number) {
+			parentGasLimit = parent.GasLimit * uint64(gasTargetPercentage) / 100
+		}
 	}
 	if err := VerifyGaslimit(parentGasLimit, header.GasLimit); err != nil {
 		return err
@@ -60,18 +66,27 @@ func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Heade
 func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 	// If the current block is the first EIP-1559 block, return the InitialBaseFee.
 	if !config.IsLondon(parent.Number) {
-		return new(big.Int).SetUint64(params.InitialBaseFee)
+		return new(big.Int).SetInt64(params.InitialBaseFee)
 	}
-	// NB: in Wemix both elasticityMultiplier & baseFeeChangeDenominator are percentage numbers
-	_, maxBaseFee, _, baseFeeMaxChangeRate, gasTargetPercentage, err := wemixminer.GetBlockBuildParameters(parent.Number)
-	if err == wemixminer.ErrNotInitialized {
-		return new(big.Int).Set(parent.BaseFee)
-	}
+
 	var (
-		parentGasTarget    = parent.GasLimit * uint64(gasTargetPercentage) / 100
-		parentGasTargetBig = new(big.Int).SetUint64(parentGasTarget)
-		baseFeeChangeRate  = new(big.Int).SetInt64(baseFeeMaxChangeRate)
+		parentGasTarget          = parent.GasLimit / params.ElasticityMultiplier
+		parentGasTargetBig       = new(big.Int).SetUint64(parentGasTarget)
+		baseFeeChangeDenominator = new(big.Int).SetUint64(params.BaseFeeChangeDenominator)
+		baseFeeChangeRate        *big.Int
+		maxBaseFee               *big.Int
 	)
+	if !wemixminer.IsPoW() {
+		// NB: in Wemix both elasticityMultiplier & baseFeeChangeDenominator are percentage numbers
+		_, maxBaseFeeGov, _, baseFeeMaxChangeRate, gasTargetPercentage, err := wemixminer.GetBlockBuildParameters(parent.Number)
+		if err == wemixminer.ErrNotInitialized {
+			return new(big.Int).Set(parent.BaseFee)
+		}
+		parentGasTarget = parent.GasLimit * uint64(gasTargetPercentage) / 100
+		parentGasTargetBig = new(big.Int).SetUint64(parentGasTarget)
+		baseFeeChangeRate = new(big.Int).SetInt64(baseFeeMaxChangeRate)
+		maxBaseFee = maxBaseFeeGov
+	}
 	// If the parent gasUsed is the same as the target, the baseFee remains unchanged.
 	if parent.GasUsed == parentGasTarget {
 		return new(big.Int).Set(parent.BaseFee)
@@ -81,19 +96,35 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 		gasUsedDelta := new(big.Int).SetUint64(parent.GasUsed - parentGasTarget)
 		x := new(big.Int).Mul(parent.BaseFee, gasUsedDelta)
 		y := x.Div(x, parentGasTargetBig)
-		baseFeeDelta := math.BigMax(
-			x.Div(y.Mul(y, baseFeeChangeRate), big.NewInt(100)),
-			common.Big1,
-		)
-		return math.BigMin(x.Add(parent.BaseFee, baseFeeDelta), maxBaseFee)
+		var baseFeeDelta *big.Int
+		if wemixminer.IsPoW() {
+			baseFeeDelta = math.BigMax(
+				x.Div(y, baseFeeChangeDenominator),
+				common.Big1,
+			)
+
+			return x.Add(parent.BaseFee, baseFeeDelta)
+		} else {
+			baseFeeDelta = math.BigMax(
+				x.Div(y.Mul(y, baseFeeChangeRate), big.NewInt(100)),
+				common.Big1,
+			)
+
+			return math.BigMin(x.Add(parent.BaseFee, baseFeeDelta), maxBaseFee)
+		}
 	} else {
 		// Otherwise if the parent block used less gas than its target, the baseFee should decrease.
 		gasUsedDelta := new(big.Int).SetUint64(parentGasTarget - parent.GasUsed)
 		x := new(big.Int).Mul(parent.BaseFee, gasUsedDelta)
 		y := x.Div(x, parentGasTargetBig)
-		baseFeeDelta := x.Div(y.Mul(y, baseFeeChangeRate), big.NewInt(100))
-		if baseFeeDelta.Cmp(common.Big0) == 0 && parent.BaseFee.Cmp(common.Big1) > 0 {
-			baseFeeDelta.SetUint64(1)
+		var baseFeeDelta *big.Int
+		if wemixminer.IsPoW() {
+			baseFeeDelta = x.Div(y, baseFeeChangeDenominator)
+		} else {
+			baseFeeDelta = x.Div(y.Mul(y, baseFeeChangeRate), big.NewInt(100))
+			if baseFeeDelta.Cmp(common.Big0) == 0 && parent.BaseFee.Cmp(common.Big1) > 0 {
+				baseFeeDelta.SetUint64(1)
+			}
 		}
 		return math.BigMax(
 			x.Sub(parent.BaseFee, baseFeeDelta),

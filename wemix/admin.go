@@ -180,9 +180,11 @@ func (ma *wemixAdmin) getGenesisInfo() (string, common.Address, error) {
 
 	var nodeId string
 	if len(block.Extra) < 64 {
-		panic("Invalid bootnode id in the genesis block.")
+		return "", common.Address{}, fmt.Errorf("Invalid bootnode id in the genesis block")
 	} else if len(block.Extra) == 64 {
 		nodeId = hex.EncodeToString(block.Extra)
+	} else if len(block.Extra) <= 128 {
+		return "", common.Address{}, fmt.Errorf("Invalid bootnode id in the genesis block")
 	} else {
 		nodeId = string(block.Extra[len(block.Extra)-128:])
 	}
@@ -721,7 +723,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 
 	admin.bootNodeId, admin.bootAccount, err = admin.getGenesisInfo()
 	if err != nil {
-		utils.Fatalf("Cannot get contract address from genesis block: %v", err)
+		return
 	}
 
 	go admin.run()

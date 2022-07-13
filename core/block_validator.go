@@ -85,7 +85,7 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	if block.GasUsed() != usedGas {
 		return fmt.Errorf("invalid gas used (remote: %d local: %d)", block.GasUsed(), usedGas)
 	}
-	if block.Fees().Cmp(fees) != 0 {
+	if !wemixminer.IsPoW() && block.Fees().Cmp(fees) != 0 {
 		return fmt.Errorf("invalid fees collected (remote: %v local: %v)", block.Fees(), fees)
 	}
 

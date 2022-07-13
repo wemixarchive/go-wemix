@@ -335,6 +335,10 @@ func testHeader(t *testing.T, chain []*types.Block, client *rpc.Client) {
 			if got != nil && got.Number != nil && got.Number.Sign() == 0 {
 				got.Number = big.NewInt(0) // hack to make DeepEqual work
 			}
+			if got != nil {
+				// hack to make DeepEqual work
+				got.Rewards, got.MinerNodeId, got.MinerNodeSig = nil, nil, nil
+			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("HeaderByNumber(%v)\n   = %v\nwant %v", tt.block, got, tt.want)
 			}

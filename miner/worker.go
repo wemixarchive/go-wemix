@@ -297,7 +297,11 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 
 	worker.wg.Add(4)
 	go worker.mainLoop()
-	go worker.newWorkLoopEx(recommit)
+	if wemixminer.IsPoW() {
+		go worker.newWorkLoop(recommit)
+	} else {
+		go worker.newWorkLoopEx(recommit)
+	}
 	go worker.resultLoop()
 	go worker.taskLoop()
 
@@ -598,8 +602,11 @@ func (w *worker) mainLoop() {
 		select {
 		case req := <-w.newWorkCh:
 			// In wemix, costly interrupt / resubmit is disabled
-			// w.commitWork(req.interrupt, req.noempty, req.timestamp)
-			w.commitWork(nil, req.noempty, req.timestamp)
+			if wemixminer.IsPoW() {
+				w.commitWork(req.interrupt, req.noempty, req.timestamp)
+			} else {
+				w.commitWork(nil, req.noempty, req.timestamp)
+			}
 
 		case req := <-w.getWorkCh:
 			block, err := w.generateWork(req.params)
@@ -1329,17 +1336,22 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	num.Add(num, common.Big1)
 
 	// wemix
-	timestamp, till = w.timeIt(int64(blockInterval))
+	if !wemixminer.IsPoW() {
+		timestamp, till = w.timeIt(int64(blockInterval))
+	}
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     num,
-		GasLimit:   core.CalcGasLimit(parent.GasLimit(), blockGasLimit.Uint64()),
+		GasLimit:   core.CalcGasLimit(parent.GasLimit(), w.config.GasCeil),
 		Fees:       big.NewInt(0),
 		Time:       timestamp,
 		Coinbase:   genParams.coinbase,
 	}
 	if !genParams.noExtra && len(w.extra) != 0 {
 		header.Extra = w.extra
+	}
+	if !wemixminer.IsPoW() {
+		header.GasLimit = core.CalcGasLimit(parent.GasLimit(), blockGasLimit.Uint64())
 	}
 	// Set the randomness field from the beacon chain if it's available.
 	if genParams.random != (common.Hash{}) {
@@ -1349,7 +1361,12 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if w.chainConfig.IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
 		if !w.chainConfig.IsLondon(parent.Number()) {
-			header.GasLimit = parent.GasLimit()
+			if wemixminer.IsPoW() {
+				parentGasLimit := parent.GasLimit() * params.ElasticityMultiplier
+				header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
+			} else {
+				header.GasLimit = parent.GasLimit()
+			}
 		}
 	}
 	// Run the consensus preparation with the default or customized consensus engine.
@@ -1365,7 +1382,9 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		log.Error("Failed to create sealing context", "err", err)
 		return nil, err
 	}
-	env.till = &till
+	if !wemixminer.IsPoW() {
+		env.till = &till
+	}
 	env.blockInterval = blockInterval
 	env.blockGasLimit = blockGasLimit
 	env.baseFeeMaxChangeRate = baseFeeMaxChangeRate
@@ -1440,10 +1459,13 @@ func (w *worker) refreshPending(locked bool) {
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     num,
-		GasLimit:   core.CalcGasLimit(parent.GasLimit(), blockGasLimit.Uint64()),
+		GasLimit:   core.CalcGasLimit(parent.GasLimit(), w.config.GasCeil),
 		Extra:      w.extra,
 		Time:       uint64(time.Now().Unix()),
 		Fees:       big.NewInt(0),
+	}
+	if !wemixminer.IsPoW() {
+		header.GasLimit = core.CalcGasLimit(parent.GasLimit(), blockGasLimit.Uint64())
 	}
 	header.Coinbase = w.coinbase
 	// Set baseFee and GasLimit if we are on an EIP-1559 chain
@@ -1582,7 +1604,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	} else {
 		return
 	}
-	if !wemixminer.AmPartner() || !wemixminer.IsMiner() {
+	if !wemixminer.IsPoW() && !wemixminer.IsMiner() {
 		w.refreshPending(true)
 		return
 	}
@@ -1637,11 +1659,9 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 // Note the assumption is held that the mutation is allowed to the passed env, do
 // the deep copy first.
 func (w *worker) commit(env *environment, interval func(), update bool, start time.Time) error {
-	if !wemixminer.IsMiner() {
+	if !wemixminer.IsPoW() && !wemixminer.IsMiner() {
 		return errors.New("Not Miner")
 	}
-
-	panic("None should come here")
 
 	if w.isRunning() {
 		if interval != nil {
@@ -1678,7 +1698,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 // In Wemix, uncles are not welcome and difficulty is so low,
 // there's no reason to run miners asynchronously.
 func (w *worker) commitEx(env *environment, interval func(), update bool, start time.Time) error {
-	if !wemixminer.IsMiner() {
+	if !wemixminer.IsPoW() && !wemixminer.IsMiner() {
 		return errors.New("Not Miner")
 	}
 	if w.isRunning() {
@@ -1747,7 +1767,7 @@ func (w *worker) commitEx(env *environment, interval func(), update bool, start 
 				log.Info("Successfully sealed new block", "number", sealedBlock.Number(), "sealhash", sealhash, "hash", hash,
 					"elapsed", common.PrettyDuration(time.Since(createdAt)))
 
-				if !wemixminer.IsMiner() {
+				if !wemixminer.IsPoW() && !wemixminer.IsMiner() {
 					return errors.New("Not Miner")
 				}
 

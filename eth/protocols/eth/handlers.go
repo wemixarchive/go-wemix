@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
@@ -36,10 +37,14 @@ func handleGetBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		response := answerGetBlockHeadersQuery(backend, &query, peer)
 		return peer.SendBlockHeaders(response)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -136,7 +141,7 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		response := ServiceGetBlockHeadersQuery(backend.Chain(), query.GetBlockHeadersPacket, peer)
 		if len(response) == int(query.GetBlockHeadersPacket.Amount) {
 			return peer.ReplyBlockHeadersRLP(query.RequestId, response)
@@ -149,7 +154,11 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 				return peer.ReplyBlockHeadersRLP(query.RequestId, response)
 			}
 		}
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -322,10 +331,14 @@ func handleGetBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		response := ServiceGetBlockBodiesQuery(backend.Chain(), query)
 		return peer.SendBlockBodiesRLP(response)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -335,10 +348,14 @@ func handleGetBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		response := ServiceGetBlockBodiesQuery(backend.Chain(), query.GetBlockBodiesPacket)
 		return peer.ReplyBlockBodiesRLP(query.RequestId, response)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -369,10 +386,14 @@ func handleGetNodeData(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		response := ServiceGetNodeDataQuery(backend.Chain(), query)
 		return peer.SendNodeData(response)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -382,10 +403,14 @@ func handleGetNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		response := ServiceGetNodeDataQuery(backend.Chain(), query.GetNodeDataPacket)
 		return peer.ReplyNodeData(query.RequestId, response)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -422,10 +447,14 @@ func handleGetReceipts(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		response := ServiceGetReceiptsQuery(backend.Chain(), query)
 		return peer.SendReceiptsRLP(response)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -435,10 +464,14 @@ func handleGetReceipts66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		response := ServiceGetReceiptsQuery(backend.Chain(), query.GetReceiptsPacket)
 		return peer.ReplyReceiptsRLP(query.RequestId, response)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -479,14 +512,18 @@ func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(ann); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		// Mark the hashes as present at the remote node
 		for _, block := range *ann {
 			peer.markBlock(block.Hash)
 		}
 		// Deliver them all to the backend for queuing
 		return backend.Handle(peer, ann)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -499,7 +536,7 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 	if err := ann.sanityCheck(); err != nil {
 		return err
 	}
-	go func() error {
+	f := func() error {
 		if hash := types.CalcUncleHash(ann.Block.Uncles()); hash != ann.Block.UncleHash() {
 			log.Warn("Propagated block has invalid uncles", "have", hash, "exp", ann.Block.UncleHash())
 			return nil // TODO(karalabe): return error eventually, but wait a few releases
@@ -515,7 +552,11 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 		peer.markBlock(ann.Block.Hash())
 
 		return backend.Handle(peer, ann)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -525,7 +566,7 @@ func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		metadata := func() interface{} {
 			hashes := make([]common.Hash, len(*res))
 			for i, header := range *res {
@@ -538,7 +579,11 @@ func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 			code: BlockHeadersMsg,
 			Res:  res,
 		}, metadata)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -548,7 +593,7 @@ func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		metadata := func() interface{} {
 			hashes := make([]common.Hash, len(res.BlockHeadersPacket))
 			for i, header := range res.BlockHeadersPacket {
@@ -561,7 +606,11 @@ func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 			code: BlockHeadersMsg,
 			Res:  &res.BlockHeadersPacket,
 		}, metadata)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -571,7 +620,7 @@ func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		metadata := func() interface{} {
 			var (
 				txsHashes   = make([]common.Hash, len(*res))
@@ -589,7 +638,11 @@ func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 			code: BlockBodiesMsg,
 			Res:  res,
 		}, metadata)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -599,7 +652,7 @@ func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		metadata := func() interface{} {
 			var (
 				txsHashes   = make([]common.Hash, len(res.BlockBodiesPacket))
@@ -617,7 +670,11 @@ func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 			code: BlockBodiesMsg,
 			Res:  &res.BlockBodiesPacket,
 		}, metadata)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -627,13 +684,17 @@ func handleNodeData(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		return peer.dispatchResponse(&Response{
 			id:   peer.genRequestId(NodeDataMsg),
 			code: NodeDataMsg,
 			Res:  res,
 		}, nil) // No post-processing, we're not using this packet anymore
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -643,13 +704,17 @@ func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		return peer.dispatchResponse(&Response{
 			id:   res.RequestId,
 			code: NodeDataMsg,
 			Res:  &res.NodeDataPacket,
 		}, nil) // No post-processing, we're not using this packet anymore
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -659,7 +724,7 @@ func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		metadata := func() interface{} {
 			hasher := trie.NewStackTrie(nil)
 			hashes := make([]common.Hash, len(*res))
@@ -673,7 +738,11 @@ func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
 			code: ReceiptsMsg,
 			Res:  res,
 		}, metadata)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -683,7 +752,7 @@ func handleReceipts66(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		metadata := func() interface{} {
 			hasher := trie.NewStackTrie(nil)
 			hashes := make([]common.Hash, len(res.ReceiptsPacket))
@@ -697,7 +766,11 @@ func handleReceipts66(backend Backend, msg Decoder, peer *Peer) error {
 			code: ReceiptsMsg,
 			Res:  &res.ReceiptsPacket,
 		}, metadata)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -711,13 +784,17 @@ func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) 
 	if err := msg.Decode(ann); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		// Schedule all the unknown hashes for retrieval
 		for _, hash := range *ann {
 			peer.markTransaction(hash)
 		}
 		return backend.Handle(peer, ann)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -727,10 +804,14 @@ func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		hashes, txs := answerGetPooledTransactions(backend, query, peer)
 		return peer.SendPooledTransactionsRLP(hashes, txs)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -740,10 +821,14 @@ func handleGetPooledTransactions66(backend Backend, msg Decoder, peer *Peer) err
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		hashes, txs := answerGetPooledTransactions(backend, query.GetPooledTransactionsPacket, peer)
 		return peer.ReplyPooledTransactionsRLP(query.RequestId, hashes, txs)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -785,7 +870,7 @@ func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&txs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		for i, tx := range txs {
 			// Validate and mark the remote transaction
 			if tx == nil {
@@ -794,7 +879,11 @@ func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
 			peer.markTransaction(tx.Hash())
 		}
 		return backend.Handle(peer, &txs)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -808,7 +897,7 @@ func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&txexs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		signer := types.MakeSigner(backend.Chain().Config(), backend.Chain().CurrentBlock().Number())
 		txs := types.TxExs2Txs(signer, txexs, wemixminer.IsPartner(peer.ID()))
 		for i, tx := range txs {
@@ -820,7 +909,11 @@ func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
 		}
 		txsp := TransactionsPacket(txs)
 		return backend.Handle(peer, &txsp)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -834,7 +927,7 @@ func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&txs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		for i, tx := range txs {
 			// Validate and mark the remote transaction
 			if tx == nil {
@@ -843,7 +936,11 @@ func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
 			peer.markTransaction(tx.Hash())
 		}
 		return backend.Handle(peer, &txs)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }
 
@@ -857,7 +954,7 @@ func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error 
 	if err := msg.Decode(&txs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	go func() error {
+	f := func() error {
 		for i, tx := range txs.PooledTransactionsPacket {
 			// Validate and mark the remote transaction
 			if tx == nil {
@@ -868,6 +965,10 @@ func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error 
 		requestTracker.Fulfil(peer.id, peer.version, PooledTransactionsMsg, txs.RequestId)
 
 		return backend.Handle(peer, &txs.PooledTransactionsPacket)
-	}()
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
 	return nil
 }

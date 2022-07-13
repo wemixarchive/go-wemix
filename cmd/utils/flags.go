@@ -1807,6 +1807,8 @@ func SetDNSDiscoveryDefaults(cfg *ethconfig.Config, genesis common.Hash) {
 func SetWemixConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	if ctx.GlobalIsSet(ConsensusMethodFlag.Name) {
 		params.ConsensusMethod = ctx.GlobalInt(ConsensusMethodFlag.Name)
+	} else {
+		params.ConsensusMethod = params.ConsensusPoA
 	}
 	if ctx.GlobalIsSet(FixedDifficultyFlag.Name) {
 		params.FixedDifficulty = ctx.GlobalUint64(FixedDifficultyFlag.Name)
