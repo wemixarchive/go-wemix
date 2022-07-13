@@ -1491,7 +1491,7 @@ func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) 
 	num.Add(num, common.Big1)
 	now := time.Now()
 	nowInSeconds := now.Unix()
-	nowInMilliSeconds := now.UnixNano() / 1e3 // convert to millisecond
+	nowInMilliSeconds := now.UnixNano() / 1e6 // convert to millisecond
 
 	check := func(heightToPeek int64) (offset int, height, stamp uint64, dt int64) {
 		if heightToPeek > maxPeekBack {
@@ -1568,7 +1568,7 @@ func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) 
 			// make sure time stamp doesn't jump by 2
 			tms = (nowInSeconds+2)*1000 - params.BlockTrailTime
 		}
-		till = time.Unix(tms/1e3, (tms%1e3)*1e6) // time.UnixMilli() is av supported until
+		till = time.Unix(tms/1e3, (tms%1e3)*1e6)
 		log.Debug("time-it", "on-schedule", timestamp, "duration", tms-nowInMilliSeconds)
 	}
 	return timestamp, till
