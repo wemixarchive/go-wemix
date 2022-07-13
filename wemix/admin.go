@@ -1464,11 +1464,10 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 	baseFeeMaxChangeRate = gasLimitAndBaseFee[1].Int64()
 	gasTargetPercentage = gasLimitAndBaseFee[2].Int64()
 
-	// if err = metclient.CallContract(ctx, env, "getMaxBaseFee", nil, &maxBaseFee, height); err != nil {
-	//	err = wemixminer.ErrNotInitialized
-	//	return
-	// }
-	maxBaseFee = big.NewInt(500 * params.GWei)
+	if err = metclient.CallContract(ctx, env, "getMaxBaseFee", nil, &maxBaseFee, height); err != nil {
+		err = wemixminer.ErrNotInitialized
+		return
+	}
 
 	// cache it
 	blockBuildParamsLock.Lock()

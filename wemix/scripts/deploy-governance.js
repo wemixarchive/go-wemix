@@ -287,7 +287,7 @@ var GovernanceDeployer = new function() {
                 web3.toWei(100, 'gwei'),   // tip: 100 gwei
                 4000, 1000, 2500, 2500,    // NCPs, WEMIX Staker, Eco System, Maintenance
                 web3.toWei(50000, 'gwei'), // maxBaseFee * 21000 -> 1.05 wemix
-                5000 * 21000, 46, 30 ]
+                5000 * 21000, 55, 30 ]
         txs[txs.length] = this.sendTx(envStorage.address, null,
             tmpEnvStorageImp.initialize.getData(envNames, envValues))
 
