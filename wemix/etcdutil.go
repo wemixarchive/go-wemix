@@ -665,14 +665,14 @@ func EtcdGetWork() (string, error) {
 	if admin == nil {
 		return "", ErrNotRunning
 	}
-	return admin.etcdGet("metadium-work")
+	return admin.etcdGet("work")
 }
 
 func EtcdDeleteWork() error {
 	if admin == nil {
 		return ErrNotRunning
 	}
-	return admin.etcdDelete("metadium-work")
+	return admin.etcdDelete("work")
 }
 
 /* EOF */

@@ -123,7 +123,7 @@ type rewardParameters struct {
 var (
 	// "Metadium Registry"
 	magic, _        = big.NewInt(0).SetString("0x4d6574616469756d205265676973747279", 0)
-	etcdClusterName = "Metadium"
+	etcdClusterName = "Wemix"
 	big0            = big.NewInt(0)
 	nilAddress      = common.Address{}
 	admin           *wemixAdmin
@@ -1346,7 +1346,7 @@ func LogBlock(height int64, hash common.Hash) {
 	}
 
 	tstart := time.Now()
-	rev, err := admin.etcdPut("metadium-work", string(work))
+	rev, err := admin.etcdPut("work", string(work))
 	if err != nil {
 		log.Error("failed to log the latest block",
 			"height", height, "hash", hash, "took", time.Since(tstart))

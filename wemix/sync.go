@@ -134,7 +134,7 @@ func (ma *wemixAdmin) updateMiner(locked bool) bool {
 			)
 
 			for ; retries > 0; retries-- {
-				workInfo, err = ma.etcdGet("metadium-work")
+				workInfo, err = ma.etcdGet("work")
 				if err != nil {
 					// TODO: ignore if error is not found
 					log.Error("cannot get the latest work info",

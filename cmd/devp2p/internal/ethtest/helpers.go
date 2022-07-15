@@ -76,8 +76,8 @@ func (s *Suite) dial() (*Conn, error) {
 	}
 	// set default p2p capabilities
 	conn.caps = []p2p.Cap{
-		{Name: "meta", Version: 64},
-		{Name: "meta", Version: 65},
+		{Name: "mir", Version: 64},
+		{Name: "mir", Version: 65},
 	}
 	conn.ourHighestProtoVersion = 65
 	return &conn, nil
@@ -91,7 +91,7 @@ func (s *Suite) dial66() (*Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial failed: %v", err)
 	}
-	conn.caps = append(conn.caps, p2p.Cap{Name: "meta", Version: 66})
+	conn.caps = append(conn.caps, p2p.Cap{Name: "mir", Version: 66})
 	conn.ourHighestProtoVersion = 66
 	return conn, nil
 }
@@ -163,7 +163,7 @@ func (c *Conn) negotiateEthProtocol(caps []p2p.Cap) {
 	var highestSnapVersion uint
 	for _, capability := range caps {
 		switch capability.Name {
-		case "meta":
+		case "mir":
 			if capability.Version > highestEthVersion && capability.Version <= c.ourHighestProtoVersion {
 				highestEthVersion = capability.Version
 			}
@@ -580,24 +580,24 @@ func (s *Suite) maliciousHandshakes(t *utesting.T, isEth66 bool) error {
 		{
 			Version: 5,
 			Caps: []p2p.Cap{
-				{Name: "meta", Version: 64},
-				{Name: "meta", Version: 65},
+				{Name: "mir", Version: 64},
+				{Name: "mir", Version: 65},
 			},
 			ID: append(pub0, byte(0)),
 		},
 		{
 			Version: 5,
 			Caps: []p2p.Cap{
-				{Name: "meta", Version: 64},
-				{Name: "meta", Version: 65},
+				{Name: "mir", Version: 64},
+				{Name: "mir", Version: 65},
 			},
 			ID: append(pub0, pub0...),
 		},
 		{
 			Version: 5,
 			Caps: []p2p.Cap{
-				{Name: "meta", Version: 64},
-				{Name: "meta", Version: 65},
+				{Name: "mir", Version: 64},
+				{Name: "mir", Version: 65},
 			},
 			ID: largeBuffer(2),
 		},
