@@ -253,13 +253,12 @@ func (s *Sync) Missing(max int) ([]string, []common.Hash, []common.Hash) {
 		case common.Hash:
 			codeHashes = append(codeHashes, item)
 		case string:
-			path := item
-			req, ok := s.nodeReqs[path]
+			req, ok := s.nodeReqs[item]
 			if !ok {
-				log.Error("Missing node request", "path", path)
+				log.Error("Missing node request", "path", item)
 				continue // System very wrong, shouldn't happen
 			}
-			nodePaths = append(nodePaths, path)
+			nodePaths = append(nodePaths, item)
 			nodeHashes = append(nodeHashes, req.hash)
 		}
 	}
