@@ -186,6 +186,7 @@ var (
 	FixedGasLimit        uint64 = 0            // 0 means no fixed gas limit,
 	MaxIdleBlockInterval uint64 = 600          // in seconds
 	BlocksPerTurn        uint64 = 100
+	DropUnderPriced      bool   = true // drop underpriced transactions
 
 	NonceLimit     uint64 = 0    // nonce limit for non-governing accounts
 	UseRocksDb     int    = 1    // LevelDB (0) or RocksDB (1)
