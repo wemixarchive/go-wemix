@@ -151,8 +151,17 @@ var GovernanceDeployer = new function() {
         throw "Cannot get a transaction receipt for " + tx
     }
 
+    this.sendStakingDeposit = function (to, data) {
+        var tx = { from: this.from, to: to, gas: this.gas, gasPrice: this.gasPrice, nonce: this.nonce(), value: "0" }
+        tx.value = "1500000" + "0".repeat(18)
+        if (data) tx.data = data
+        var stx = offlineWalletSignTx(this.wallet.id, tx, eth.chainId())
+
+        return eth.sendRawTransaction(stx)
+    }
+
     // bool deploy(string walletUrl, string password, string cfg)
-    this.deploy = function(walletUrl, password, cfg) {
+    this.deploy = function(walletUrl, password, cfg, doInitOnce) {
         w = offlineWalletOpen(walletUrl, password)
         if (!w || !w.id || !w.address) {
             throw "Offline wallet is not loaded"
@@ -182,6 +191,15 @@ var GovernanceDeployer = new function() {
         // initial members and nodes data
         var initData = this.getInitialGovernanceMembersAndNodes(data)
 
+        // bootnode
+        var bootNode = {
+            "name": web3.fromAscii(data.members[0].name),
+            "id": data.members[0].id,
+            "ip": web3.fromAscii(data.members[0].ip),
+            "port": data.members[0].port,
+            "lockAmount": data.members[0].lockAmount
+        }
+
         // contacts, transactions to be deployed
         var registry, envStorageImp, staking, ballotStorage, envStorage, govImp, gov
         var txs = new Array()
@@ -197,20 +215,22 @@ var GovernanceDeployer = new function() {
 
         // 2. deploy Staking, BallotStorage, EnvStorage, GovImp, Gov
         this.log("Deploying Staking, BallotStorage, EnvStorage, GovImp & Gov...")
-        var code = Staking_contract.getData(registry.address, initData.stakes,
-                                            {data: Staking_data})
+        var code = Staking_contract.getData(registry.address,
+            doInitOnce ? initData.stakes : "", {data: Staking_data})
         staking = this.deployContract(code)
         code = BallotStorage_contract.getData(registry.address, {data: BallotStorage_data})
         ballotStorage = this.deployContract(code)
-        code = EnvStorage_contract.getData(registry.address, envStorageImp.address,
-                                           {data: EnvStorage_data})
+        code = EnvStorage_contract.getData(envStorageImp.address, {data: EnvStorage_data})
         envStorage = this.deployContract(code)
         govImp = this.deployContract(GovImp_data)
-        gov = this.deployContract(Gov_data)
 
         this.log("Waiting for receipts...")
-        gov = this.resolveContract(Gov_contract.abi, gov)
         govImp = this.resolveContract(GovImp_contract.abi, govImp)
+        code = Gov_contract.getData(govImp.address, { data: Gov_data })
+        gov = this.deployContract(code)
+
+        this.log("Waiting for gov contract...")
+        gov = this.resolveContract(Gov_contract.abi, gov)
         envStorage = this.resolveContract(EnvStorage_contract.abi, envStorage)
         ballotStorage = this.resolveContract(BallotStorage_contract.abi, ballotStorage)
         staking = this.resolveContract(Staking_contract.abi, staking)
@@ -245,16 +265,7 @@ var GovernanceDeployer = new function() {
 
         // no need to wait for the receipts for the above
 
-        // 4. deposit staking - not needed
-
-        // 5. Gov.initOnce()
-        this.log("Initializing governance members and nodes...")
-        txs.length = 0
-        txs[txs.length] = this.sendTx(gov.address, null,
-            gov.initOnce.getData(
-                registry.address, govImp.address, initData.nodes))
-
-        // 6. initialize environment storage data:
+        // 4. initialize environment storage data:
         // blocksPer, ballotDurationMin, ballotDurationMax,
         // stakingMin, stakingMax, gasPrice
         this.log("Initializing environment storage...")
@@ -289,12 +300,32 @@ var GovernanceDeployer = new function() {
                 web3.toWei(50000, 'gwei'), // maxBaseFee * 21000 -> 1.05 wemix
                 5000 * 21000, 55, 30 ]
         txs[txs.length] = this.sendTx(envStorage.address, null,
-            tmpEnvStorageImp.initialize.getData(envNames, envValues))
+            tmpEnvStorageImp.initialize.getData(registry.address, envNames, envValues))
+
+        // 5. deposit staking
+        txs[txs.length] = this.sendStakingDeposit(staking.address, staking.deposit.getData());
 
         if (!this.checkReceipt(txs[0]))
-            throw "Failed to initialize with initOnce. Tx is " + txs[0]
+            throw "Failed to initialize environment storage data. Tx is " + txs[0]
         if (!this.checkReceipt(txs[1]))
-            throw "Failed to initialize environment storage data. Tx is " + txs[1]
+            throw "Failed to initialize staking data. Tx is " + txs[1]
+
+        // 5. Gov initialize
+        this.log("Initializing governance members and nodes...")
+        var tmpGovImp = web3.eth.contract(govImp.abi).at(gov.address);
+        if (!doInitOnce) {
+            txs.length = 0
+            txs[txs.length] = this.sendTx(gov.address, null,
+                tmpGovImp.init.getData(registry.address,
+                    bootNode.lockAmount, bootNode.name, bootNode.id,
+                    bootNode.ip, bootNode.port))
+        } else {
+            txs.length = 0
+            txs[txs.length] = this.sendTx(gov.address, null,
+                tmpGovImp.initOnce.getData(registry.address, initData.nodes))
+        }
+        if (!this.checkReceipt(txs[0]))
+            throw "Failed to initialize with gov.init. Tx is " + txs[0]
 
         // 7. print the addresses
         this.log('{\n' +

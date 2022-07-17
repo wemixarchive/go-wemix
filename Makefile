@@ -166,7 +166,7 @@ BEGIN { print "package wemix\n"; }					     \
   n = "EnvStorageImp";							     \
   print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
 }									     \
-/^var Gov_contract/ {							     \
+/^var GovImp_contract/ {							     \
   sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
   n = "Gov";								     \
   print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \

@@ -69,7 +69,7 @@ DISCOVER=0" > $d/.rc
     wait
 }
 
-# void init_gov(String node, String config_json, String account_file)
+# void init_gov(String node, String config_json, String account_file, bool doInitOnce)
 # account_file can be
 #   1. keystore file: "<path>"
 #   2. nano ledger: "ledger:"
@@ -79,6 +79,7 @@ function init_gov ()
     NODE="$1"
     CONFIG="$2"
     ACCT="$3"
+    [ "$4" = "1" ] && INIT_ONCE=true || INIT_ONCE=false
 
     if [ ! -f "$CONFIG" ]; then
 	echo "Cannot find config file: $2"
@@ -101,7 +102,7 @@ function init_gov ()
     PORT=$(grep PORT ${d}/.rc | sed -e 's/PORT=//')
     [ "$PORT" = "" ] && PORT=8588
 
-    exec ${GWEMIX} attach http://localhost:${PORT} --preload "$d/conf/WemixGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'")'
+    exec ${GWEMIX} attach http://localhost:${PORT} --preload "$d/conf/WemixGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'", '${INIT_ONCE}')'
 #    ${GWEMIX} wemix deploy-governance --url http://localhost:${PORT} --gasprice 1 --gas 0xF000000 "$d/conf/WemixGovernance.js" "$CONFIG" "${ACCT}"
 }
 
@@ -246,7 +247,7 @@ function do_nodes ()
 function usage ()
 {
     echo "Usage: `basename $0` [init <node> <config.json> |
-	init-gov <node> <config.json> <account-file> |
+	init-gov <node> <config.json> <account-file> <do-init-once>|
 	clean [<node>] | wipe [<node>] | console [<node>] |
 	[re]start [<node>] | stop [<node>] | [re]start-nodes | stop-nodes]
 
@@ -267,7 +268,7 @@ case "$1" in
     if [ $# -lt 4 ]; then
 	usage;
     else
-	init_gov "$2" "$3" "$4"
+	init_gov "$2" "$3" "$4" "$5"
     fi
     ;;
 
