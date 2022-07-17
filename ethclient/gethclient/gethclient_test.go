@@ -43,6 +43,10 @@ var (
 	testBalance = big.NewInt(2e15)
 )
 
+func init() {
+	params.DropUnderPriced = false
+}
+
 func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
 	// Generate test chain.
 	genesis, blocks := generateTestChain()
