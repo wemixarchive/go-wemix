@@ -1,29 +1,27 @@
 #!/bin/bash
 
-[ "$WEMIX_DIR" = "" ] && WEMIX_DIR=/opt
+WEMIX_DIR=${WEMIX_DIR:-/opt}
 
-CHAIN_ID=101
-CONSENSUS_METHOD=2
-FIXED_GAS_LIMIT=0x40000000
-GAS_PRICE=1000000000
-MAX_IDLE_BLOCK_INTERVAL=600
-BLOCKS_PER_TURN=10
+function get_script_dir ()
+{
+    OPWD=$(pwd)
+    echo $(cd $(dirname ${BASH_SOURCE[0]}) &> /dev/null && pwd)
+    cd "$OPWD"
+}
 
 function get_data_dir ()
 {
     if [ ! "$1" = "" ]; then
-	d=${WEMIX_DIR}/$1
-	if [ -x "$d/bin/gwemix" ]; then
-	    echo $d
+	if [ -x "$1/bin/gwemix" ]; then
+	    echo $1
+        else
+	    d=${WEMIX_DIR}/$1
+	    if [ -x "$d/bin/gwemix" ]; then
+		echo $d
+	    fi
 	fi
     else
-	for i in $(/bin/ls -1 ${WEMIX_DIR}); do
-	    if [ -x "${WEMIX_DIR}/$i/bin/gwemix" ]; then
-		echo ${WEMIX_DIR}/$i
-		return
-	    fi
-	done
-	echo "$(cd "$(dirname "$0")" && pwd)"
+	echo $(dirname $(get_script_dir))
     fi
 }
 
@@ -103,7 +101,6 @@ function init_gov ()
     [ "$PORT" = "" ] && PORT=8588
 
     exec ${GWEMIX} attach http://localhost:${PORT} --preload "$d/conf/WemixGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'", '${INIT_ONCE}')'
-#    ${GWEMIX} wemix deploy-governance --url http://localhost:${PORT} --gasprice 1 --gas 0xF000000 "$d/conf/WemixGovernance.js" "$CONFIG" "${ACCT}"
 }
 
 function wipe ()
@@ -119,16 +116,6 @@ function wipe ()
 	geth/transactions.rlp geth/nodes geth/triecache gwemix.ipc logs/* etcd
 }
 
-function wipe_all ()
-{
-    for i in `/bin/ls -1 ${WEMIX_DIR}/`; do
-	if [ ! -d "${WEMIX_DIR}/$i" -o ! -x "${WEMIX_DIR}/$i/bin/gwemix" ]; then
-	    continue
-	fi
-	wipe $i
-    done
-}
-
 function clean ()
 {
     d=$(get_data_dir "$1")
@@ -141,16 +128,6 @@ function clean ()
 
     cd $d
     $GWEMIX --datadir ${PWD} removedb
-}
-
-function clean_all ()
-{
-    for i in `/bin/ls -1 ${WEMIX_DIR}/`; do
-	if [ ! -d "${WEMIX_DIR}/$i" -o ! -d "${WEMIX_DIR}/$i/geth" ]; then
-	    continue
-	fi
-	clean $i
-    done
 }
 
 function start ()
@@ -209,23 +186,9 @@ function start ()
     fi
 }
 
-function start_all ()
-{
-    for i in `/bin/ls -1 ${WEMIX_DIR}/`; do
-	if [ ! -d "${WEMIX_DIR}/$i" -o ! -f "${WEMIX_DIR}/$i/bin/gwemix" ]; then
-	    continue
-	fi
-	start $i
-	echo "started $i."
-	return
-    done
-
-    echo "Cannot find gwemix directory. Check if 'bin/gwemix' is present in the data directory";
-}
-
 function get_gwemix_pids ()
 {
-    ps axww | grep -v grep | grep "gwemix.*datadir.*${NODE}" | awk '{print $1}'
+    ps axww | grep -v grep | grep "gwemix.*datadir.*${1}" | awk '{print $1}'
 }
 
 function do_nodes ()
@@ -273,60 +236,40 @@ case "$1" in
     ;;
 
 "wipe")
-    if [ ! "$2" = "" ]; then
-	wipe $2
-    else
-	wipe_all
-    fi
+    wipe $2
     ;;
 
 "clean")
-    if [ ! "$2" = "" ]; then
-	clean $2
-    else
-	clean_all
-    fi
+    clean $2
     ;;
 
 "stop")
     echo -n "stopping..."
-    if [ ! "$2" = "" ]; then
-	NODE=$2
-    else
-	NODE=
-    fi
-    PIDS=`get_gwemix_pids`
+    dir=$(get_data_dir $2)
+    PIDS=$(get_gwemix_pids ${dir})
     if [ ! "$PIDS" = "" ]; then
 	echo $PIDS | xargs -L1 kill
     fi
     for i in {1..200}; do
-	PIDS=`get_gwemix_pids`
+	PIDS=$(get_gwemix_pids ${dir})
 	[ "$PIDS" = "" ] && break
 	echo -n "."
 	sleep 1
     done
-    PIDS=`get_gwemix_pids`
+    PIDS=$(get_gwemix_pids ${dir})
     if [ ! "$PIDS" = "" ]; then
 	echo $PIDS | xargs -L1 kill -9
     fi
     # wait until geth/chaindata is free
-    if [ ! "$NODE" = "" ]; then
-        d=$(get_data_dir "$1")
-        for i in {1..200}; do
-            lsof ${d}/geth/chaindata/LOG 2>&1 | grep -q gwemix > /dev/null 2>&1 || break
-            sleep 1
-        done
-    fi
+    for i in {1..200}; do
+	lsof ${dir}/geth/chaindata/LOG 2>&1 | grep -q gwemix > /dev/null 2>&1 || break
+	sleep 1
+    done
     echo "done."
     ;;
 
 "start")
-    if [ ! "$2" = "" ]; then
-	start $2
-	echo "started $2."
-    else
-	start_all
-    fi
+    start $2
     ;;
 
 "start-inner")
@@ -338,13 +281,8 @@ case "$1" in
     ;;
 
 "restart")
-    if [ ! "$2" = "" ]; then
-	$0 stop $2
-	start $2
-    else
-	$0 stop
-	start_all
-    fi
+    $0 stop $2
+    start $2
     ;;
 
 "start-nodes"|"restart-nodes"|"stop-nodes")
