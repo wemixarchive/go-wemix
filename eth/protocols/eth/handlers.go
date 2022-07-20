@@ -791,11 +791,7 @@ func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) 
 		}
 		return backend.Handle(peer, ann)
 	}
-	if params.ConsensusMethod == params.ConsensusPoW {
-		return f()
-	}
-	go f()
-	return nil
+	return f()
 }
 
 func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
@@ -808,11 +804,7 @@ func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error
 		hashes, txs := answerGetPooledTransactions(backend, query, peer)
 		return peer.SendPooledTransactionsRLP(hashes, txs)
 	}
-	if params.ConsensusMethod == params.ConsensusPoW {
-		return f()
-	}
-	go f()
-	return nil
+	return f()
 }
 
 func handleGetPooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
@@ -825,11 +817,7 @@ func handleGetPooledTransactions66(backend Backend, msg Decoder, peer *Peer) err
 		hashes, txs := answerGetPooledTransactions(backend, query.GetPooledTransactionsPacket, peer)
 		return peer.ReplyPooledTransactionsRLP(query.RequestId, hashes, txs)
 	}
-	if params.ConsensusMethod == params.ConsensusPoW {
-		return f()
-	}
-	go f()
-	return nil
+	return f()
 }
 
 func answerGetPooledTransactions(backend Backend, query GetPooledTransactionsPacket, peer *Peer) ([]common.Hash, []rlp.RawValue) {
@@ -880,11 +868,7 @@ func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
 		}
 		return backend.Handle(peer, &txs)
 	}
-	if params.ConsensusMethod == params.ConsensusPoW {
-		return f()
-	}
-	go f()
-	return nil
+	return f()
 }
 
 func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
@@ -910,11 +894,7 @@ func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
 		txsp := TransactionsPacket(txs)
 		return backend.Handle(peer, &txsp)
 	}
-	if params.ConsensusMethod == params.ConsensusPoW {
-		return f()
-	}
-	go f()
-	return nil
+	return f()
 }
 
 func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
@@ -937,11 +917,7 @@ func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
 		}
 		return backend.Handle(peer, &txs)
 	}
-	if params.ConsensusMethod == params.ConsensusPoW {
-		return f()
-	}
-	go f()
-	return nil
+	return f()
 }
 
 func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
@@ -966,9 +942,5 @@ func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error 
 
 		return backend.Handle(peer, &txs.PooledTransactionsPacket)
 	}
-	if params.ConsensusMethod == params.ConsensusPoW {
-		return f()
-	}
-	go f()
-	return nil
+	return f()
 }
