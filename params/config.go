@@ -521,7 +521,6 @@ func (c *ChainConfig) String() string {
 		banner += fmt.Sprintf(" - Merge netsplit block:      %-8v", c.MergeNetsplitBlock)
 	}
 	return banner
-
 }
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.

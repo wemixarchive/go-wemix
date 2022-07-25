@@ -77,7 +77,6 @@ func setMinMax(db ethdb.Database, prefix string, min, max int) error {
 }
 
 func read(db ethdb.Database, prefix string, start, end, numThreads int, verbose bool) error {
-
 	doRead := func(idx int) error {
 		ks := fmt.Sprintf("%s-%d", prefix, idx)
 		k := sha_256([]byte(ks))
@@ -179,7 +178,6 @@ func genVal(key []byte, sz int) []byte {
 }
 
 func write(db ethdb.Database, prefix string, start, end, numThreads, batchCount, valueSize int) error {
-
 	flush := func(dbb ethdb.Batch) error {
 		var err error
 		if dbb.ValueSize() > 0 {
