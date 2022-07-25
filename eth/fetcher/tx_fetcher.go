@@ -36,7 +36,7 @@ import (
 const (
 	// maxTxAnnounces is the maximum number of unique transaction a peer
 	// can announce in a short time.
-	maxTxAnnounces = 4096
+	maxTxAnnounces = 1500000
 
 	// maxTxRetrievals is the maximum transaction number can be fetched in one
 	// request. The rationale to pick 256 is:
@@ -51,7 +51,7 @@ const (
 	// maxTxUnderpricedSetSize is the size of the underpriced transaction set that
 	// is used to track recent transactions that have been dropped so we don't
 	// re-request them.
-	maxTxUnderpricedSetSize = 32768
+	maxTxUnderpricedSetSize = 32768 * 10
 
 	// txArriveTimeout is the time allowance before an announced transaction is
 	// explicitly requested.
