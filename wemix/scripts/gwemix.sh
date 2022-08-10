@@ -77,7 +77,7 @@ function init_gov ()
     NODE="$1"
     CONFIG="$2"
     ACCT="$3"
-    [ "$4" = "1" ] && INIT_ONCE=true || INIT_ONCE=false
+    [ "$4" = "0" ] && INIT_ONCE=false || INIT_ONCE=true
 
     if [ ! -f "$CONFIG" ]; then
 	echo "Cannot find config file: $2"
