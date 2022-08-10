@@ -197,7 +197,7 @@ var GovernanceDeployer = new function() {
             "id": data.members[0].id,
             "ip": web3.fromAscii(data.members[0].ip),
             "port": data.members[0].port,
-            "lockAmount": data.members[0].lockAmount
+            "stake": data.members[0].stake
         }
 
         // contacts, transactions to be deployed
@@ -317,7 +317,7 @@ var GovernanceDeployer = new function() {
             txs.length = 0
             txs[txs.length] = this.sendTx(gov.address, null,
                 tmpGovImp.init.getData(registry.address,
-                    bootNode.lockAmount, bootNode.name, bootNode.id,
+                    bootNode.stake, bootNode.name, bootNode.id,
                     bootNode.ip, bootNode.port))
         } else {
             txs.length = 0
