@@ -20,8 +20,8 @@ var (
 	LogBlockFunc                func(int64, common.Hash)
 	CalculateRewardsFunc        func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
 	VerifyRewardsFunc           func(*big.Int, string) error
-	SignBlockFunc               func(hash common.Hash) (nodeid, sig []byte, err error)
-	VerifyBlockSigFunc          func(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool
+	SignBlockFunc               func(hash common.Hash) (coinbase common.Address, sig []byte, err error)
+	VerifyBlockSigFunc          func(height *big.Int, coinbase common.Address, hash common.Hash, sig []byte) bool
 	RequirePendingTxsFunc       func() bool
 	VerifyBlockRewardsFunc      func(height *big.Int) interface{}
 	SuggestGasPriceFunc         func() *big.Int
@@ -86,20 +86,20 @@ func VerifyRewards(num *big.Int, rewards string) error {
 	}
 }
 
-func SignBlock(hash common.Hash) (nodeId, sig []byte, err error) {
+func SignBlock(hash common.Hash) (coinbase common.Address, sig []byte, err error) {
 	if SignBlockFunc == nil {
 		err = ErrNotInitialized
 	} else {
-		nodeId, sig, err = SignBlockFunc(hash)
+		coinbase, sig, err = SignBlockFunc(hash)
 	}
 	return
 }
 
-func VerifyBlockSig(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool {
+func VerifyBlockSig(height *big.Int, coinbase common.Address, hash common.Hash, sig []byte) bool {
 	if VerifyBlockSigFunc == nil {
 		return false
 	} else {
-		return VerifyBlockSigFunc(height, nodeId, hash, sig)
+		return VerifyBlockSigFunc(height, coinbase, hash, sig)
 	}
 }
 

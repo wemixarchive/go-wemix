@@ -1212,7 +1212,7 @@ func verifyRewards(num *big.Int, rewards string) error {
 	//return admin.verifyRewards(num, rewards)
 }
 
-func signBlock(hash common.Hash) (nodeId, sig []byte, err error) {
+func signBlock(hash common.Hash) (coinbase common.Address, sig []byte, err error) {
 	if admin == nil {
 		err = wemixminer.ErrNotInitialized
 		return
@@ -1220,14 +1220,50 @@ func signBlock(hash common.Hash) (nodeId, sig []byte, err error) {
 
 	prvKey := admin.stack.Server().PrivateKey
 	sig, err = crypto.Sign(hash.Bytes(), prvKey)
-	nodeId = crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
+	if admin.self != nil {
+		coinbase = admin.self.Addr
+	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
+		coinbase = admin.bootAccount
+	}
 	return
 }
 
-func verifyBlockSig(height *big.Int, nodeId []byte, hash common.Hash, sig []byte) bool {
-	// TODO: need to check if nodeId is a valid partner in the 'height' block.
+func verifyBlockSig(height *big.Int, coinbase common.Address, hash common.Hash, sig []byte) bool {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// get nodeid from the coinbase
+	num := new(big.Int).Sub(height, common.Big1)
+	_, gov, _, err := admin.getRegGovEnvContracts(ctx, num)
+	if err != nil {
+		if err == wemixminer.ErrNotInitialized {
+			return true
+		}
+		return false
+	}
+	var (
+		modifiedBlock, ix, port *big.Int
+		name, enode, ip         []byte
+		output                  = []interface{}{&name, &enode, &ip, &port}
+	)
+	err = metclient.CallContract(ctx, gov, "modifiedBlock", nil, &modifiedBlock, num)
+	if err != nil {
+		return false
+	} else if modifiedBlock.Int64() == 0 {
+		// not initialized yet
+		return true
+	}
+	err = metclient.CallContract(ctx, gov, "rewardIdx", &coinbase, &ix, num)
+	if err != nil {
+		return false
+	}
+	err = metclient.CallContract(ctx, gov, "getNode", &ix, &output, num)
+	if err != nil {
+		return false
+	}
+
 	pubKey, err := crypto.Ecrecover(hash.Bytes(), sig)
-	return err == nil && nodeId != nil && len(pubKey) > 1 && bytes.Equal(nodeId, pubKey[1:])
+	return err == nil && len(pubKey) > 1 && bytes.Equal(enode, pubKey[1:])
 }
 
 func (ma *wemixAdmin) getNodeInfo() (*p2p.NodeInfo, error) {
