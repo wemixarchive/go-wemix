@@ -1212,14 +1212,15 @@ func verifyRewards(num *big.Int, rewards string) error {
 	//return admin.verifyRewards(num, rewards)
 }
 
-func signBlock(hash common.Hash) (coinbase common.Address, sig []byte, err error) {
+func signBlock(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error) {
 	if admin == nil {
 		err = wemixminer.ErrNotInitialized
 		return
 	}
-
+	data := append(height.Bytes(), hash.Bytes()...)
+	data = crypto.Keccak256(data)
 	prvKey := admin.stack.Server().PrivateKey
-	sig, err = crypto.Sign(hash.Bytes(), prvKey)
+	sig, err = crypto.Sign(data, prvKey)
 	if admin.self != nil {
 		coinbase = admin.self.Addr
 	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
@@ -1262,7 +1263,9 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, hash common.Hash, 
 		return false
 	}
 
-	pubKey, err := crypto.Ecrecover(hash.Bytes(), sig)
+	data := append(height.Bytes(), hash.Bytes()...)
+	data = crypto.Keccak256(data)
+	pubKey, err := crypto.Ecrecover(data, sig)
 	return err == nil && len(pubKey) > 1 && bytes.Equal(enode, pubKey[1:])
 }
 

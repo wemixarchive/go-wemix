@@ -623,7 +623,7 @@ func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 
 	// sign header.Root with node's private key
 	if !wemixminer.IsPoW() {
-		coinbase, sig, err := wemixminer.SignBlock(header.Root)
+		coinbase, sig, err := wemixminer.SignBlock(header.Number, header.Root)
 		if err != nil {
 			return nil, err
 		} else {

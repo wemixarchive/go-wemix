@@ -20,7 +20,7 @@ var (
 	LogBlockFunc                func(int64, common.Hash)
 	CalculateRewardsFunc        func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
 	VerifyRewardsFunc           func(*big.Int, string) error
-	SignBlockFunc               func(hash common.Hash) (coinbase common.Address, sig []byte, err error)
+	SignBlockFunc               func(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error)
 	VerifyBlockSigFunc          func(height *big.Int, coinbase common.Address, hash common.Hash, sig []byte) bool
 	RequirePendingTxsFunc       func() bool
 	VerifyBlockRewardsFunc      func(height *big.Int) interface{}
@@ -86,11 +86,11 @@ func VerifyRewards(num *big.Int, rewards string) error {
 	}
 }
 
-func SignBlock(hash common.Hash) (coinbase common.Address, sig []byte, err error) {
+func SignBlock(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error) {
 	if SignBlockFunc == nil {
 		err = ErrNotInitialized
 	} else {
-		coinbase, sig, err = SignBlockFunc(hash)
+		coinbase, sig, err = SignBlockFunc(height, hash)
 	}
 	return
 }
