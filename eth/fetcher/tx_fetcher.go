@@ -33,7 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 )
 
-const (
+var (
 	// maxTxAnnounces is the maximum number of unique transaction a peer
 	// can announce in a short time.
 	maxTxAnnounces = 1500000
