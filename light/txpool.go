@@ -73,7 +73,7 @@ type TxPool struct {
 	feedelegation bool // Fork indicator whether we are in the fee delegation stage.
 }
 
-// TxRelayBackend provides an interface to the mechanism that forwards transacions
+// TxRelayBackend provides an interface to the mechanism that forwards transactions
 // to the ETH network. The implementations of the functions should be non-blocking.
 //
 // Send instructs backend to forward new transactions
