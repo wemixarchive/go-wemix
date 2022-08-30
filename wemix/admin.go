@@ -138,6 +138,9 @@ var (
 	// cached block build parameters
 	blockBuildParamsLock = &sync.Mutex{}
 	blockBuildParams     *blockBuildParameters
+
+	// cached node id / enode check
+	enodeCache = &sync.Map{}
 )
 
 func (n *wemixNode) eq(m *wemixNode) bool {
@@ -1229,7 +1232,41 @@ func signBlock(height *big.Int, hash common.Hash) (coinbase common.Address, sig 
 	return
 }
 
-func verifyBlockSig(height *big.Int, coinbase common.Address, hash common.Hash, sig []byte) bool {
+func (ma *wemixAdmin) enodeExists(ctx context.Context, height, modifiedBlock *big.Int, gov *metclient.RemoteContract, nodeId []byte) (bool, error) {
+	enodes, ok := enodeCache.Load(modifiedBlock.Int64())
+	if !ok {
+		var (
+			port            *big.Int
+			name, enode, ip []byte
+			output          = []interface{}{&name, &enode, &ip, &port}
+			enodesMap       = map[string]bool{}
+		)
+		var count *big.Int
+		err := metclient.CallContract(ctx, gov, "getNodeLength", nil, &count, height)
+		if err != nil {
+			return false, err
+		}
+		for i := int64(1); i <= count.Int64(); i++ {
+			ix := big.NewInt(i)
+			err = metclient.CallContract(ctx, gov, "getNode", &ix, &output, height)
+			if err != nil {
+				return false, err
+			}
+			enodesMap[string(enode)] = true
+		}
+		enodeCache.Store(modifiedBlock.Int64(), enodesMap)
+		enodes = enodesMap
+	}
+	if enodesMap, ok := enodes.(map[string]bool); !ok {
+		return false, nil
+	} else if exists, ok := enodesMap[string(nodeId)]; !ok {
+		return false, nil
+	} else {
+		return exists, nil
+	}
+}
+
+func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte) bool {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1244,7 +1281,7 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, hash common.Hash, 
 	}
 	var (
 		modifiedBlock, ix, port *big.Int
-		name, enode, ip         []byte
+		name, enode, ip, data   []byte
 		output                  = []interface{}{&name, &enode, &ip, &port}
 	)
 	err = metclient.CallContract(ctx, gov, "modifiedBlock", nil, &modifiedBlock, num)
@@ -1254,17 +1291,28 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, hash common.Hash, 
 		// not initialized yet
 		return true
 	}
-	err = metclient.CallContract(ctx, gov, "rewardIdx", &coinbase, &ix, num)
-	if err != nil {
-		return false
+	// if minerNodeId is given, i.e. present in block header, use it,
+	// otherwise, derive it from the codebase
+	if len(nodeId) == 0 {
+		// minerNodeId is not given, derive enode from the codebase
+		err = metclient.CallContract(ctx, gov, "rewardIdx", &coinbase, &ix, num)
+		if err != nil {
+			return false
+		}
+		err = metclient.CallContract(ctx, gov, "getNode", &ix, &output, num)
+		if err != nil {
+			return false
+		}
+		data = append(height.Bytes(), hash.Bytes()...)
+		data = crypto.Keccak256(data)
+	} else {
+		// minerNodeId is given, verify that it's a registered miner
+		enode = nodeId
+		if exists, err := admin.enodeExists(ctx, num, modifiedBlock, gov, enode); err != nil || exists == false {
+			return false
+		}
+		data = hash.Bytes()
 	}
-	err = metclient.CallContract(ctx, gov, "getNode", &ix, &output, num)
-	if err != nil {
-		return false
-	}
-
-	data := append(height.Bytes(), hash.Bytes()...)
-	data = crypto.Keccak256(data)
 	pubKey, err := crypto.Ecrecover(data, sig)
 	return err == nil && len(pubKey) > 1 && bytes.Equal(enode, pubKey[1:])
 }
