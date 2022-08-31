@@ -106,6 +106,11 @@ func (ma *wemixAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	// LCUrls: listening client urls
 	// LPUrls: advertised client urls
 	cfg := embed.NewConfig()
+	cfg.PeerAutoTLS = true
+	cfg.ClientAutoTLS = true
+	cfg.SelfSignedCertValidity = 10
+	cfg.AutoCompactionMode = "revision"
+	cfg.AutoCompactionRetention = "100"
 	cfg.LogLevel = "error"
 	cfg.Dir = ma.etcdDir
 	cfg.Name = ma.self.Name
