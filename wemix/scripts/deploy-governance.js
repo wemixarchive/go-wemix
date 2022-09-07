@@ -175,7 +175,7 @@ var GovernanceDeployer = new function() {
             throw "cannot load governance contract .js or config .json file"
 
         // check if contracts exist
-        var contractNames = [ "Registry", "EnvStorageImp", "Staking",
+        var contractNames = [ "Registry", "EnvStorageImp", "Staking", "StakingImp",
                               "BallotStorage", "EnvStorage", "GovImp", "Gov" ]
         for (var i in contractNames) {
             var cn = contractNames[i]
@@ -201,24 +201,26 @@ var GovernanceDeployer = new function() {
         }
 
         // contacts, transactions to be deployed
-        var registry, envStorageImp, staking, ballotStorage, envStorage, govImp, gov
+        var registry, envStorageImp, staking, stakingImp, ballotStorage, envStorage, govImp, gov
         var txs = new Array()
 
         // 1. deploy Registry and EnvStorageImp contracts
         this.log("Deploying Registry and EnvStorageImp...")
         registry = this.deployContract(Registry_data)
         envStorageImp = this.deployContract(EnvStorageImp_data)
+        stakingImp = this.deployContract(StakingImp_data)
 
         this.log("Waiting for receipts...")
         envStorageImp = this.resolveContract(EnvStorageImp_contract.abi, envStorageImp)
         registry = this.resolveContract(Registry_contract.abi, registry)
+        stakingImp = this.resolveContract(StakingImp_contract.abi, stakingImp);
 
         // 2. deploy Staking, BallotStorage, EnvStorage, GovImp, Gov
         this.log("Deploying Staking, BallotStorage, EnvStorage, GovImp & Gov...")
-        var code = Staking_contract.getData(registry.address,
-            doInitOnce ? initData.stakes : "", {data: Staking_data})
-        staking = this.deployContract(code)
-        code = BallotStorage_contract.getData(registry.address, {data: BallotStorage_data})
+        // var code = Staking_contract.getData(registry.address,
+        //     doInitOnce ? initData.stakes : "", {data: Staking_data})
+        staking = this.deployContract(Staking_data)
+        var code = BallotStorage_contract.getData(registry.address, {data: BallotStorage_data})
         ballotStorage = this.deployContract(code)
         code = EnvStorage_contract.getData(envStorageImp.address, {data: EnvStorage_data})
         envStorage = this.deployContract(code)
@@ -303,7 +305,15 @@ var GovernanceDeployer = new function() {
             tmpEnvStorageImp.initialize.getData(registry.address, envNames, envValues))
 
         // 5. deposit staking
-        txs[txs.length] = this.sendStakingDeposit(staking.address, staking.deposit.getData());
+        var tmpStakingImp = web3.eth.contract(stakingImp.abi).at(staking.address)
+        code = tmpStakingImp.init.getData(registry.address,
+            doInitOnce ? initData.stakes : "", {data: Staking_data})
+        txs[txs.length] = this.sendTx(staking.address, null, code);
+        txs[txs.length] = this.sendStakingDeposit(staking.address, tmpStakingImp.deposit.getData());
+        for(i=0;i<txs.length;i++){
+            if (!this.checkReceipt(txs[i]))
+            throw "Failed to initialize data. Tx is " + txs[i]
+        }
 
         if (!this.checkReceipt(txs[0]))
             throw "Failed to initialize environment storage data. Tx is " + txs[0]
@@ -326,7 +336,7 @@ var GovernanceDeployer = new function() {
         }
         if (!this.checkReceipt(txs[0]))
             throw "Failed to initialize with gov.init. Tx is " + txs[0]
-
+            
         // 7. print the addresses
         this.log('{\n' +
                  '  "REGISTRY_ADDRESS": "' + registry.address + '",\n' +
