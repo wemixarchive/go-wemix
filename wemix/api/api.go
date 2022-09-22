@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/event"
 )
 
 type WemixMinerStatus struct {
@@ -26,6 +27,10 @@ type WemixMinerStatus struct {
 }
 
 var (
+	// miner status & etcd cluster events
+	minerStatusFeed event.Feed
+	etcdClusterFeed event.Feed
+
 	msgChannelLock = &sync.Mutex{}
 	msgChannel     chan interface{}
 
@@ -41,28 +46,43 @@ var (
 	EtcdMoveLeader   func(name string) error
 	EtcdGetWork      func() (string, error)
 	EtcdDeleteWork   func() error
+
+	// for debugging
+	EtcdPut    func(string, string) error
+	EtcdGet    func(string) (string, error)
+	EtcdDelete func(string) error
 )
 
-func SetMsgChannel(ch chan interface{}) {
-	msgChannelLock.Lock()
-	defer msgChannelLock.Unlock()
-	msgChannel = ch
+func (s *WemixMinerStatus) Clone() *WemixMinerStatus {
+	return &WemixMinerStatus{
+		NodeName:          s.NodeName,
+		Enode:             s.Enode,
+		Id:                s.Id,
+		Addr:              s.Addr,
+		Status:            s.Status,
+		Miner:             s.Miner,
+		MiningPeers:       s.MiningPeers,
+		LatestBlockHeight: new(big.Int).Set(s.LatestBlockHeight),
+		LatestBlockHash:   s.LatestBlockHash,
+		LatestBlockTd:     new(big.Int).Set(s.LatestBlockTd),
+		RttMs:             new(big.Int).Set(s.RttMs),
+	}
+}
+
+func SubscribeToMinerStatus(ch chan *WemixMinerStatus) event.Subscription {
+	return minerStatusFeed.Subscribe(ch)
+}
+
+func SubscribeToEtcdCluster(ch chan string) event.Subscription {
+	return etcdClusterFeed.Subscribe(ch)
 }
 
 func GotStatusEx(status *WemixMinerStatus) {
-	msgChannelLock.Lock()
-	defer msgChannelLock.Unlock()
-	if msgChannel != nil {
-		msgChannel <- status
-	}
+	minerStatusFeed.Send(status)
 }
 
 func GotEtcdCluster(cluster string) {
-	msgChannelLock.Lock()
-	defer msgChannelLock.Unlock()
-	if msgChannel != nil {
-		msgChannel <- cluster
-	}
+	etcdClusterFeed.Send(cluster)
 }
 
 // EOF

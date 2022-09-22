@@ -13,11 +13,9 @@ import (
 var (
 	ErrNotInitialized = errors.New("not initialized")
 
-	IsMinerFunc                 func() bool
 	AmPartnerFunc               func() bool
 	IsPartnerFunc               func(string) bool
 	AmHubFunc                   func(string) int
-	LogBlockFunc                func(int64, common.Hash)
 	CalculateRewardsFunc        func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
 	VerifyRewardsFunc           func(*big.Int, string) error
 	SignBlockFunc               func(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error)
@@ -26,15 +24,10 @@ var (
 	VerifyBlockRewardsFunc      func(height *big.Int) interface{}
 	SuggestGasPriceFunc         func() *big.Int
 	GetBlockBuildParametersFunc func(height *big.Int) (blockInterval int64, maxBaseFee, gasLimit *big.Int, baseFeeMaxChangeRate, gasTargetPercentage int64, err error)
+	AcquireMiningTokenFunc      func(height *big.Int, parentHash common.Hash) (bool, error)
+	ReleaseMiningTokenFunc      func(height *big.Int, hash, parentHash common.Hash) error
+	HasMiningTokenFunc          func() bool
 )
-
-func IsMiner() bool {
-	if IsMinerFunc == nil {
-		return false
-	} else {
-		return IsMinerFunc()
-	}
-}
 
 func IsPartner(id string) bool {
 	if IsPartnerFunc == nil {
@@ -60,10 +53,25 @@ func AmHub(id string) int {
 	}
 }
 
-func LogBlock(height int64, hash common.Hash) {
-	if LogBlockFunc != nil {
-		LogBlockFunc(height, hash)
+func AcquireMiningToken(height *big.Int, parentHash common.Hash) (bool, error) {
+	if AcquireMiningTokenFunc == nil {
+		return false, ErrNotInitialized
 	}
+	return AcquireMiningTokenFunc(height, parentHash)
+}
+
+func ReleaseMiningToken(height *big.Int, hash, parentHash common.Hash) error {
+	if ReleaseMiningTokenFunc == nil {
+		return ErrNotInitialized
+	}
+	return ReleaseMiningTokenFunc(height, hash, parentHash)
+}
+
+func HasMiningToken() bool {
+	if HasMiningTokenFunc == nil {
+		return false
+	}
+	return HasMiningTokenFunc()
 }
 
 func IsPoW() bool {
@@ -133,52 +141,6 @@ func GetBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 		return 15, big.NewInt(0), big.NewInt(0), 0, 100, ErrNotInitialized
 	} else {
 		return GetBlockBuildParametersFunc(height)
-	}
-}
-
-var leadershipSink *chan struct{}
-
-func SubscribeToLeadership(ch *chan struct{}) {
-	leadershipSink = ch
-}
-
-func UnsubscribeToLeadership() {
-	leadershipSink = nil
-}
-
-func FeedLeadership() {
-	if leadershipSink != nil {
-		select {
-		case *leadershipSink <- struct{}{}:
-		default:
-		}
-	}
-}
-
-type WemixBlockHead struct {
-	Height int64
-	Hash   common.Hash
-}
-
-var blockImportedSink *chan WemixBlockHead
-
-func SubscribeToBlockImported(ch *chan WemixBlockHead) {
-	blockImportedSink = ch
-}
-
-func UnsubscribeToBlockImported() {
-	blockImportedSink = nil
-}
-
-func FeedBlockImported(height int64, hash common.Hash) {
-	if blockImportedSink != nil {
-		select {
-		case *blockImportedSink <- WemixBlockHead{Height: height, Hash: hash}:
-		default:
-			// if full, replace it
-			<-*blockImportedSink
-			*blockImportedSink <- WemixBlockHead{Height: height, Hash: hash}
-		}
 	}
 }
 
