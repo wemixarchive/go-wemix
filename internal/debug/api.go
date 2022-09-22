@@ -38,6 +38,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 	"github.com/hashicorp/go-bexpr"
 )
@@ -286,4 +287,19 @@ func (*HandlerT) DbStats(device string, b interface{}) []uint64 {
 
 func (*HandlerT) VerifyBlockRewards(block *big.Int) interface{} {
 	return wemixminer.VerifyBlockRewards(block)
+}
+
+// Remove an etcd key / value pair
+func (*HandlerT) EtcdPut(key, value string) error {
+	return wemixapi.EtcdPut(key, value)
+}
+
+// Get etcd key's value
+func (*HandlerT) EtcdGet(key string) (string, error) {
+	return wemixapi.EtcdGet(key)
+}
+
+// Remove an etcd key / value pair
+func (*HandlerT) EtcdDelete(key string) error {
+	return wemixapi.EtcdDelete(key)
 }
