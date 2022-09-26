@@ -134,6 +134,7 @@ var (
 	ErrInvalidEnode   = errors.New("invalid enode")
 	ErrInvalidToken   = errors.New("invalid token")
 	ErrInvalidWork    = errors.New("invalid work")
+	ErrNotFound       = errors.New("not found")
 	ErrNotRunning     = errors.New("not running")
 
 	etcdCompactFrequency = int64(100)
@@ -739,6 +740,12 @@ func StartAdmin(stack *node.Node, datadir string) {
 
 	go admin.run()
 	go admin.handleNewBlocks()
+	go func() {
+		for {
+			time.Sleep(time.Duration(SyncIdleThreshold) * time.Second)
+			syncCheck()
+		}
+	}()
 }
 
 func (ma *wemixAdmin) addPeer(node *wemixNode) error {
