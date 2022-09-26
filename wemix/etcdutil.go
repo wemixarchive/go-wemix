@@ -320,7 +320,7 @@ func (ma *wemixAdmin) etcdStart() error {
 	go func() {
 		// watch
 		workCh := ma.etcdCli.Watch(context.Background(), wemixWorkKey)
-		lockCh := ma.etcdCli.Watch(context.Background(), wemixLockKey)
+		lockCh := ma.etcdCli.Watch(context.Background(), wemixTokenKey)
 		for {
 			if !ma.etcdIsRunning() {
 				break
@@ -329,6 +329,7 @@ func (ma *wemixAdmin) etcdStart() error {
 			case <-etcd.Server.LeaderChangedNotify():
 				latestEtcdLeader.Store(ma.etcd.Server.Leader())
 			case watchResp := <-workCh:
+				latestUpdateTime.Store(time.Now())
 				for _, event := range watchResp.Events {
 					switch event.Type {
 					case mvccpb.PUT:
@@ -559,7 +560,7 @@ func (ma *wemixAdmin) etcdDelete(key string) error {
 
 // leases
 
-type WemixEtcdLock struct {
+type WemixToken struct {
 	admin  *wemixAdmin
 	Miner  string `json:"miner"`
 	ID     uint64 `json:"id"`
@@ -569,69 +570,79 @@ type WemixEtcdLock struct {
 	Key    string `json:"key"`
 }
 
-func (ma *wemixAdmin) etcdAcquireLock(ctx context.Context, key string, height *big.Int, ttl int) (*WemixEtcdLock, error) {
-	prev := ""
-
+func (ma *wemixAdmin) acquireToken(ctx context.Context, height *big.Int, ttl int) (*WemixToken, error) {
 again:
 	now := time.Now().Unix()
 	till := now + int64(ttl)
-	lock := &WemixEtcdLock{
+	lock := &WemixToken{
 		admin:  ma,
 		Miner:  ma.self.Name,
 		ID:     uint64(ma.etcd.Server.ID()),
 		Height: height.Int64(),
 		Since:  now,
 		Till:   till,
-		Key:    key,
+		Key:    wemixTokenKey,
 	}
 	value, err := json.Marshal(lock)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: how to do "not present || value == ''"
 	tx := ma.etcdCli.Txn(ctx)
 	txresp, err := tx.If(
-		clientv3.Compare(clientv3.Value(key), "=", prev),
+		clientv3.Compare(clientv3.CreateRevision(wemixTokenKey), "=", 0),
 	).Then(
-		clientv3.OpPut(key, string(value)),
-		clientv3.OpGet(key),
+		clientv3.OpPut(wemixTokenKey, string(value)),
 	).Else(
-		clientv3.OpGet(key),
+		clientv3.OpGet(wemixTokenKey),
 	).Commit()
 
 	if err == nil && !txresp.Succeeded {
 		err = ErrExists
-		lock.Miner, lock.ID, lock.Height, lock.Since, lock.Till = "", 0, 0, 0, 0
-		if len(txresp.Responses) > 0 {
-			if rr := txresp.Responses[0].GetResponseRange(); rr.Count > 0 {
-				value := rr.Kvs[0].Value
-				if e2 := json.Unmarshal(value, lock); e2 != nil {
-					err = e2
-				}
-				lock.admin = ma
-				if lock.Till < time.Now().Unix() && len(prev) == 0 {
-					prev = string(value)
-					goto again
-				}
-			} else {
-				// if not exists, put empty string
-				tx = ma.etcdCli.Txn(ctx)
-				_, err := tx.If(
-					clientv3.Compare(clientv3.Version(key), "=", 0),
-				).Then(
-					clientv3.OpPut(key, ""),
-				).Commit()
-				if err == nil {
-					goto again
+		var (
+			tokenFound bool = false
+			foundToken []byte
+		)
+		for _, r := range txresp.Responses {
+			for _, kv := range r.GetResponseRange().Kvs {
+				switch string(kv.Key) {
+				case wemixTokenKey:
+					tokenFound = true
+					foundToken = kv.Value
 				}
 			}
+		}
+
+		if tokenFound {
+			if len(foundToken) > 0 {
+				var otherToken = &WemixToken{}
+				if err = json.Unmarshal(foundToken, otherToken); err != nil {
+					return nil, err
+				}
+				otherToken.admin = ma
+				if otherToken.Till >= time.Now().Unix() {
+					// valid lock
+					return otherToken, ErrExists
+				}
+			}
+
+			// expired or empty lock, delete it & try again
+			tx = ma.etcdCli.Txn(ctx)
+			_, err := tx.If(
+				clientv3.Compare(clientv3.Value(wemixTokenKey), "=", string(foundToken)),
+			).Then(
+				clientv3.OpDelete(wemixTokenKey),
+			).Commit()
+			if err != nil {
+				return nil, err
+			}
+			goto again
 		}
 	}
 	return lock, err
 }
 
-func (lck *WemixEtcdLock) ttl() int64 {
+func (lck *WemixToken) ttl() int64 {
 	ttl := lck.Till - time.Now().Unix()
 	if ttl < 0 {
 		ttl = -1
@@ -639,7 +650,7 @@ func (lck *WemixEtcdLock) ttl() int64 {
 	return ttl
 }
 
-func (lck *WemixEtcdLock) renew(ctx context.Context, ttl int) error {
+func (lck *WemixToken) renew(ctx context.Context, ttl int) error {
 	prev, err := json.Marshal(lck)
 	if err != nil {
 		return err
@@ -672,7 +683,7 @@ func (lck *WemixEtcdLock) renew(ctx context.Context, ttl int) error {
 	return err
 }
 
-func (lck *WemixEtcdLock) release(ctx context.Context) error {
+func (lck *WemixToken) release(ctx context.Context) error {
 	value, err := json.Marshal(lck)
 	if err != nil {
 		return err
@@ -691,7 +702,7 @@ func (lck *WemixEtcdLock) release(ctx context.Context) error {
 	return err
 }
 
-func (lck *WemixEtcdLock) lockedPut(ctx context.Context, key, value, prev string) error {
+func (lck *WemixToken) lockedPut(ctx context.Context, key, value, prev string) error {
 	exists := true
 	lockValue, err := json.Marshal(lck)
 	if err != nil {
@@ -748,7 +759,7 @@ func (ma *wemixAdmin) ttl2(ctx context.Context, key string) (int64, error) {
 	} else if rsp.Count == 0 {
 		return -1, nil
 	}
-	lock := &WemixEtcdLock{}
+	lock := &WemixToken{}
 	var value []byte
 	for _, kv := range rsp.Kvs {
 		value = kv.Value
@@ -767,12 +778,12 @@ func (ma *wemixAdmin) ttl2(ctx context.Context, key string) (int64, error) {
 	return ttl, nil
 }
 
-// acquire lock iff we're in sync with the latest block
+// acquire token iff we're in sync with the latest block
 // lock is expected not to be present
 //   if expired, delete & try again
 // work is expected to be there
 //   if not present, put an empty string & try again
-func (ma *wemixAdmin) acquireLockSync(ctx context.Context, height *big.Int, parentHash common.Hash, ttl int64) (*WemixEtcdLock, error) {
+func (ma *wemixAdmin) acquireTokenSync(ctx context.Context, height *big.Int, parentHash common.Hash, ttl int64) (*WemixToken, error) {
 	if ok, err := ma.isEligibleMiner(height); err != nil {
 		return nil, err
 	} else if !ok {
@@ -790,54 +801,53 @@ func (ma *wemixAdmin) acquireLockSync(ctx context.Context, height *big.Int, pare
 again:
 	now := time.Now().Unix()
 	till := now + ttl
-	lock := &WemixEtcdLock{
+	lock := &WemixToken{
 		admin:  ma,
 		Miner:  ma.self.Name,
 		ID:     uint64(ma.etcd.Server.ID()),
 		Height: height.Int64(),
 		Since:  now,
 		Till:   till,
-		Key:    wemixLockKey,
+		Key:    wemixTokenKey,
 	}
 	lockValue, err := json.Marshal(lock)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: how to do "not present || value == ''"
 	tx := ma.etcdCli.Txn(ctx)
 	var txIf clientv3.Txn
 	if workExists {
 		txIf = tx.If(
-			clientv3.Compare(clientv3.CreateRevision(wemixLockKey), "=", 0),
+			clientv3.Compare(clientv3.CreateRevision(wemixTokenKey), "=", 0),
 			clientv3.Compare(clientv3.Value(wemixWorkKey), "=", prevWork),
 		)
 	} else {
 		txIf = tx.If(
-			clientv3.Compare(clientv3.CreateRevision(wemixLockKey), "=", 0),
+			clientv3.Compare(clientv3.CreateRevision(wemixTokenKey), "=", 0),
 			clientv3.Compare(clientv3.CreateRevision(wemixWorkKey), "=", 0),
 		)
 	}
 	txresp, err := txIf.Then(
-		clientv3.OpPut(wemixLockKey, string(lockValue)),
+		clientv3.OpPut(wemixTokenKey, string(lockValue)),
 	).Else(
-		clientv3.OpGet(wemixLockKey),
+		clientv3.OpGet(wemixTokenKey),
 		clientv3.OpGet(wemixWorkKey),
 	).Commit()
 
 	if err == nil && !txresp.Succeeded {
 		err = ErrExists
 		var (
-			lockFound, workFound bool = false, false
-			foundLock            []byte
-			foundWork            []byte
+			tokenFound, workFound bool = false, false
+			foundToken            []byte
+			foundWork             []byte
 		)
 		for _, r := range txresp.Responses {
 			for _, kv := range r.GetResponseRange().Kvs {
 				switch string(kv.Key) {
-				case wemixLockKey:
-					lockFound = true
-					foundLock = kv.Value
+				case wemixTokenKey:
+					tokenFound = true
+					foundToken = kv.Value
 				case wemixWorkKey:
 					workFound = true
 					foundWork = kv.Value
@@ -845,25 +855,25 @@ again:
 			}
 		}
 
-		if lockFound {
-			if len(foundLock) > 0 {
-				var otherLock = &WemixEtcdLock{}
-				if err = json.Unmarshal(foundLock, otherLock); err != nil {
+		if tokenFound {
+			if len(foundToken) > 0 {
+				var otherToken = &WemixToken{}
+				if err = json.Unmarshal(foundToken, otherToken); err != nil {
 					return nil, err
 				}
-				otherLock.admin = ma
-				if otherLock.Till >= time.Now().Unix() {
+				otherToken.admin = ma
+				if otherToken.Till >= time.Now().Unix() {
 					// valid lock
-					return otherLock, ErrExists
+					return otherToken, ErrExists
 				}
 			}
 
 			// expired or empty lock, delete it & try again
 			tx = ma.etcdCli.Txn(ctx)
 			_, err := tx.If(
-				clientv3.Compare(clientv3.Value(wemixLockKey), "=", string(foundLock)),
+				clientv3.Compare(clientv3.Value(wemixTokenKey), "=", string(foundToken)),
 			).Then(
-				clientv3.OpDelete(wemixLockKey),
+				clientv3.OpDelete(wemixTokenKey),
 			).Commit()
 			if err != nil {
 				return nil, err
@@ -884,7 +894,7 @@ again:
 	return lock, err
 }
 
-func (lck *WemixEtcdLock) releaseLockSync(ctx context.Context, height *big.Int, hash, parentHash common.Hash) error {
+func (lck *WemixToken) releaseTokenSync(ctx context.Context, height *big.Int, hash, parentHash common.Hash) error {
 	exists := true
 	prevWork, work, lockValue := "", "", ""
 
@@ -928,22 +938,22 @@ again:
 
 	if err == nil && !txresp.Succeeded {
 		var (
-			lockFound, workFound bool = false, false
-			foundLock            []byte
+			tokenFound, workFound bool = false, false
+			foundToken            []byte
 		)
 		for _, r := range txresp.Responses {
 			for _, kv := range r.GetResponseRange().Kvs {
 				switch string(kv.Key) {
-				case wemixLockKey:
-					lockFound = true
-					foundLock = kv.Value
+				case wemixTokenKey:
+					tokenFound = true
+					foundToken = kv.Value
 				case wemixWorkKey:
 					workFound = true
 				}
 			}
 		}
 
-		if !lockFound || lockValue != string(foundLock) {
+		if !tokenFound || lockValue != string(foundToken) {
 			// we don't have the lock
 			return ErrInvalidToken
 		}
