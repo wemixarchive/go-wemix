@@ -512,7 +512,7 @@ func (ma *wemixAdmin) etcdGet(key string) (string, error) {
 	if err != nil {
 		return "", err
 	} else if rsp.Count == 0 {
-		return "", nil
+		return "", ErrNotFound
 	} else {
 		var v string
 		for _, kv := range rsp.Kvs {
@@ -555,6 +555,51 @@ func (ma *wemixAdmin) etcdDelete(key string) error {
 		ma.etcd.Server.Cfg.ReqTimeout())
 	defer cancel()
 	_, err := ma.etcdCli.Delete(ctx, key)
+	return err
+}
+
+// handles removed nodes
+// caller should take care of etcd & governance lock
+func etcdSyncMembership() error {
+	if admin == nil || !admin.amPartner() || admin.self == nil || !admin.etcdIsRunning() {
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	header, err := admin.cli.HeaderByNumber(ctx, nil)
+	if err != nil {
+		log.Error("etcd sync: failed to get the latest block", "error", err)
+		return err
+	}
+	nodes, err := getNodesAt(header.Number)
+	if err != nil {
+		return err
+	}
+	m := map[string]*wemixNode{}
+	for _, n := range nodes {
+		m[n.Name] = n
+	}
+	members := admin.etcd.Server.Cluster().Members()
+	if len(nodes) > len(members) {
+		// some nodes are not added to etcd yet
+		return nil
+	}
+
+	var removed []*membership.Member
+	for _, cn := range members {
+		if _, ok := m[cn.Attributes.Name]; !ok {
+			removed = append(removed, cn)
+		}
+	}
+	if len(removed) == 0 {
+		return nil
+	}
+
+	// remove the first one
+	_, err = admin.etcdRemoveMember(removed[0].Attributes.Name)
+	log.Error("etcd node sync", "removed-node", removed[0].Attributes.Name, "error", err)
 	return err
 }
 
@@ -890,6 +935,9 @@ again:
 			goto again
 		}
 		return nil, ErrInvalidWork
+	}
+	if lock != nil && err == nil {
+		etcdSyncMembership()
 	}
 	return lock, err
 }

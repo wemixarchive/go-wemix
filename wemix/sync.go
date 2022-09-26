@@ -243,6 +243,7 @@ func syncCheck() error {
 
 	secondsSinceUpdate := func() int {
 		if v := latestUpdateTime.Load(); v == nil {
+			latestUpdateTime.Store(time.Now())
 			return -1
 		} else if t, ok := v.(time.Time); ok {
 			return int(time.Since(t).Seconds())

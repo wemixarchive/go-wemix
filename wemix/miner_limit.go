@@ -120,6 +120,18 @@ func enodeExists(ctx context.Context, height *big.Int, gov *metclient.RemoteCont
 	return ix >= 1, nil
 }
 
+// returns wemix nodes at given height
+func getNodesAt(height *big.Int) ([]*wemixNode, error) {
+	ctx := context.Background()
+	if _, gov, _, err := admin.getRegGovEnvContracts(ctx, height); err != nil {
+		return nil, wemixminer.ErrNotInitialized
+	} else if e, err := getCoinbaseEnodeCache(ctx, height, gov); err != nil {
+		return nil, err
+	} else {
+		return e.nodes, nil
+	}
+}
+
 // return block's miner node id
 func getBlockMiner(ctx context.Context, cli *ethclient.Client, entry *coinbaseEnodeEntry, height *big.Int) ([]byte, error) {
 	// if already cached, use it
@@ -287,8 +299,11 @@ func (ma *wemixAdmin) nextMinerCandidates(height *big.Int) ([]*wemixNode, error)
 	})
 	var miners []*wemixNode
 	for _, k := range keys {
-		nix := e.enode2index[k]
-		miners = append(miners, e.nodes[nix-1])
+		if nix, ok := e.enode2index[k]; !ok || nix <= 0 {
+			continue
+		} else {
+			miners = append(miners, e.nodes[nix-1])
+		}
 	}
 	return miners, nil
 }
