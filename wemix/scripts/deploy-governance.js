@@ -217,9 +217,8 @@ var GovernanceDeployer = new function() {
 
         // 2. deploy Staking, BallotStorage, EnvStorage, GovImp, Gov
         this.log("Deploying Staking, BallotStorage, EnvStorage, GovImp & Gov...")
-        // var code = Staking_contract.getData(registry.address,
-        //     doInitOnce ? initData.stakes : "", {data: Staking_data})
-        staking = this.deployContract(Staking_data)
+        var code = Staking_contract.getData(stakingImp.address, {data: Staking_data})
+        staking = this.deployContract(code)
         var code = BallotStorage_contract.getData(registry.address, {data: BallotStorage_data})
         ballotStorage = this.deployContract(code)
         code = EnvStorage_contract.getData(envStorageImp.address, {data: EnvStorage_data})
