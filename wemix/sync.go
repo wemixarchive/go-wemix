@@ -85,7 +85,9 @@ func (ma *wemixAdmin) handleNewBlocks() {
 			latestBlock.Store(header)
 			refreshCoinbaseEnodeCache(header.Number)
 		}
-		admin.update()
+		if admin != nil {
+			admin.update()
+		}
 	}
 }
 
@@ -312,6 +314,12 @@ func syncCheck() error {
 			log.Error("sync check: ignoring invalid work", "work", string(workData))
 			work = nil
 		}
+	}
+
+	// if we're in sync, nothing we can do
+	if work != nil && work.Height == header.Number.Int64() && bytes.Equal(work.Hash.Bytes(), header.Hash().Bytes()) {
+		log.Debug("sync check: in sync", "height", work.Height, "hash", work.Hash)
+		return err
 	}
 
 	// we're ahead of 'work'
