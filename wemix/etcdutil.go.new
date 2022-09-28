@@ -33,7 +33,7 @@ import (
 var (
 	etcdLock         = &SpinLock{0}
 	etcdReady        = false
-	etcdAutoJoinLock = make(chan interface{}, 1)
+	etcdAutoJoinLock chan interface{}
 )
 
 func (ma *wemixAdmin) etcdMemberExists(name, cluster string) (bool, error) {
@@ -126,7 +126,8 @@ func (ma *wemixAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	cfg.SelfSignedCertValidity = 10
 	cfg.AutoCompactionMode = "revision"
 	cfg.AutoCompactionRetention = "100"
-	cfg.LogLevel = "error"
+	//	cfg.LogLevel = "error"
+	cfg.LogLevel = "info"
 	cfg.Dir = ma.etcdDir
 	cfg.Name = ma.self.Name
 	u, _ := url.Parse(fmt.Sprintf("https://%s:%d", "0.0.0.0", ma.self.Port+1))
@@ -183,7 +184,13 @@ func (ma *wemixAdmin) etcdAddMember(name string) (string, error) {
 	if !ma.etcdIsReady() {
 		return "", ErrNotRunning
 	}
+	if ma.etcd.Server.Leader() == 0 {
+		fmt.Printf("XXX: etcd add meber leader == 0\n")
+		return "", ErrNotRunning
+	}
+
 	if ok, _ := ma.etcdMemberExists(name, ma.etcdGetCluster()); ok {
+		fmt.Printf("XXX: etcd add member -> %s exists %s\n", name, ma.etcdGetCluster())
 		return ma.etcdGetCluster(), nil
 	}
 
@@ -198,8 +205,22 @@ func (ma *wemixAdmin) etcdAddMember(name string) (string, error) {
 	ma.lock.Unlock()
 
 	if node == nil {
+		fmt.Printf("XXX: etcd add member -> %s not found\n", name)
 		return "", ethereum.NotFound
 	}
+
+	/*
+		data := new(big.Int).SetBytes([]byte(name))
+		token, err := ma.acquireToken(context.Background(), wemixJoinKey, data, MiningTokenTTL)
+		if err != nil {
+			if err == ErrExists && token != nil {
+				fmt.Printf("XXX: %s etcd add member failed to get token: %s in progress -> %v\n", ma.self.Name, string(token.Height.Bytes()), err)
+			} else {
+				fmt.Printf("XXX: %s etcd add member failed to get token %v\n", ma.self.Name, err)
+			}
+			return "", err
+		}
+	*/
 
 	now := time.Now()
 	u, _ := url.Parse(fmt.Sprintf("https://%s:%d", node.Ip, node.Port+1))
@@ -213,6 +234,11 @@ func (ma *wemixAdmin) etcdAddMember(name string) (string, error) {
 		fmt.Fprintf(bb, "%s=%s", i.Attributes.Name, i.RaftAttributes.PeerURLs[0])
 	}
 
+	/*
+		_, err := ma.etcdCli.MemberAdd(context.Background(),
+			[]string{fmt.Sprintf("https://%s:%d", node.Ip, node.Port+1)})
+	*/
+	fmt.Printf("XXX: etcd add member %s -> %s -> %v\n", name, bb.String(), err)
 	if err != nil {
 		log.Error("failed to add a new member",
 			"name", name, "ip", node.Ip, "port", node.Port+1, "error", err)
@@ -303,52 +329,6 @@ func (ma *wemixAdmin) etcdWipe() error {
 	}
 }
 
-func etcdEventHandler() {
-	if !admin.etcdIsRunning() {
-		return
-	}
-	select {
-	case <-admin.etcd.Server.ReadyNotify():
-		etcdReady = true
-		log.Info("etcd server ready")
-	case err := <-admin.etcd.Err():
-		etcdReady = false
-		log.Info("etcd server failed to start", "error", err)
-		return
-	}
-	// watch
-	ctx := context.Background()
-	workCh := admin.etcdCli.Watch(ctx, wemixWorkKey)
-	lockCh := admin.etcdCli.Watch(ctx, wemixTokenKey)
-	for {
-		select {
-		case <-admin.etcd.Server.LeaderChangedNotify():
-			latestEtcdLeader.Store(admin.etcd.Server.Leader())
-		case watchResp := <-workCh:
-			latestUpdateTime.Store(time.Now())
-			for _, event := range watchResp.Events {
-				switch event.Type {
-				case mvccpb.PUT:
-					latestWemixWork.Store(event.Kv.Value)
-				case mvccpb.DELETE:
-					var nilBytes []byte
-					latestWemixWork.Store(nilBytes)
-				}
-			}
-		case watchResp := <-lockCh:
-			for _, event := range watchResp.Events {
-				switch event.Type {
-				case mvccpb.PUT:
-					latestMiningToken.Store(event.Kv.Value)
-				case mvccpb.DELETE:
-					var nilBytes []byte
-					latestMiningToken.Store(nilBytes)
-				}
-			}
-		}
-	}
-}
-
 func (ma *wemixAdmin) etcdInit() error {
 	if ma.etcdIsRunning() {
 		return ErrAlreadyRunning
@@ -359,15 +339,19 @@ func (ma *wemixAdmin) etcdInit() error {
 	cfg := ma.etcdNewConfig(true)
 	etcd, err := embed.StartEtcd(cfg)
 	if err != nil {
-		log.Error("etcd failed to initialize", "error", err)
+		log.Error("failed to initialize etcd", "error", err)
 		return err
 	} else {
-		log.Info("etcd initialized")
+		log.Info("initialized etcd server")
 	}
 
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)
-	go etcdEventHandler()
+	go func() {
+		<-ma.etcd.Server.ReadyNotify()
+		etcdReady = true
+		log.Info("etcd server ready")
+	}()
 	return nil
 }
 
@@ -379,14 +363,69 @@ func (ma *wemixAdmin) etcdStart() error {
 	cfg := ma.etcdNewConfig(false)
 	etcd, err := embed.StartEtcd(cfg)
 	if err != nil {
-		log.Error("etcd failed to start", "error", err)
+		log.Error("failed to start etcd", "error", err)
 		return err
 	} else {
-		log.Info("etcd started")
+		log.Info("started etcd server")
 	}
+
+	select {
+	case <-etcd.Server.ReadyNotify():
+		etcdReady = true
+		log.Info("etcd server ready")
+	case err := <-etcd.Err():
+		etcdReady = false
+		fmt.Printf("XXX etcd server failed to start: %v\n", err)
+		return err
+	}
+
+	/*
+		go func() {
+			<-ma.etcd.Server.ReadyNotify()
+			etcdReady = true
+			log.Info("etcd server ready")
+		}()
+	*/
+
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)
-	go etcdEventHandler()
+
+	// capture leader changes & latest work updates
+	go func() {
+		// watch
+		workCh := ma.etcdCli.Watch(context.Background(), wemixWorkKey)
+		lockCh := ma.etcdCli.Watch(context.Background(), wemixTokenKey)
+		for {
+			if !ma.etcdIsRunning() {
+				break
+			}
+			select {
+			case <-etcd.Server.LeaderChangedNotify():
+				latestEtcdLeader.Store(ma.etcd.Server.Leader())
+			case watchResp := <-workCh:
+				latestUpdateTime.Store(time.Now())
+				for _, event := range watchResp.Events {
+					switch event.Type {
+					case mvccpb.PUT:
+						latestWemixWork.Store(event.Kv.Value)
+					case mvccpb.DELETE:
+						var nilBytes []byte
+						latestWemixWork.Store(nilBytes)
+					}
+				}
+			case watchResp := <-lockCh:
+				for _, event := range watchResp.Events {
+					switch event.Type {
+					case mvccpb.PUT:
+						latestMiningToken.Store(event.Kv.Value)
+					case mvccpb.DELETE:
+						var nilBytes []byte
+						latestMiningToken.Store(nilBytes)
+					}
+				}
+			}
+		}
+	}()
 	return nil
 }
 
@@ -412,7 +451,7 @@ func (ma *wemixAdmin) etcdJoin(name string) error {
 		close(ch)
 	}()
 
-	to := 30 * time.Second
+	to := 120 * time.Second
 	timer := time.NewTimer(to)
 	ctx, cancel := context.WithTimeout(context.Background(), to)
 	defer cancel()
@@ -426,8 +465,11 @@ func (ma *wemixAdmin) etcdJoin(name string) error {
 		select {
 		case cluster := <-ch:
 			cluster, err := ma.etcdFixCluster(cluster)
+			xxx := strings.Split(cluster, ",")
+			fmt.Printf("XXX: %s etcd join count=%d cluster %v %v\n", admin.self.Name, len(xxx), xxx, cluster)
 			if err != nil {
-				log.Error("etcd failed to join", "error", err)
+				fmt.Printf("XXX %s etcd join cluster not found %v != %v\n",
+					admin.self.Name, admin.self.Name, cluster)
 				return err
 			}
 
@@ -435,14 +477,31 @@ func (ma *wemixAdmin) etcdJoin(name string) error {
 			cfg.InitialCluster = cluster
 			etcd, err := embed.StartEtcd(cfg)
 			if err != nil {
-				log.Error("etcd failed to join", "error", err)
+				log.Error("failed to join etcd", "error", err)
 				return err
 			} else {
-				log.Info("etcd started server")
+				log.Info("started etcd server")
 			}
+			go func() {
+				<-ma.etcd.Server.ReadyNotify()
+				etcdReady = true
+				log.Info("etcd server ready")
+
+				/*
+					data := new(big.Int).SetBytes([]byte(name))
+					token, err := ma.acquireToken(context.Background(), wemixJoinKey, data, MiningTokenTTL)
+					if err == ErrExists && token != nil && name == string(token.Height.Bytes()) && token.ttl() >= 0 {
+						// good
+						fmt.Printf("XXX: %s etcd join retrieveid token\n", ma.self.Name)
+						token.release(context.Background())
+					} else {
+						fmt.Printf("XXX: %s etcd join failed to get token: %v\n", ma.self.Name, err)
+					}
+				*/
+			}()
+
 			ma.etcd = etcd
 			ma.etcdCli = v3client.New(etcd.Server)
-			go etcdEventHandler()
 			return nil
 
 		case <-timer.C:
@@ -462,57 +521,50 @@ func (ma *wemixAdmin) etcdAutoJoin() error {
 		<-etcdAutoJoinLock
 	}()
 
-	// boot node
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	header, err := admin.cli.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return err
+	}
+	nodes, err := getNodesAt(header.Number)
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Name < nodes[j].Name
+	})
+	if err != nil {
+		return err
+	}
+	ix := -1
+	for i, n := range nodes {
+		if n.Name == ma.self.Name {
+			ix = i
+			break
+		}
+	}
+	if ix < 0 {
+		return ErrNotFound
+	}
+
 	if ma.nodeInfo != nil && ma.nodeInfo.ID == ma.bootNodeId {
-		etcdLock.Lock()
-		defer etcdLock.Unlock()
 		return ma.etcdInit()
 	}
 
-	// collect miners that haven't joined the etcd network yet
-	var sz, gap, ix int64
-	if states := getMiners("", 0); len(states) > 0 {
-		var tobes []*wemixapi.WemixMinerStatus
-		for _, state := range states {
-			if state.NodeName == admin.self.Name || strings.Index(state.MiningPeers, "*") < 0 {
-				tobes = append(tobes, state)
-			}
-		}
-		sz = int64(len(tobes))
-		gap = 23
-		if sz <= 11 {
-			sz = 11
-			gap = 7
-		} else if sz <= 23 {
-			sz = 23
-			gap = 11
-		} else if sz <= 41 {
-			sz = 41
-			gap = 17
-		}
-		ix = -1
-		for i := 0; i < len(tobes); i++ {
-			if tobes[i].NodeName == admin.self.Name {
-				ix = int64(i)
-				break
-			}
-		}
-		if ix == -1 {
-			return ErrNotFound
-		}
-	}
-
-	// schedule it
-	tt := sz * gap
+	gap := int64(5)
+	tt := int64(len(nodes)) * gap
 	ct := time.Now().Unix()
-	st := ct/tt*tt + sz
-	t := st + ix*gap + (rand.Int63()%(gap/2) - (gap / 4))
+	st := ct / tt * tt
+	t := st + int64(ix)*gap + (rand.Int63()%(gap/2) - gap/4)
 	if t < ct {
 		t += tt
 	}
 	if dt := t - ct; dt > 0 {
+		fmt.Printf("XXX: etcd join %s ix=%v dt=%v %v\n", ma.self.Name, ix, dt, t)
 		time.Sleep(time.Duration(dt) * time.Second)
+	} else {
+		fmt.Printf("XXX: etcd join %s ix=%v dt=0 %v\n", ma.self.Name, ix, t)
 	}
+	fmt.Printf("XXX: etcd auto join %s %v ix=%d/n=%d\n", ma.self.Name, time.Now(), ix, len(nodes))
 
 	if ma.etcdIsRunning() {
 		return nil
@@ -520,23 +572,29 @@ func (ma *wemixAdmin) etcdAutoJoin() error {
 	etcdLock.Lock()
 	defer etcdLock.Unlock()
 
-	var state *wemixapi.WemixMinerStatus
-	for _, s := range getMiners("", 0) {
-		if s.NodeName != admin.self.Name && s.Status == "up" && strings.Index(s.MiningPeers, "*") >= 0 {
-			state = s
-			break
+	var node *wemixNode
+	states := getMiners("", 0)
+	if len(states) > 0 {
+		ix := 0
+		for count := len(states); count > 0; count -= 1 {
+			state := states[ix]
+			if state.Status == "up" && state.NodeName != admin.self.Name && strings.Index(state.MiningPeers, "*") >= 0 {
+				admin.lock.Lock()
+				node = admin.nodes[state.Id]
+				admin.lock.Unlock()
+			}
+			if ix += 1; ix >= len(states) {
+				ix -= len(states)
+			}
 		}
 	}
-
-	if state == nil {
-		err := ErrNotFound
-		log.Info("etcd join failed", "name", admin.self.Name, "error", err)
-		return err
-	} else {
-		err := admin.etcdJoin(state.NodeName)
-		log.Info("etcd join", "name", admin.self.Name, "server", state.NodeName, "error", err)
-		return err
+	if node != nil {
+		err := admin.etcdJoin(node.Name)
+		log.Info("Wemix etcd join", "name", admin.self.Name, "server", node.Name, "error", err)
+		log.Error("XXX Wemix etcd join", "name", admin.self.Name, "server", node.Name, "error", err)
+		return nil
 	}
+	return ErrNotFound
 }
 
 func (ma *wemixAdmin) etcdStop() error {
@@ -722,10 +780,13 @@ type WemixToken struct {
 	Key    string   `json:"key"`
 }
 
-func (ma *wemixAdmin) acquireToken(ctx context.Context, height *big.Int, ttl int) (*WemixToken, error) {
+func (ma *wemixAdmin) acquireToken(ctx context.Context, key string, height *big.Int, ttl int) (*WemixToken, error) {
 	if !ma.etcdIsReady() {
 		return nil, wemixminer.ErrNotInitialized
 	}
+	etcdLock.Lock()
+	defer etcdLock.Unlock()
+
 again:
 	now := time.Now().Unix()
 	till := now + int64(ttl)
@@ -736,7 +797,7 @@ again:
 		Height: height,
 		Since:  now,
 		Till:   till,
-		Key:    wemixTokenKey,
+		Key:    key,
 	}
 	value, err := json.Marshal(lock)
 	if err != nil {
@@ -745,11 +806,11 @@ again:
 
 	tx := ma.etcdCli.Txn(ctx)
 	txresp, err := tx.If(
-		clientv3.Compare(clientv3.CreateRevision(wemixTokenKey), "=", 0),
+		clientv3.Compare(clientv3.CreateRevision(key), "=", 0),
 	).Then(
-		clientv3.OpPut(wemixTokenKey, string(value)),
+		clientv3.OpPut(key, string(value)),
 	).Else(
-		clientv3.OpGet(wemixTokenKey),
+		clientv3.OpGet(key),
 	).Commit()
 
 	if err == nil && !txresp.Succeeded {
@@ -761,7 +822,7 @@ again:
 		for _, r := range txresp.Responses {
 			for _, kv := range r.GetResponseRange().Kvs {
 				switch string(kv.Key) {
-				case wemixTokenKey:
+				case key:
 					tokenFound = true
 					foundToken = kv.Value
 				}
@@ -784,9 +845,9 @@ again:
 			// expired or empty lock, delete it & try again
 			tx = ma.etcdCli.Txn(ctx)
 			_, err := tx.If(
-				clientv3.Compare(clientv3.Value(wemixTokenKey), "=", string(foundToken)),
+				clientv3.Compare(clientv3.Value(key), "=", string(foundToken)),
 			).Then(
-				clientv3.OpDelete(wemixTokenKey),
+				clientv3.OpDelete(key),
 			).Commit()
 			if err != nil {
 				return nil, err
@@ -947,6 +1008,9 @@ func (ma *wemixAdmin) acquireTokenSync(ctx context.Context, height *big.Int, par
 	} else if !ok {
 		return nil, ErrIneligible
 	}
+
+	etcdLock.Lock()
+	defer etcdLock.Unlock()
 
 	workExists := true
 	prevWork := ""
@@ -1142,6 +1206,22 @@ func (ma *wemixAdmin) etcdCompact(rev int64) error {
 	return err
 }
 
+func (ma *wemixAdmin) isMember() (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(),
+		ma.etcd.Server.Cfg.ReqTimeout())
+	defer cancel()
+	rsp, err := ma.etcdCli.MemberList(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, i := range rsp.Members {
+		if i.ID == uint64(ma.etcd.Server.ID()) {
+			return true, nil
+		}
+	}
+	return false, ErrNotFound
+}
+
 func (ma *wemixAdmin) etcdInfo() interface{} {
 	if ma.etcd == nil {
 		return ErrNotRunning
@@ -1306,6 +1386,10 @@ func EtcdDelete(key string) error {
 		return ErrNotRunning
 	}
 	return admin.etcdDelete(key)
+}
+
+func init() {
+	etcdAutoJoinLock = make(chan interface{}, 1)
 }
 
 /* EOF */
