@@ -1192,11 +1192,12 @@ func (w *worker) ancestorTimes(num *big.Int) []int64 {
 
 // returns throttle delay if necessary in seconds & seconds from the parent
 // blocks  seconds  seconds per
-//     10        1  0.1
-//     50       10  0.2
-//    100       50  0.5
-//    500      500  1
-//   1000     2000  2
+//
+//	  10        1  0.1
+//	  50       10  0.2
+//	 100       50  0.5
+//	 500      500  1
+//	1000     2000  2
 func (w *worker) throttleMining(ts []int64) (int64, int64) {
 	t := time.Now().Unix()
 	dt, pt := int64(0), t-ts[0]
@@ -1310,7 +1311,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if parent == nil {
 		return nil, fmt.Errorf("missing parent")
 	}
-	blockInterval, _, blockGasLimit, baseFeeMaxChangeRate, gasTargetPercentage, err := wemixminer.GetBlockBuildParameters(parent.Number())
+	blockInterval, _, blockGasLimit, baseFeeMaxChangeRate, gasTargetPercentage, _ := wemixminer.GetBlockBuildParameters(parent.Number())
 	// Sanity check the timestamp correctness, recap the timestamp
 	// to parent+1 if the mutation is allowed.
 	timestamp := genParams.timestamp
@@ -1326,7 +1327,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 
 	// wemix
 	if !wemixminer.IsPoW() {
-		timestamp, till = w.timeIt(int64(blockInterval))
+		timestamp, till = w.timeIt(blockInterval)
 	}
 	header := &types.Header{
 		ParentHash: parent.Hash(),
