@@ -79,6 +79,8 @@ func (ma *wemixAdmin) handleNewBlocks() {
 	defer sub.Unsubscribe()
 
 	for {
+		<-ch
+
 		latestUpdateTime.Store(time.Now())
 		if header, err := admin.cli.HeaderByNumber(context.Background(), nil); err == nil {
 			latestBlock.Store(header)
