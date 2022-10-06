@@ -286,6 +286,7 @@ func doTest(cmdline []string) {
 		coverage = flag.Bool("coverage", false, "Whether to record code coverage")
 		verbose  = flag.Bool("v", false, "Whether to log verbosely")
 		race     = flag.Bool("race", false, "Execute the race detector")
+		short    = flag.Bool("short", false, "Skip time consuming tests")
 	)
 	flag.CommandLine.Parse(cmdline)
 
@@ -308,6 +309,9 @@ func doTest(cmdline []string) {
 	}
 	if *race {
 		gotest.Args = append(gotest.Args, "-race")
+	}
+	if *short {
+		gotest.Args = append(gotest.Args, "-test.short")
 	}
 
 	packages := []string{"./..."}
