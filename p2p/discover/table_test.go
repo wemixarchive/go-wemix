@@ -93,6 +93,10 @@ func testPingReplace(t *testing.T, newNodeIsResponding, lastInBucketIsResponding
 }
 
 func TestBucket_bumpNoDuplicates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	cfg := &quick.Config{
 		MaxCount: 1000,
@@ -191,6 +195,10 @@ func checkIPLimitInvariant(t *testing.T, tab *Table) {
 }
 
 func TestTable_findnodeByID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	test := func(test *closeTest) bool {

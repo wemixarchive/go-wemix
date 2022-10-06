@@ -44,6 +44,10 @@ const (
 // maximum permitted rate. The max capacity nodes are changed multiple times during
 // a single test.
 func TestConstantTotalCapacity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	testConstantTotalCapacity(t, 10, 1, 0)
 	testConstantTotalCapacity(t, 10, 1, 1)
 	testConstantTotalCapacity(t, 30, 1, 0)

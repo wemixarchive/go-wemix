@@ -42,6 +42,10 @@ func TestLegacyCheckpointSyncingLes3(t *testing.T) { testCheckpointSyncing(t, lp
 func TestCheckpointSyncingLes3(t *testing.T) { testCheckpointSyncing(t, lpv3, 2) }
 
 func testCheckpointSyncing(t *testing.T, protocol int, syncMode int) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	config := light.TestServerIndexerConfig
 
 	waitIndexers := func(cIndexer, bIndexer, btIndexer *core.ChainIndexer) {
@@ -138,6 +142,10 @@ func TestMissOracleBackendLES3(t *testing.T)             { testMissOracleBackend
 func TestMissOracleBackendNoCheckpointLES3(t *testing.T) { testMissOracleBackend(t, false, lpv3) }
 
 func testMissOracleBackend(t *testing.T, hasCheckpoint bool, protocol int) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	config := light.TestServerIndexerConfig
 
 	waitIndexers := func(cIndexer, bIndexer, btIndexer *core.ChainIndexer) {
@@ -235,6 +243,10 @@ func testMissOracleBackend(t *testing.T, hasCheckpoint bool, protocol int) {
 func TestSyncFromConfiguredCheckpointLES3(t *testing.T) { testSyncFromConfiguredCheckpoint(t, lpv3) }
 
 func testSyncFromConfiguredCheckpoint(t *testing.T, protocol int) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	config := light.TestServerIndexerConfig
 
 	waitIndexers := func(cIndexer, bIndexer, btIndexer *core.ChainIndexer) {
@@ -319,6 +331,10 @@ func testSyncFromConfiguredCheckpoint(t *testing.T, protocol int) {
 func TestSyncAll(t *testing.T) { testSyncAll(t, lpv3) }
 
 func testSyncAll(t *testing.T, protocol int) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	config := light.TestServerIndexerConfig
 
 	waitIndexers := func(cIndexer, bIndexer, btIndexer *core.ChainIndexer) {

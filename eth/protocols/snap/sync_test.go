@@ -748,6 +748,10 @@ func TestSyncWithStorage(t *testing.T) {
 
 // TestMultiSyncManyUseless contains one good peer, and many which doesn't return anything valuable at all
 func TestMultiSyncManyUseless(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	var (
@@ -796,6 +800,10 @@ func TestMultiSyncManyUseless(t *testing.T) {
 
 // TestMultiSyncManyUseless contains one good peer, and many which doesn't return anything valuable at all
 func TestMultiSyncManyUselessWithLowTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	var (
 		once   sync.Once
 		cancel = make(chan struct{})
@@ -847,6 +855,10 @@ func TestMultiSyncManyUselessWithLowTimeout(t *testing.T) {
 
 // TestMultiSyncManyUnresponsive contains one good peer, and many which doesn't respond at all
 func TestMultiSyncManyUnresponsive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	var (
 		once   sync.Once
 		cancel = make(chan struct{})

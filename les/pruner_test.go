@@ -28,6 +28,10 @@ import (
 )
 
 func TestLightPruner(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	var (
 		waitIndexers = func(cIndexer, bIndexer, btIndexer *core.ChainIndexer) {
 			for {

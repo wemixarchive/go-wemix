@@ -52,6 +52,10 @@ var (
 )
 
 func TestWatchNewFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	dir, ks := tmpKeyStore(t, false)
@@ -92,6 +96,10 @@ func TestWatchNewFile(t *testing.T) {
 }
 
 func TestWatchNoDir(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	// Create ks but not the directory that it watches.
@@ -318,6 +326,10 @@ func waitForAccounts(wantAccounts []accounts.Account, ks *KeyStore) error {
 // TestUpdatedKeyfileContents tests that updating the contents of a keystore file
 // is noticed by the watcher, and the account cache is updated accordingly
 func TestUpdatedKeyfileContents(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	// Create a temporary kesytore to test with

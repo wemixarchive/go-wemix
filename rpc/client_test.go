@@ -163,6 +163,10 @@ func TestClientCancelIPC(t *testing.T)       { testClientCancel("ipc", t) }
 // This test checks that requests made through CallContext can be canceled by canceling
 // the context.
 func testClientCancel(transport string, t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// These tests take a lot of time, run them all at once.
 	// You probably want to run with -parallel 1 or comment out
 	// the call to t.Parallel if you enable the logging.
@@ -440,6 +444,10 @@ func TestClientSubscriptionUnsubscribeServer(t *testing.T) {
 // This checks that the subscribed channel can be closed after Unsubscribe.
 // It is the reproducer for https://github.com/ethereum/go-ethereum/issues/22322
 func TestClientSubscriptionChannelClose(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	var (
@@ -599,6 +607,10 @@ func TestClientHTTP(t *testing.T) {
 }
 
 func TestClientReconnect(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	startServer := func(addr string) (*Server, net.Listener) {
 		srv := newTestServer()
 		l, err := net.Listen("tcp", addr)
