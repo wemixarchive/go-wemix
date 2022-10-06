@@ -86,6 +86,9 @@ ios:
 test: all
 	$(GORUN) build/ci.go test
 
+test-short: all
+	$(GORUN) build/ci.go test -short
+
 lint: wemix/governance_abi.go ## Run linters.
 	$(GORUN) build/ci.go lint
 
