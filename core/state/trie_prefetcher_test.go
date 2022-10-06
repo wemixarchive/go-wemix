@@ -44,6 +44,10 @@ func filledStateDB() *StateDB {
 }
 
 func TestCopyAndClose(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	db := filledStateDB()
 	prefetcher := newTriePrefetcher(db.db, db.originalRoot, "")
 	skey := common.HexToHash("aaa")

@@ -17,6 +17,7 @@
 package ethtest
 
 import (
+	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -581,6 +582,11 @@ func (s *Suite) TestLargeAnnounce66(t *utesting.T) {
 
 // TestOldAnnounce65 tests the announcement mechanism with an old block.
 func (s *Suite) TestOldAnnounce65(t *utesting.T) {
+	if testing.Short() {
+		t.Log("skipping test in short mode")
+		return
+	}
+
 	if err := s.oldAnnounce(eth65); err != nil {
 		t.Fatal(err)
 	}
@@ -589,6 +595,11 @@ func (s *Suite) TestOldAnnounce65(t *utesting.T) {
 // TestOldAnnounce66 tests the announcement mechanism with an old block,
 // over the eth66 protocol.
 func (s *Suite) TestOldAnnounce66(t *utesting.T) {
+	if testing.Short() {
+		t.Log("skipping test in short mode")
+		return
+	}
+
 	if err := s.oldAnnounce(eth66); err != nil {
 		t.Fatal(err)
 	}

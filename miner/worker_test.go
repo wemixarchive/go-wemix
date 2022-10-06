@@ -217,6 +217,10 @@ func TestGenerateBlockAndImportClique(t *testing.T) {
 }
 
 func testGenerateBlockAndImport(t *testing.T, isClique bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	var (
 		engine      consensus.Engine
 		chainConfig *params.ChainConfig
@@ -387,6 +391,10 @@ func TestRegenerateMiningBlockClique(t *testing.T) {
 }
 
 func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	defer engine.Close()
 
 	w, b := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0)
@@ -447,6 +455,10 @@ func TestAdjustIntervalClique(t *testing.T) {
 }
 
 func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	defer engine.Close()
 
 	w, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0)

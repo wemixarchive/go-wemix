@@ -958,6 +958,10 @@ func TestTransactionQueueTimeLimitingNoLocals(t *testing.T) {
 }
 
 func testTransactionQueueTimeLimiting(t *testing.T, nolocals bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Reduce the eviction interval to a testable amount
 	defer func(old time.Duration) { evictionInterval = old }(evictionInterval)
 	evictionInterval = time.Millisecond * 100
@@ -2247,6 +2251,10 @@ func TestTransactionJournaling(t *testing.T)         { testTransactionJournaling
 func TestTransactionJournalingNoLocals(t *testing.T) { testTransactionJournaling(t, true) }
 
 func testTransactionJournaling(t *testing.T, nolocals bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	// Create a temporary file for the journal

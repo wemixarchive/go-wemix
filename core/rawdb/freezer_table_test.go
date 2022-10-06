@@ -77,6 +77,10 @@ func TestFreezerBasics(t *testing.T) {
 // TestFreezerBasicsClosing tests same as TestFreezerBasics, but also closes and reopens the freezer between
 // every operation
 func TestFreezerBasicsClosing(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	// set cutoff at 50 bytes
 	var (

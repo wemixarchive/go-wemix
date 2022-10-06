@@ -1074,6 +1074,10 @@ func deleteString(trie *Trie, k string) {
 }
 
 func TestDecodeNode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	var (
 		hash  = make([]byte, 20)

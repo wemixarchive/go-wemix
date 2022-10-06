@@ -375,6 +375,10 @@ func TestGenerateExistentStateWithWrongAccounts(t *testing.T) {
 // Tests that snapshot generation errors out correctly in case of a missing trie
 // node in the account trie.
 func TestGenerateCorruptAccountTrie(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// without any storage slots to keep the test smaller.
@@ -419,6 +423,10 @@ func TestGenerateCorruptAccountTrie(t *testing.T) {
 // trie node for a storage trie. It's similar to internal corruption but it is
 // handled differently inside the generator.
 func TestGenerateMissingStorageTrie(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// two of which also has the same 3-slot storage trie attached.
@@ -478,6 +486,10 @@ func TestGenerateMissingStorageTrie(t *testing.T) {
 // Tests that snapshot generation errors out correctly in case of a missing trie
 // node in a storage trie.
 func TestGenerateCorruptStorageTrie(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// two of which also has the same 3-slot storage trie attached.
