@@ -329,6 +329,7 @@ func syncCheck() error {
 		// If the network, except this node, is in sync, this node will eventually
 		// follow the longest chain.
 		log.Error("sync check: ahead of work, aborting", "our-height", header.Number, "work-height", work.Height)
+		return nil
 	}
 
 	// collects mining peers' latest blocks
