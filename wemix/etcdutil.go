@@ -474,7 +474,7 @@ func (ma *wemixAdmin) etcdAutoJoin() error {
 	if states := getMiners("", 0); len(states) > 0 {
 		var tobes []*wemixapi.WemixMinerStatus
 		for _, state := range states {
-			if state.NodeName == admin.self.Name || strings.Index(state.MiningPeers, "*") < 0 {
+			if state.NodeName == admin.self.Name || !strings.Contains(state.MiningPeers, "*") {
 				tobes = append(tobes, state)
 			}
 		}
@@ -522,7 +522,7 @@ func (ma *wemixAdmin) etcdAutoJoin() error {
 
 	var state *wemixapi.WemixMinerStatus
 	for _, s := range getMiners("", 0) {
-		if s.NodeName != admin.self.Name && s.Status == "up" && strings.Index(s.MiningPeers, "*") >= 0 {
+		if s.NodeName != admin.self.Name && s.Status == "up" && strings.Contains(s.MiningPeers, "*") {
 			state = s
 			break
 		}
@@ -879,7 +879,7 @@ again:
 		)
 	}
 	txresp, err := txIf.Then(
-		clientv3.OpPut(key, string(value)),
+		clientv3.OpPut(key, value),
 		clientv3.OpGet(key),
 	).Else(
 		clientv3.OpGet(key),
@@ -935,9 +935,12 @@ func (ma *wemixAdmin) ttl2(ctx context.Context, key string) (int64, error) {
 
 // acquire token iff we're in sync with the latest block
 // lock is expected not to be present
-//   if expired, delete & try again
+//
+//	if expired, delete & try again
+//
 // work is expected to be there
-//   if not present, put an empty string & try again
+//
+//	if not present, put an empty string & try again
 func (ma *wemixAdmin) acquireTokenSync(ctx context.Context, height *big.Int, parentHash common.Hash, ttl int64) (*WemixToken, error) {
 	if !ma.etcdIsReady() {
 		return nil, wemixminer.ErrNotInitialized
@@ -994,7 +997,7 @@ again:
 	).Commit()
 
 	if err == nil && !txresp.Succeeded {
-		err = ErrExists
+
 		var (
 			tokenFound, workFound bool = false, false
 			foundToken            []byte

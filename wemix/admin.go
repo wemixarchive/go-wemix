@@ -177,10 +177,10 @@ func toIdv4(id string) (string, error) {
 }
 
 // returns
-// 1) extradata of genesis block, which is the id of the node that is allowed
-//   to generated blocks before admin contract is established.
-// 2) returns the coinbase of genesis block, which should be the admin
-//   contract creator
+//  1. extradata of genesis block, which is the id of the node that is allowed
+//     to generated blocks before admin contract is established.
+//  2. returns the coinbase of genesis block, which should be the admin
+//     contract creator
 func (ma *wemixAdmin) getGenesisInfo() (string, common.Address, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -341,11 +341,12 @@ func (ma *wemixAdmin) getNodes() []*wemixNode {
 }
 
 // returns
-// 1. currentMiner *wemixNode: the current leader
-// 2. nextMiner *wemixNode: the most eligible miner for the given height,
-//   which is up and running
-// 3. nodes []*wemixNode: copies of map[string]*wemixNode, not references,
-//   sorted by id, i.e. mining order
+//  1. currentMiner *wemixNode: the current leader
+//  2. nextMiner *wemixNode: the most eligible miner for the given height,
+//     which is up and running
+//  3. nodes []*wemixNode: copies of map[string]*wemixNode, not references,
+//     sorted by id, i.e. mining order
+//
 // 'locked' indicates whether ma.lock is held by the caller or not
 func (ma *wemixAdmin) getMinerNodes(height int64, locked bool) (*wemixNode, *wemixNode, []*wemixNode) {
 	var nodes []*wemixNode
@@ -412,7 +413,7 @@ func (ma *wemixAdmin) getWemixNodes(ctx context.Context, block *big.Int) ([]*wem
 
 	count, err = ma.getInt(ctx, ma.gov, block, "getNodeLength")
 	for i := int64(1); i <= count; i++ {
-		input = []interface{}{big.NewInt(int64(i))}
+		input = []interface{}{big.NewInt(i)}
 		output = []interface{}{&name, &enode, &ip, &port}
 		if err = metclient.CallContract(ctx, ma.gov, "getNode", input, &output, block); err != nil {
 			return nil, err
@@ -453,7 +454,7 @@ func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*re
 		return nil, err
 	}
 
-	rp.distributionMethod = make([]*big.Int, 4, 4)
+	rp.distributionMethod = make([]*big.Int, 4)
 	if err = metclient.CallContract(ctx, env, "getBlockRewardDistributionMethod", nil, &rp.distributionMethod, height); err != nil {
 		return nil, err
 	}
@@ -489,11 +490,10 @@ func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*re
 		return nil, err
 	} else {
 		for i := int64(1); i <= count; i++ {
-			input = []interface{}{big.NewInt(int64(i))}
+			input = []interface{}{big.NewInt(i)}
 			if err = metclient.CallContract(ctx, gov, "getReward", input, &addr, height); err != nil {
 				return nil, err
 			}
-			input = []interface{}{addr}
 			// NB. no staking consideration
 			// if err = metclient.CallContract(ctx, staking, "lockedBalanceOf", input, &stake, height); err != nil {
 			//	return nil, err
@@ -540,7 +540,7 @@ func (ma *wemixAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (re
 	}
 
 	for i := int64(1); i <= count; i++ {
-		input = []interface{}{big.NewInt(int64(i))}
+		input = []interface{}{big.NewInt(i)}
 		err = metclient.CallContract(ctx, ma.gov, "getReward", input,
 			&addr, block)
 		if err != nil {
@@ -622,7 +622,7 @@ func (ma *wemixAdmin) getGovData(refresh bool) (data *govdata, err error) {
 	if err != nil {
 		return
 	}
-	gasLimitAndBaseFee := make([]*big.Int, 3, 3)
+	gasLimitAndBaseFee := make([]*big.Int, 3)
 	err = metclient.CallContract(ctx, ma.envStorage, "getGasLimitAndBaseFee", nil, &gasLimitAndBaseFee, block.Number)
 	if err != nil {
 		return
@@ -1153,10 +1153,7 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 	num := new(big.Int).Sub(height, common.Big1)
 	_, gov, _, err := admin.getRegGovEnvContracts(ctx, num)
 	if err != nil {
-		if err == wemixminer.ErrNotInitialized {
-			return true
-		}
-		return false
+		return err == wemixminer.ErrNotInitialized
 	}
 	// if minerNodeId is given, i.e. present in block header, use it,
 	// otherwise, derive it from the codebase
@@ -1348,7 +1345,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 	}
 	blockInterval = v.Int64()
 
-	gasLimitAndBaseFee := make([]*big.Int, 3, 3)
+	gasLimitAndBaseFee := make([]*big.Int, 3)
 	if err = metclient.CallContract(ctx, env, "getGasLimitAndBaseFee", nil, &gasLimitAndBaseFee, height); err != nil {
 		err = wemixminer.ErrNotInitialized
 		return
@@ -1648,13 +1645,13 @@ func requirePendingTxs() bool {
 }
 
 // checks
-// 1. fees total and per governance accounts are accurate
-// 2. sum(rewards) == fees + block reward
-// 3. rewards distribution is correct
-// 4. reward members, reward pool and maintenance account are correct
-// 5. balances of governance accounts are accurate.
-//   Note that it doesn't take account of internal transactions,
-//   so balance checks won't be accurate if there are contract transactions.
+//  1. fees total and per governance accounts are accurate
+//  2. sum(rewards) == fees + block reward
+//  3. rewards distribution is correct
+//  4. reward members, reward pool and maintenance account are correct
+//  5. balances of governance accounts are accurate.
+//     Note that it doesn't take account of internal transactions,
+//     so balance checks won't be accurate if there are contract transactions.
 func verifyBlockRewards(height *big.Int) interface{} {
 	type result struct {
 		Status bool `json:"status"`

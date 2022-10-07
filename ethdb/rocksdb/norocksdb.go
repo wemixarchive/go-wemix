@@ -1,4 +1,5 @@
 // rocksdb_database.go
+//go:build !rocksdb
 // +build !rocksdb
 
 package rocksdb

@@ -53,7 +53,7 @@ var (
 	latestWemixWork atomic.Value
 
 	// governance data at modifiedBlock height
-	// cached coinbase -> enode & enode existance check at given modifiedBlock
+	// cached coinbase -> enode & enode existence check at given modifiedBlock
 	// sync.Map[int]*cointbaseEnodeEntry
 	coinbaseEnodeCache = &sync.Map{}
 
@@ -78,7 +78,8 @@ func (ma *wemixAdmin) handleNewBlocks() {
 	defer sub.Unsubscribe()
 
 	for {
-		_ = <-ch
+		<-ch
+
 		latestUpdateTime.Store(time.Now())
 		if header, err := admin.cli.HeaderByNumber(context.Background(), nil); err == nil {
 			latestBlock.Store(header)
@@ -225,18 +226,18 @@ func findConsensusBlock(states []*wemixapi.WemixMinerStatus) (height *big.Int, h
 }
 
 // handles inconsistencies if any
-// 0. updates of 'latestBlock' of 'latestWemixWork' hasn't occurred over 30 seconds
-//   -> i.e. the system is likely stuck
-// 1. the token is invalid, i.e. present but json.Unmarshal fails
-//   -> remove
-// 2. our latest block is ahead of the recorded 'work'
-//   -> if recorded 'work' exists and valid,
-//      then revert back to the 'work' block using 'debug.setHead()'
-// 3. the recorded 'work' doesn't exist, i.e. no mining peers has it as their
-//    latest block, or
-//    the 'work' is invalid, i.e. present but json.Unmarshal fails
-//   -> find the consensus block, a block that the majority of the miners have
-//      as the latest block, sets it to the 'work'
+//  0. updates of 'latestBlock' of 'latestWemixWork' hasn't occurred over 30 seconds
+//     -> i.e. the system is likely stuck
+//  1. the token is invalid, i.e. present but json.Unmarshal fails
+//     -> remove
+//  2. our latest block is ahead of the recorded 'work'
+//     -> if recorded 'work' exists and valid,
+//     then revert back to the 'work' block using 'debug.setHead()'
+//  3. the recorded 'work' doesn't exist, i.e. no mining peers has it as their
+//     latest block, or
+//     the 'work' is invalid, i.e. present but json.Unmarshal fails
+//     -> find the consensus block, a block that the majority of the miners have
+//     as the latest block, sets it to the 'work'
 func syncCheck() error {
 	if admin == nil || !admin.amPartner() || admin.self == nil || !admin.etcdIsRunning() {
 		return nil
@@ -268,7 +269,7 @@ func syncCheck() error {
 		if err = json.Unmarshal([]byte(tokenData), token); err != nil {
 			// invalid token string
 			err = admin.etcdDelete(wemixTokenKey)
-			log.Error("sync check: reset the invalid token", "token", string(tokenData), "error", err)
+			log.Error("sync check: reset the invalid token", "token", tokenData, "error", err)
 		}
 	}
 
@@ -310,7 +311,7 @@ func syncCheck() error {
 	} else {
 		if err = json.Unmarshal([]byte(workData), work); err != nil {
 			// invalid work data
-			log.Error("sync check: ignoring invalid work", "work", string(workData))
+			log.Error("sync check: ignoring invalid work", "work", workData)
 			work = nil
 		}
 	}
@@ -376,7 +377,7 @@ func syncCheck() error {
 	if newWorkData, err := json.Marshal(newWork); err != nil {
 		panic("failed to marshal work data")
 	} else {
-		_, err = admin.etcdPut(wemixWorkKey, string(newWorkData))
+		admin.etcdPut(wemixWorkKey, string(newWorkData))
 	}
 	log.Error("sync check: found consensus block, setting work", "height", consensusHeight, "hash", consensusHash, "error", err)
 	return err
