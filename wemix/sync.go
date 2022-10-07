@@ -325,28 +325,10 @@ func syncCheck() error {
 
 	// we're ahead of 'work'
 	if work != nil && work.Height < header.Number.Int64() {
-		workHeader, err := admin.cli.HeaderByNumber(ctx, big.NewInt(work.Height))
-		if err != nil {
-			// can't locate the past block, abort
-			log.Error("sync check: ahead of the work, but can't find the work", "height", work.Height, "hash", work.Hash)
-			return err
-		}
-		if !bytes.Equal(work.Hash.Bytes(), workHeader.Hash().Bytes()) {
-			// hash mismatch, too much to handle
-			log.Error("sync check: ahead of the work, the found block hash mismatch", "height", work.Height, "our-hash", workHeader.Hash(), "work-hash", work.Hash)
-			return fmt.Errorf("BAD BLOCK")
-		}
-
-		token.release(ctx)
-		token = nil
-
-		// go back to the work
-		log.Error("sync check: ahead of work, reverting", "height", work.Height, "was", header.Number)
-		hexNum := hexutil.EncodeUint64(uint64(work.Height))
-		t := time.Now()
-		_ = admin.rpcCli.CallContext(ctx, nil, "debug_setHead", hexNum)
-		log.Error("sync check: ahead of work, reverted", "height", work.Height, "was", header.Number, "ellapsed", time.Since(t))
-		return nil
+		// It's too dangerous to go back to the recorded work.
+		// If the network, except this node, is in sync, this node will eventually
+		// follow the longest chain.
+		log.Error("sync check: ahead of work, aborting", "our-height", header.Number, "work-height", work.Height)
 	}
 
 	// collects mining peers' latest blocks
