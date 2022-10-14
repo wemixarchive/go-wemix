@@ -30,6 +30,10 @@ import (
 )
 
 func TestUDPv4_Lookup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPTest(t)
 
@@ -65,6 +69,10 @@ func TestUDPv4_Lookup(t *testing.T) {
 }
 
 func TestUDPv4_LookupIterator(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPTest(t)
 	defer test.close()
@@ -100,6 +108,10 @@ func TestUDPv4_LookupIterator(t *testing.T) {
 // TestUDPv4_LookupIteratorClose checks that lookupIterator ends when its Close
 // method is called.
 func TestUDPv4_LookupIteratorClose(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPTest(t)
 	defer test.close()

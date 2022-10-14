@@ -319,6 +319,10 @@ func TestFullSequentialAnnouncements(t *testing.T)  { testSequentialAnnouncement
 func TestLightSequentialAnnouncements(t *testing.T) { testSequentialAnnouncements(t, true) }
 
 func testSequentialAnnouncements(t *testing.T, light bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a chain of blocks to import
 	targetBlocks := 4 * hashLimit
 	hashes, blocks := makeChain(targetBlocks, 0, genesis)
@@ -356,6 +360,10 @@ func TestFullConcurrentAnnouncements(t *testing.T)  { testConcurrentAnnouncement
 func TestLightConcurrentAnnouncements(t *testing.T) { testConcurrentAnnouncements(t, true) }
 
 func testConcurrentAnnouncements(t *testing.T, light bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a chain of blocks to import
 	targetBlocks := 4 * hashLimit
 	hashes, blocks := makeChain(targetBlocks, 0, genesis)

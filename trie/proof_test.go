@@ -159,6 +159,10 @@ func (p entrySlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 // TestRangeProof tests normal range proof with both edge proofs
 // as the existent proof. The test cases are generated randomly.
 func TestRangeProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	trie, vals := randomTrie(4096)
 	var entries entrySlice
 	for _, kv := range vals {
@@ -192,6 +196,10 @@ func TestRangeProof(t *testing.T) {
 // TestRangeProof tests normal range proof with two non-existent proofs.
 // The test cases are generated randomly.
 func TestRangeProofWithNonExistentProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	trie, vals := randomTrie(4096)
 	var entries entrySlice
 	for _, kv := range vals {
@@ -457,6 +465,10 @@ func TestAllElementsProof(t *testing.T) {
 
 // TestSingleSideRangeProof tests the range starts from zero.
 func TestSingleSideRangeProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	for i := 0; i < 64; i++ {
 		trie := new(Trie)
 		var entries entrySlice
@@ -492,6 +504,10 @@ func TestSingleSideRangeProof(t *testing.T) {
 
 // TestReverseSingleSideRangeProof tests the range ends with 0xffff...fff.
 func TestReverseSingleSideRangeProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	for i := 0; i < 64; i++ {
 		trie := new(Trie)
 		var entries entrySlice

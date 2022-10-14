@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -343,7 +342,7 @@ func syncCheck() error {
 
 	// 'work' is ahead of us
 	if work != nil && work.Height > header.Number.Int64() {
-		// checks if the recorded 'work' is the latest block of any ming peer
+		// checks if the recorded 'work' is the latest block of any mining peer
 		exists := false
 		for _, state := range states {
 			if state.LatestBlockHeight == nil {

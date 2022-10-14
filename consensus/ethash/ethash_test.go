@@ -161,6 +161,10 @@ func TestHashrate(t *testing.T) {
 }
 
 func TestClosedRemoteSealer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	ethash := NewTester(nil, false)
 	time.Sleep(1 * time.Second) // ensure exit channel is listening
 	ethash.Close()

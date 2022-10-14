@@ -534,6 +534,10 @@ func TestGetBloombitsProofsLes4(t *testing.T) { testGetBloombitsProofs(t, 4) }
 
 // Tests that bloombits proofs can be correctly retrieved.
 func testGetBloombitsProofs(t *testing.T, protocol int) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	var (
 		config       = light.TestServerIndexerConfig
 		waitIndexers = func(cIndexer, bIndexer, btIndexer *core.ChainIndexer) {
@@ -695,6 +699,10 @@ func TestStopResumeLES3(t *testing.T) { testStopResume(t, lpv3) }
 func TestStopResumeLES4(t *testing.T) { testStopResume(t, lpv4) }
 
 func testStopResume(t *testing.T, protocol int) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	netconfig := testnetConfig{
 		protocol:  protocol,
 		simClock:  true,

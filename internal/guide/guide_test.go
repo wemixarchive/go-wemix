@@ -37,6 +37,10 @@ import (
 
 // Tests that the account management snippets work correctly.
 func TestAccountManagement(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a temporary folder to work with
 	workdir, err := ioutil.TempDir("", "")
 	if err != nil {
