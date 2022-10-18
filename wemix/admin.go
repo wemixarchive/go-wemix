@@ -1335,8 +1335,11 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var env *metclient.RemoteContract
-	if _, _, env, err = admin.getRegGovEnvContracts(ctx, height); err != nil {
+	var env, gov *metclient.RemoteContract
+	if _, gov, env, err = admin.getRegGovEnvContracts(ctx, height); err != nil {
+		err = wemixminer.ErrNotInitialized
+		return
+	} else if count, err2 := admin.getInt(ctx, gov, height, "getMemberLength"); err2 != nil || count == 0 {
 		err = wemixminer.ErrNotInitialized
 		return
 	}
