@@ -12,7 +12,7 @@ type SpinLock struct {
 }
 
 func (l *SpinLock) Lock() {
-	for l.TryLock() {
+	for !l.TryLock() {
 		runtime.Gosched()
 	}
 }
