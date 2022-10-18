@@ -1154,6 +1154,8 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 	_, gov, _, err := admin.getRegGovEnvContracts(ctx, num)
 	if err != nil {
 		return err == wemixminer.ErrNotInitialized
+	} else if count, err := admin.getInt(ctx, gov, num, "getMemberLength"); err != nil || count == 0 {
+		return err == wemixminer.ErrNotInitialized
 	}
 	// if minerNodeId is given, i.e. present in block header, use it,
 	// otherwise, derive it from the codebase
