@@ -19,6 +19,10 @@ func handleGetStatusEx(backend Backend, msg Decoder, peer *Peer) error {
 
 	go func() {
 		statusEx := wemixapi.GetMinerStatus()
+		if statusEx == nil {
+			// ignore the error, most likely server is shutting down
+			return
+		}
 		statusEx.LatestBlockTd = backend.Chain().GetTd(statusEx.LatestBlockHash,
 			statusEx.LatestBlockHeight.Uint64())
 		if err := peer.SendStatusEx(statusEx); err != nil {

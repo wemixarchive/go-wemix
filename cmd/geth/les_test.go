@@ -175,6 +175,10 @@ func startClient(t *testing.T, name string) *gethrpc {
 }
 
 func TestPriorityClient(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	lightServer := startLightServer(t)
 	defer lightServer.killAndWait()
 

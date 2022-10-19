@@ -72,19 +72,41 @@ var GovernanceDeployer = new function() {
         var nodes = "0x", stakes = "0x"
 
         for (var i = 0, l = data.members.length; i < l; i++) {
-            var m = data.members[i], id, addr
+            var m = data.members[i], id
             if (m.id.length != 128 && m.id.length != 130)
                 throw "Invalid enode id " + m.id
             id = m.id.length == 128 ? m.id : m.id.substr(2)
-            addr = m.addr.indexOf("0x") != 0 ? m.addr : m.addr.substr(2)
-
-            nodes += web3.padLeft(addr, 64, "0") +
+            if (m.addr) {
+                if (m.addr.indexOf("0x") == 0)
+                    m.addr = m.addr.substr(2)
+                if (!m.staker)
+                    m.staker = m.addr
+                if (!m.voter)
+                    m.voter = m.addr
+                if (!m.reward)
+                    m.reward = m.addr
+            }
+            if (m.staker) {
+                if (m.staker.indexOf("0x") == 0)
+                    m.staker = m.staker.substr(2)
+                if (!m.addr)
+                    m.addr = m.staker
+                if (!m.voter)
+                    m.voter = m.staker
+                if (!m.reward)
+                    m.reward = m.staker
+            }
+            if (!m.addr && !m.staker)
+                throw "Address & staker are missing"
+            nodes += web3.padLeft(m.staker, 64, "0") +
+                web3.padLeft(m.voter, 64, "0") +
+                web3.padLeft(m.reward, 64, "0") +
                 this.packNum(m.name.length) + web3.fromAscii(m.name).substr(2) +
                 this.packNum(id.length/2) + id +
                 this.packNum(m.ip.length) + web3.fromAscii(m.ip).substr(2) +
                 this.packNum(m.port)
 
-            stakes += web3.padLeft(addr, 64, "0") +
+            stakes += web3.padLeft(m.addr, 64, "0") +
                 this.packNum(m.stake)
         }
         return {
@@ -175,7 +197,7 @@ var GovernanceDeployer = new function() {
             throw "cannot load governance contract .js or config .json file"
 
         // check if contracts exist
-        var contractNames = [ "Registry", "EnvStorageImp", "Staking",
+        var contractNames = [ "Registry", "EnvStorageImp", "Staking", "StakingImp",
                               "BallotStorage", "EnvStorage", "GovImp", "Gov" ]
         for (var i in contractNames) {
             var cn = contractNames[i]
@@ -197,28 +219,29 @@ var GovernanceDeployer = new function() {
             "id": data.members[0].id,
             "ip": web3.fromAscii(data.members[0].ip),
             "port": data.members[0].port,
-            "lockAmount": data.members[0].lockAmount
+            "stake": data.members[0].stake
         }
 
         // contacts, transactions to be deployed
-        var registry, envStorageImp, staking, ballotStorage, envStorage, govImp, gov
+        var registry, envStorageImp, staking, stakingImp, ballotStorage, envStorage, govImp, gov
         var txs = new Array()
 
         // 1. deploy Registry and EnvStorageImp contracts
         this.log("Deploying Registry and EnvStorageImp...")
         registry = this.deployContract(Registry_data)
         envStorageImp = this.deployContract(EnvStorageImp_data)
+        stakingImp = this.deployContract(StakingImp_data)
 
         this.log("Waiting for receipts...")
         envStorageImp = this.resolveContract(EnvStorageImp_contract.abi, envStorageImp)
         registry = this.resolveContract(Registry_contract.abi, registry)
+        stakingImp = this.resolveContract(StakingImp_contract.abi, stakingImp);
 
         // 2. deploy Staking, BallotStorage, EnvStorage, GovImp, Gov
         this.log("Deploying Staking, BallotStorage, EnvStorage, GovImp & Gov...")
-        var code = Staking_contract.getData(registry.address,
-            doInitOnce ? initData.stakes : "", {data: Staking_data})
+        var code = Staking_contract.getData(stakingImp.address, {data: Staking_data})
         staking = this.deployContract(code)
-        code = BallotStorage_contract.getData(registry.address, {data: BallotStorage_data})
+        var code = BallotStorage_contract.getData(registry.address, {data: BallotStorage_data})
         ballotStorage = this.deployContract(code)
         code = EnvStorage_contract.getData(envStorageImp.address, {data: EnvStorage_data})
         envStorage = this.deployContract(code)
@@ -291,7 +314,7 @@ var GovernanceDeployer = new function() {
             envValues = [
                 1,
                 86400, 604800,
-                4980000000000000000000000, 39840000000000000000000000,
+                1500000000000000000000000, 1500000000000000000000000,
                 5,
                 1000,
                 web3.toWei(1, 'ether'),    // mint amount: 1 wemix
@@ -303,7 +326,15 @@ var GovernanceDeployer = new function() {
             tmpEnvStorageImp.initialize.getData(registry.address, envNames, envValues))
 
         // 5. deposit staking
-        txs[txs.length] = this.sendStakingDeposit(staking.address, staking.deposit.getData());
+        var tmpStakingImp = web3.eth.contract(stakingImp.abi).at(staking.address)
+        code = tmpStakingImp.init.getData(registry.address,
+            doInitOnce ? initData.stakes : "", {data: Staking_data})
+        txs[txs.length] = this.sendTx(staking.address, null, code);
+        txs[txs.length] = this.sendStakingDeposit(staking.address, tmpStakingImp.deposit.getData());
+        for(i=0;i<txs.length;i++){
+            if (!this.checkReceipt(txs[i]))
+            throw "Failed to initialize data. Tx is " + txs[i]
+        }
 
         if (!this.checkReceipt(txs[0]))
             throw "Failed to initialize environment storage data. Tx is " + txs[0]
@@ -317,16 +348,16 @@ var GovernanceDeployer = new function() {
             txs.length = 0
             txs[txs.length] = this.sendTx(gov.address, null,
                 tmpGovImp.init.getData(registry.address,
-                    bootNode.lockAmount, bootNode.name, bootNode.id,
+                    bootNode.stake, bootNode.name, bootNode.id,
                     bootNode.ip, bootNode.port))
         } else {
             txs.length = 0
             txs[txs.length] = this.sendTx(gov.address, null,
-                tmpGovImp.initOnce.getData(registry.address, initData.nodes))
+                tmpGovImp.initOnce.getData(registry.address, data.members[0].stake, initData.nodes))
         }
         if (!this.checkReceipt(txs[0]))
             throw "Failed to initialize with gov.init. Tx is " + txs[0]
-
+            
         // 7. print the addresses
         this.log('{\n' +
                  '  "REGISTRY_ADDRESS": "' + registry.address + '",\n' +

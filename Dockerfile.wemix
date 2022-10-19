@@ -1,6 +1,6 @@
 # builder image
 
-FROM ubuntu:bionic as base
+FROM ubuntu:focal as base
 
 SHELL ["/bin/bash", "-c"]
 
@@ -18,5 +18,7 @@ RUN curl -sL -o /tmp/go.tar.gz https://dl.google.com/go/$(curl -sL https://golan
     rm /tmp/go.tar.gz
 
 RUN apt autoremove && apt autoclean
+
+ENTRYPOINT ["/bin/bash", "-c"]
 
 # EOF

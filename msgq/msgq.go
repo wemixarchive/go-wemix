@@ -210,8 +210,9 @@ func (q *MsgQ) Unsubscribe(name string) error {
 	return err
 }
 
-//nolint:deadcode
 // msgq test
+//
+//nolint:deadcode
 func msgqTest() error {
 	q := NewMsgQ(10, 100)
 

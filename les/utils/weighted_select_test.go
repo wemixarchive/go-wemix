@@ -36,6 +36,10 @@ func testWeight(i interface{}) uint64 {
 }
 
 func TestWeightedRandomSelect(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	testFn := func(cnt int) {
 		s := NewWeightedRandomSelect(testWeight)
 		w := -1

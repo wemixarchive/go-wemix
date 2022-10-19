@@ -1526,3 +1526,8 @@ func containsHash(slice []common.Hash, hash common.Hash) bool {
 	}
 	return false
 }
+
+func init() {
+	maxTxAnnounces = 4096
+	maxTxUnderpricedSetSize = 32768
+}

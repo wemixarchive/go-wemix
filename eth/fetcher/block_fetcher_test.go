@@ -359,6 +359,10 @@ func TestFullSequentialAnnouncements(t *testing.T)  { testSequentialAnnouncement
 func TestLightSequentialAnnouncements(t *testing.T) { testSequentialAnnouncements(t, true) }
 
 func testSequentialAnnouncements(t *testing.T, light bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a chain of blocks to import
 	targetBlocks := 4 * hashLimit
 	hashes, blocks := makeChain(targetBlocks, 0, genesis)
@@ -397,6 +401,10 @@ func TestFullConcurrentAnnouncements(t *testing.T)  { testConcurrentAnnouncement
 func TestLightConcurrentAnnouncements(t *testing.T) { testConcurrentAnnouncements(t, true) }
 
 func testConcurrentAnnouncements(t *testing.T, light bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a chain of blocks to import
 	targetBlocks := 4 * hashLimit
 	hashes, blocks := makeChain(targetBlocks, 0, genesis)
@@ -453,6 +461,10 @@ func TestFullOverlappingAnnouncements(t *testing.T)  { testOverlappingAnnounceme
 func TestLightOverlappingAnnouncements(t *testing.T) { testOverlappingAnnouncements(t, true) }
 
 func testOverlappingAnnouncements(t *testing.T, light bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a chain of blocks to import
 	targetBlocks := 4 * hashLimit
 	hashes, blocks := makeChain(targetBlocks, 0, genesis)
@@ -552,6 +564,10 @@ func TestFullRandomArrivalImport(t *testing.T)  { testRandomArrivalImport(t, fal
 func TestLightRandomArrivalImport(t *testing.T) { testRandomArrivalImport(t, true) }
 
 func testRandomArrivalImport(t *testing.T, light bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a chain of blocks to import, and choose one to delay
 	targetBlocks := maxQueueDist
 	hashes, blocks := makeChain(targetBlocks, 0, genesis)
@@ -591,6 +607,10 @@ func testRandomArrivalImport(t *testing.T, light bool) {
 // Tests that direct block enqueues (due to block propagation vs. hash announce)
 // are correctly schedule, filling and import queue gaps.
 func TestQueueGapFill(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a chain of blocks to import, and choose one to not announce at all
 	targetBlocks := maxQueueDist
 	hashes, blocks := makeChain(targetBlocks, 0, genesis)
@@ -658,6 +678,10 @@ func TestImportDeduplication(t *testing.T) {
 // Tests that blocks with numbers much lower or higher than out current head get
 // discarded to prevent wasting resources on useless blocks from faulty peers.
 func TestDistantPropagationDiscarding(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a long chain to import and define the discard boundaries
 	hashes, blocks := makeChain(3*maxQueueDist, 0, genesis)
 	head := hashes[len(hashes)/2]
@@ -693,6 +717,10 @@ func TestFullDistantAnnouncementDiscarding(t *testing.T)  { testDistantAnnouncem
 func TestLightDistantAnnouncementDiscarding(t *testing.T) { testDistantAnnouncementDiscarding(t, true) }
 
 func testDistantAnnouncementDiscarding(t *testing.T, light bool) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a long chain to import and define the discard boundaries
 	hashes, blocks := makeChain(3*maxQueueDist, 0, genesis)
 	head := hashes[len(hashes)/2]
@@ -897,6 +925,10 @@ func TestHashMemoryExhaustionAttack(t *testing.T) {
 // announces and retrievals) don't pile up indefinitely, exhausting available
 // system memory.
 func TestBlockMemoryExhaustionAttack(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Create a tester with instrumented import hooks
 	tester := newTester(false)
 

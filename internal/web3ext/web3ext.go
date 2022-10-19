@@ -545,6 +545,21 @@ web3._extend({
 			call: 'debug_verifyBlockRewards',
 			params: 1,
 		}),
+		new web3._extend.Method({
+			name: 'etcdGet',
+			call: 'debug_etcdGet',
+			params: 1,
+		}),
+		new web3._extend.Method({
+			name: 'etcdPut',
+			call: 'debug_etcdPut',
+			params: 2,
+		}),
+		new web3._extend.Method({
+			name: 'etcdDelete',
+			call: 'debug_etcdDelete',
+			params: 1,
+		}),
 	],
 	properties: []
 });

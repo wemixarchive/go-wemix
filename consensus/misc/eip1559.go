@@ -84,6 +84,9 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 		}
 		parentGasTarget = parent.GasLimit * uint64(gasTargetPercentage) / 100
 		parentGasTargetBig = new(big.Int).SetUint64(parentGasTarget)
+		if parentGasTargetBig.Cmp(common.Big0) == 0 {
+			parentGasTargetBig = new(big.Int).SetUint64(parentGasTarget)
+		}
 		baseFeeChangeRate = new(big.Int).SetInt64(baseFeeMaxChangeRate)
 		maxBaseFee = maxBaseFeeGov
 	}
@@ -95,7 +98,12 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 		// If the parent block used more gas than its target, the baseFee should increase.
 		gasUsedDelta := new(big.Int).SetUint64(parent.GasUsed - parentGasTarget)
 		x := new(big.Int).Mul(parent.BaseFee, gasUsedDelta)
-		y := x.Div(x, parentGasTargetBig)
+		y := new(big.Int)
+		if parentGasTargetBig.Cmp(common.Big0) == 0 {
+			y = x
+		} else {
+			y = x.Div(x, parentGasTargetBig)
+		}
 		var baseFeeDelta *big.Int
 		if wemixminer.IsPoW() {
 			baseFeeDelta = math.BigMax(

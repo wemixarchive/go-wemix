@@ -32,6 +32,10 @@ import (
 
 // Runs multiple tests with randomized parameters.
 func TestChainIndexerSingle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	for i := 0; i < 10; i++ {
 		testChainIndexer(t, 1)
 	}
@@ -40,6 +44,10 @@ func TestChainIndexerSingle(t *testing.T) {
 // Runs multiple tests with randomized parameters and different number of
 // chain backends.
 func TestChainIndexerWithChildren(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	for i := 2; i < 8; i++ {
 		testChainIndexer(t, i)
 	}

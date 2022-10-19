@@ -154,6 +154,10 @@ func TestWebsocketPeerInfo(t *testing.T) {
 
 // This test checks that client handles WebSocket ping frames correctly.
 func TestClientWebsocketPing(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	var (
@@ -228,6 +232,10 @@ func TestClientWebsocketLargeMessage(t *testing.T) {
 }
 
 func TestClientWebsocketSevered(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	var (

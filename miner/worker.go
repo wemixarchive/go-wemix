@@ -528,11 +528,6 @@ func (w *worker) newWorkLoopEx(recommit time.Duration) {
 	timer := time.NewTimer(10 * time.Millisecond)
 	defer timer.Stop()
 
-	// to be notified when we become the leader / miner
-	leader := make(chan struct{}, 1)
-	wemixminer.SubscribeToLeadership(&leader)
-	defer wemixminer.UnsubscribeToLeadership()
-
 	// commitSimple just starts a new commitNewWork
 	commitSimple := func() {
 		if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
@@ -560,18 +555,12 @@ func (w *worker) newWorkLoopEx(recommit time.Duration) {
 			commitSimple()
 
 		case head := <-w.chainHeadCh:
-			// if leader & miner, may be waiting to sync with the previous miner
-			wemixminer.FeedBlockImported(int64(head.Block.NumberU64()), head.Block.Hash())
 			clearPending(head.Block.NumberU64())
-			commitSimple()
-
-		case <-leader:
-			// got the leadership
 			commitSimple()
 
 		case <-timer.C:
 			commitSimple()
-			timer.Reset(10 * time.Millisecond)
+			timer.Reset(1 * time.Second)
 
 		case <-w.resubmitIntervalCh:
 		case <-w.resubmitAdjustCh:
@@ -1203,11 +1192,12 @@ func (w *worker) ancestorTimes(num *big.Int) []int64 {
 
 // returns throttle delay if necessary in seconds & seconds from the parent
 // blocks  seconds  seconds per
-//     10        1  0.1
-//     50       10  0.2
-//    100       50  0.5
-//    500      500  1
-//   1000     2000  2
+//
+//	  10        1  0.1
+//	  50       10  0.2
+//	 100       50  0.5
+//	 500      500  1
+//	1000     2000  2
 func (w *worker) throttleMining(ts []int64) (int64, int64) {
 	t := time.Now().Unix()
 	dt, pt := int64(0), t-ts[0]
@@ -1321,7 +1311,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	if parent == nil {
 		return nil, fmt.Errorf("missing parent")
 	}
-	blockInterval, _, blockGasLimit, baseFeeMaxChangeRate, gasTargetPercentage, err := wemixminer.GetBlockBuildParameters(parent.Number())
+	blockInterval, _, blockGasLimit, baseFeeMaxChangeRate, gasTargetPercentage, _ := wemixminer.GetBlockBuildParameters(parent.Number())
 	// Sanity check the timestamp correctness, recap the timestamp
 	// to parent+1 if the mutation is allowed.
 	timestamp := genParams.timestamp
@@ -1337,7 +1327,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 
 	// wemix
 	if !wemixminer.IsPoW() {
-		timestamp, till = w.timeIt(int64(blockInterval))
+		timestamp, till = w.timeIt(blockInterval)
 	}
 	header := &types.Header{
 		ParentHash: parent.Hash(),
@@ -1604,9 +1594,19 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	} else {
 		return
 	}
-	if !wemixminer.IsPoW() && !wemixminer.IsMiner() {
-		w.refreshPending(true)
-		return
+	if !wemixminer.IsPoW() {
+		parent := w.chain.CurrentBlock()
+		height := new(big.Int).Add(parent.Number(), common.Big1)
+		ok, err := wemixminer.AcquireMiningToken(height, parent.Hash())
+		if ok {
+			log.Debug("Mining Token, successful", "height", height, "parent-hash", parent.Hash())
+		} else {
+			log.Debug("Mining Token, failure", "height", height, "parent-hash", parent.Hash(), "error", err)
+		}
+		if !ok {
+			w.refreshPending(true)
+			return
+		}
 	}
 
 	start := time.Now()
@@ -1659,7 +1659,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 // Note the assumption is held that the mutation is allowed to the passed env, do
 // the deep copy first.
 func (w *worker) commit(env *environment, interval func(), update bool, start time.Time) error {
-	if !wemixminer.IsPoW() && !wemixminer.IsMiner() {
+	if !wemixminer.IsPoW() && !wemixminer.HasMiningToken() {
 		return errors.New("Not Miner")
 	}
 
@@ -1698,7 +1698,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 // In Wemix, uncles are not welcome and difficulty is so low,
 // there's no reason to run miners asynchronously.
 func (w *worker) commitEx(env *environment, interval func(), update bool, start time.Time) error {
-	if !wemixminer.IsPoW() && !wemixminer.IsMiner() {
+	if !wemixminer.IsPoW() && !wemixminer.HasMiningToken() {
 		return errors.New("Not Miner")
 	}
 	if w.isRunning() {
@@ -1767,8 +1767,10 @@ func (w *worker) commitEx(env *environment, interval func(), update bool, start 
 				log.Info("Successfully sealed new block", "number", sealedBlock.Number(), "sealhash", sealhash, "hash", hash,
 					"elapsed", common.PrettyDuration(time.Since(createdAt)))
 
-				if !wemixminer.IsPoW() && !wemixminer.IsMiner() {
-					return errors.New("Not Miner")
+				if !wemixminer.IsPoW() {
+					if err = wemixminer.ReleaseMiningToken(sealedBlock.Number(), sealedBlock.Hash(), sealedBlock.ParentHash()); err != nil {
+						return err
+					}
 				}
 
 				// Broadcast the block and announce chain insertion event

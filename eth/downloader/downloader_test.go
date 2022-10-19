@@ -540,6 +540,10 @@ func TestForkedSync66Snap(t *testing.T)  { testForkedSync(t, eth.ETH66, SnapSync
 func TestForkedSync66Light(t *testing.T) { testForkedSync(t, eth.ETH66, LightSync) }
 
 func testForkedSync(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	tester := newTester()
 	defer tester.terminate()
 
@@ -570,6 +574,10 @@ func TestHeavyForkedSync66Snap(t *testing.T)  { testHeavyForkedSync(t, eth.ETH66
 func TestHeavyForkedSync66Light(t *testing.T) { testHeavyForkedSync(t, eth.ETH66, LightSync) }
 
 func testHeavyForkedSync(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	tester := newTester()
 	defer tester.terminate()
 
@@ -602,6 +610,10 @@ func TestBoundedForkedSync66Snap(t *testing.T)  { testBoundedForkedSync(t, eth.E
 func TestBoundedForkedSync66Light(t *testing.T) { testBoundedForkedSync(t, eth.ETH66, LightSync) }
 
 func testBoundedForkedSync(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	tester := newTester()
 	defer tester.terminate()
 
@@ -645,6 +657,10 @@ func TestBoundedHeavyForkedSync66Light(t *testing.T) {
 }
 
 func testBoundedHeavyForkedSync(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	tester := newTester()
 	defer tester.terminate()
 
@@ -1037,6 +1053,10 @@ func TestSyncProgress66Snap(t *testing.T)  { testSyncProgress(t, eth.ETH66, Snap
 func TestSyncProgress66Light(t *testing.T) { testSyncProgress(t, eth.ETH66, LightSync) }
 
 func testSyncProgress(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	tester := newTester()
 	defer tester.terminate()
 
@@ -1117,6 +1137,10 @@ func TestForkedSyncProgress66Snap(t *testing.T)  { testForkedSyncProgress(t, eth
 func TestForkedSyncProgress66Light(t *testing.T) { testForkedSyncProgress(t, eth.ETH66, LightSync) }
 
 func testForkedSyncProgress(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	tester := newTester()
 	defer tester.terminate()
 
@@ -1260,6 +1284,10 @@ func TestFakedSyncProgress66Snap(t *testing.T)  { testFakedSyncProgress(t, eth.E
 func TestFakedSyncProgress66Light(t *testing.T) { testFakedSyncProgress(t, eth.ETH66, LightSync) }
 
 func testFakedSyncProgress(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	tester := newTester()
 	defer tester.terminate()
 

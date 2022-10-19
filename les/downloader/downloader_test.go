@@ -549,6 +549,10 @@ func TestThrottling66Full(t *testing.T) { testThrottling(t, eth.ETH66, FullSync)
 func TestThrottling66Fast(t *testing.T) { testThrottling(t, eth.ETH66, FastSync) }
 
 func testThrottling(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	tester := newTester()
 
@@ -632,6 +636,10 @@ func TestForkedSync66Fast(t *testing.T)  { testForkedSync(t, eth.ETH66, FastSync
 func TestForkedSync66Light(t *testing.T) { testForkedSync(t, eth.ETH66, LightSync) }
 
 func testForkedSync(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	tester := newTester()
@@ -661,6 +669,10 @@ func TestHeavyForkedSync66Fast(t *testing.T)  { testHeavyForkedSync(t, eth.ETH66
 func TestHeavyForkedSync66Light(t *testing.T) { testHeavyForkedSync(t, eth.ETH66, LightSync) }
 
 func testHeavyForkedSync(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	tester := newTester()
@@ -692,6 +704,10 @@ func TestBoundedForkedSync66Fast(t *testing.T)  { testBoundedForkedSync(t, eth.E
 func TestBoundedForkedSync66Light(t *testing.T) { testBoundedForkedSync(t, eth.ETH66, LightSync) }
 
 func testBoundedForkedSync(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	tester := newTester()
@@ -728,6 +744,10 @@ func TestBoundedHeavyForkedSync66Light(t *testing.T) {
 }
 
 func testBoundedHeavyForkedSync(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	tester := newTester()
 
@@ -865,6 +885,10 @@ func TestEmptyShortCircuit66Fast(t *testing.T)  { testEmptyShortCircuit(t, eth.E
 func TestEmptyShortCircuit66Light(t *testing.T) { testEmptyShortCircuit(t, eth.ETH66, LightSync) }
 
 func testEmptyShortCircuit(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	tester := newTester()
@@ -974,6 +998,10 @@ func testShiftedHeaderAttack(t *testing.T, protocol uint, mode SyncMode) {
 func TestInvalidHeaderRollback66Fast(t *testing.T) { testInvalidHeaderRollback(t, eth.ETH66, FastSync) }
 
 func testInvalidHeaderRollback(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	tester := newTester()
@@ -1142,6 +1170,10 @@ func TestSyncProgress66Fast(t *testing.T)  { testSyncProgress(t, eth.ETH66, Fast
 func TestSyncProgress66Light(t *testing.T) { testSyncProgress(t, eth.ETH66, LightSync) }
 
 func testSyncProgress(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	tester := newTester()
@@ -1222,6 +1254,10 @@ func TestForkedSyncProgress66Fast(t *testing.T)  { testForkedSyncProgress(t, eth
 func TestForkedSyncProgress66Light(t *testing.T) { testForkedSyncProgress(t, eth.ETH66, LightSync) }
 
 func testForkedSyncProgress(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	tester := newTester()
@@ -1363,6 +1399,10 @@ func TestFakedSyncProgress66Fast(t *testing.T)  { testFakedSyncProgress(t, eth.E
 func TestFakedSyncProgress66Light(t *testing.T) { testFakedSyncProgress(t, eth.ETH66, LightSync) }
 
 func testFakedSyncProgress(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	tester := newTester()
@@ -1436,6 +1476,10 @@ func TestDeliverHeadersHang66Fast(t *testing.T)  { testDeliverHeadersHang(t, eth
 func TestDeliverHeadersHang66Light(t *testing.T) { testDeliverHeadersHang(t, eth.ETH66, LightSync) }
 
 func testDeliverHeadersHang(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	master := newTester()
@@ -1595,6 +1639,10 @@ func TestCheckpointEnforcement66Light(t *testing.T) {
 }
 
 func testCheckpointEnforcement(t *testing.T, protocol uint, mode SyncMode) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 
 	// Create a new tester with a particular hard coded checkpoint block

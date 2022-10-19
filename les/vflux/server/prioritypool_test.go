@@ -48,6 +48,10 @@ func (c *ppTestClient) estimatePriority(cap uint64, addBalance int64, future, bi
 }
 
 func TestPriorityPool(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	clock := &mclock.Simulated{}
 	setup := newServerSetup()
 	setup.balanceField = setup.setup.NewField("ppTestClient", reflect.TypeOf(&ppTestClient{}))

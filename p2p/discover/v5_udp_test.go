@@ -102,6 +102,10 @@ func startLocalhostV5(t *testing.T, cfg Config) *UDPv5 {
 
 // This test checks that incoming PING calls are handled correctly.
 func TestUDPv5_pingHandling(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -119,6 +123,10 @@ func TestUDPv5_pingHandling(t *testing.T) {
 
 // This test checks that incoming 'unknown' packets trigger the handshake.
 func TestUDPv5_unknownPacket(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -155,6 +163,10 @@ func TestUDPv5_unknownPacket(t *testing.T) {
 
 // This test checks that incoming FINDNODE calls are handled correctly.
 func TestUDPv5_findnodeHandling(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -233,6 +245,10 @@ func (test *udpV5Test) expectNodes(wantReqID []byte, wantTotal uint8, wantNodes 
 
 // This test checks that outgoing PING calls work.
 func TestUDPv5_pingCall(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -279,6 +295,10 @@ func TestUDPv5_pingCall(t *testing.T) {
 // This test checks that outgoing FINDNODE calls work and multiple NODES
 // replies are aggregated.
 func TestUDPv5_findnodeCall(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -328,6 +348,10 @@ func TestUDPv5_findnodeCall(t *testing.T) {
 
 // This test checks that pending calls are re-sent when a handshake happens.
 func TestUDPv5_callResend(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -365,6 +389,10 @@ func TestUDPv5_callResend(t *testing.T) {
 
 // This test ensures we don't allow multiple rounds of WHOAREYOU for a single call.
 func TestUDPv5_multipleHandshakeRounds(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -391,6 +419,10 @@ func TestUDPv5_multipleHandshakeRounds(t *testing.T) {
 
 // This test checks that calls with n replies may take up to n * respTimeout.
 func TestUDPv5_callTimeoutReset(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -430,6 +462,10 @@ func TestUDPv5_callTimeoutReset(t *testing.T) {
 
 // This test checks that TALKREQ calls the registered handler function.
 func TestUDPv5_talkHandling(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -480,6 +516,10 @@ func TestUDPv5_talkHandling(t *testing.T) {
 
 // This test checks that outgoing TALKREQ calls work.
 func TestUDPv5_talkRequest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
@@ -521,6 +561,10 @@ func TestUDPv5_talkRequest(t *testing.T) {
 
 // This test checks that lookup works.
 func TestUDPv5_lookup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 
@@ -598,6 +642,10 @@ func TestUDPv5_LocalNode(t *testing.T) {
 }
 
 func TestUDPv5_PingWithIPV4MappedAddress(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	t.Parallel()
 	test := newUDPV5Test(t)
 	defer test.close()
