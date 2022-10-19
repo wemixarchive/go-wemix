@@ -72,19 +72,41 @@ var GovernanceDeployer = new function() {
         var nodes = "0x", stakes = "0x"
 
         for (var i = 0, l = data.members.length; i < l; i++) {
-            var m = data.members[i], id, addr
+            var m = data.members[i], id
             if (m.id.length != 128 && m.id.length != 130)
                 throw "Invalid enode id " + m.id
             id = m.id.length == 128 ? m.id : m.id.substr(2)
-            addr = m.addr.indexOf("0x") != 0 ? m.addr : m.addr.substr(2)
-
-            nodes += web3.padLeft(addr, 64, "0") +
+            if (m.addr) {
+                if (m.addr.indexOf("0x") == 0)
+                    m.addr = m.addr.substr(2)
+                if (!m.staker)
+                    m.staker = m.addr
+                if (!m.voter)
+                    m.voter = m.addr
+                if (!m.reward)
+                    m.reward = m.addr
+            }
+            if (m.staker) {
+                if (m.staker.indexOf("0x") == 0)
+                    m.staker = m.staker.substr(2)
+                if (!m.addr)
+                    m.addr = m.staker
+                if (!m.voter)
+                    m.voter = m.staker
+                if (!m.reward)
+                    m.reward = m.staker
+            }
+            if (!m.addr && !m.staker)
+                throw "Address & staker are missing"
+            nodes += web3.padLeft(m.staker, 64, "0") +
+                web3.padLeft(m.voter, 64, "0") +
+                web3.padLeft(m.reward, 64, "0") +
                 this.packNum(m.name.length) + web3.fromAscii(m.name).substr(2) +
                 this.packNum(id.length/2) + id +
                 this.packNum(m.ip.length) + web3.fromAscii(m.ip).substr(2) +
                 this.packNum(m.port)
 
-            stakes += web3.padLeft(addr, 64, "0") +
+            stakes += web3.padLeft(m.addr, 64, "0") +
                 this.packNum(m.stake)
         }
         return {
@@ -331,7 +353,7 @@ var GovernanceDeployer = new function() {
         } else {
             txs.length = 0
             txs[txs.length] = this.sendTx(gov.address, null,
-                tmpGovImp.initOnce.getData(registry.address, initData.nodes))
+                tmpGovImp.initOnce.getData(registry.address, data.members[0].stake, initData.nodes))
         }
         if (!this.checkReceipt(txs[0]))
             throw "Failed to initialize with gov.init. Tx is " + txs[0]

@@ -277,6 +277,9 @@ type genesisConfig struct {
 	} `json:"accounts"`
 	Members []*struct {
 		Addr     common.Address `json:"addr"`
+		Staker   common.Address `json:"staker"`
+		Voter    common.Address `json:"voter"`
+		Reward   common.Address `json:"reward"`
 		Stake    *big.Int       `json:"stake"`
 		Name     string         `json:"name"`
 		Id       string         `json:"id"`
@@ -357,10 +360,14 @@ func genGenesis(ctx *cli.Context) error {
 		utils.Fatalf("At least one member and node are required.")
 	}
 
-	bootacct, bootnode := "", ""
+	bootacct, bootnode, emptyAddr := "", "", common.Address{}
 	for _, i := range config.Members {
 		if i.Bootnode {
-			bootacct = i.Addr.Hex()
+			if !bytes.Equal(i.Addr[:], emptyAddr[:]) {
+				bootacct = i.Addr.Hex()
+			} else if !bytes.Equal(i.Staker[:], emptyAddr[:]) {
+				bootacct = i.Staker.Hex()
+			}
 			bootnode = i.Id
 			break
 		}
