@@ -1,4 +1,4 @@
-name: gwemix-cron
+name: master-cron
 
 on:
   schedule:
@@ -9,8 +9,6 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v3
-      with:
-        ref: gwemix
 
     - name: Set up Go
       uses: actions/setup-go@v3
@@ -30,8 +28,6 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v3
-      with:
-        ref: gwemix
 
     - name: Set up Go
       uses: actions/setup-go@v3
@@ -45,8 +41,6 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v3
-      with:
-        ref: gwemix
 
     - name: Set up Go
       uses: actions/setup-go@v3
