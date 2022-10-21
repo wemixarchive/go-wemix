@@ -19,7 +19,7 @@ var (
 	CalculateRewardsFunc        func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
 	VerifyRewardsFunc           func(*big.Int, string) error
 	SignBlockFunc               func(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error)
-	VerifyBlockSigFunc          func(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte) bool
+	VerifyBlockSigFunc          func(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool
 	RequirePendingTxsFunc       func() bool
 	VerifyBlockRewardsFunc      func(height *big.Int) interface{}
 	SuggestGasPriceFunc         func() *big.Int
@@ -103,11 +103,11 @@ func SignBlock(height *big.Int, hash common.Hash) (coinbase common.Address, sig 
 	return
 }
 
-func VerifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte) bool {
+func VerifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool {
 	if VerifyBlockSigFunc == nil {
 		return false
 	} else {
-		return VerifyBlockSigFunc(height, coinbase, nodeId, hash, sig)
+		return VerifyBlockSigFunc(height, coinbase, nodeId, hash, sig, checkMinerLimit)
 	}
 }
 
