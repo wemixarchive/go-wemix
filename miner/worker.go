@@ -1758,6 +1758,11 @@ func (w *worker) commitEx(env *environment, interval func(), update bool, start 
 					}
 					logs = append(logs, receipt.Logs...)
 				}
+				if !wemixminer.IsPoW() {
+					if err = wemixminer.ReleaseMiningToken(sealedBlock.Number(), sealedBlock.Hash(), sealedBlock.ParentHash()); err != nil {
+						return err
+					}
+				}
 				// Commit block and state to database.
 				_, err := w.chain.WriteBlockAndSetHead(sealedBlock, receipts, logs, env.state, true)
 				if err != nil {
@@ -1766,12 +1771,6 @@ func (w *worker) commitEx(env *environment, interval func(), update bool, start 
 				}
 				log.Info("Successfully sealed new block", "number", sealedBlock.Number(), "sealhash", sealhash, "hash", hash,
 					"elapsed", common.PrettyDuration(time.Since(createdAt)))
-
-				if !wemixminer.IsPoW() {
-					if err = wemixminer.ReleaseMiningToken(sealedBlock.Number(), sealedBlock.Hash(), sealedBlock.ParentHash()); err != nil {
-						return err
-					}
-				}
 
 				// Broadcast the block and announce chain insertion event
 				w.mux.Post(core.NewMinedBlockEvent{Block: sealedBlock})

@@ -169,10 +169,17 @@ func releaseMiningToken(height *big.Int, hash, parentHash common.Hash) error {
 	if lck == nil || lck.ttl() < 0 {
 		return wemixminer.ErrNotInitialized
 	}
-	ctx, cancel := context.WithTimeout(context.Background(),
-		admin.etcd.Server.Cfg.ReqTimeout())
-	defer cancel()
-	err := lck.releaseTokenSync(ctx, height, hash, parentHash)
+	var err error
+	for range []int{1, 2} {
+		// retry in case it fails to release due to leader changes, etc.
+		ctx, cancel := context.WithTimeout(context.Background(),
+			admin.etcd.Server.Cfg.ReqTimeout())
+		err = lck.releaseTokenSync(ctx, height, hash, parentHash)
+		cancel()
+		if err == nil {
+			break
+		}
+	}
 
 	// invalidate the saved token
 	miningToken.Store(&WemixToken{})
