@@ -175,7 +175,7 @@ var (
 		MuirGlacierBlock:    big.NewInt(0),
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
-		PangyoBlock:         big.NewInt(1_000_000_000_000),
+		PangyoBlock:         big.NewInt(10_000_000),
 		Ethash:              new(EthashConfig),
 	}
 
