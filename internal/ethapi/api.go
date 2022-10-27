@@ -643,6 +643,48 @@ func (s *PublicBlockChainAPI) BlockNumber() hexutil.Uint64 {
 	return hexutil.Uint64(header.Number.Uint64())
 }
 
+// GetBlockReceipts returns all the transaction receipts for the given block hash.
+func (s *PublicBlockChainAPI) GetReceipts(ctx context.Context, blockHash common.Hash) ([]map[string]interface{}, error) {
+	receipts, err1 := s.b.GetReceipts(ctx, blockHash)
+	if err1 != nil {
+		return nil, err1
+	}
+	block, err2 := s.b.BlockByHash(ctx, blockHash)
+	if err2 != nil {
+		return nil, err2
+	}
+
+	txs := block.Transactions()
+	if receipts.Len() != txs.Len() {
+		return nil, fmt.Errorf("the size of transactions and receipts is different in the block (%s)", blockHash.String())
+	}
+	fieldsList := make([]map[string]interface{}, 0, len(receipts))
+
+	for index, receipt := range receipts {
+
+		bigblock := new(big.Int).SetUint64(block.NumberU64())
+		signer := types.MakeSigner(s.b.ChainConfig(), bigblock)
+		from, _ := types.Sender(signer, txs[index])
+
+		fields := map[string]interface{}{
+			"blockHash":         blockHash,
+			"blockNumber":       bigblock,
+			"transactionHash":   receipt.TxHash,
+			"transactionIndex":  hexutil.Uint64(index),
+			"from":              from,
+			"to":                txs[index].To(),
+			"gasUsed":           hexutil.Uint64(receipt.GasUsed),
+			"cumulativeGasUsed": hexutil.Uint64(receipt.CumulativeGasUsed),
+			"contractAddress":   nil,
+			"logs":              receipt.Logs,
+			"logsBloom":         receipt.Bloom,
+			"type":              hexutil.Uint(txs[index].Type()),
+		}
+		fieldsList = append(fieldsList, fields)
+	}
+	return fieldsList, nil
+}
+
 // GetBalance returns the amount of wei for the given address in the state of the
 // given block number. The rpc.LatestBlockNumber and rpc.PendingBlockNumber meta
 // block numbers are also allowed.

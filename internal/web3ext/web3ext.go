@@ -612,6 +612,18 @@ web3._extend({
 			inputFormatter: [web3._extend.formatters.inputTransactionFormatter]
 		}),
 		new web3._extend.Method({
+			name: 'getReceipts',
+			call: 'wemix_getReceipts',
+			params: 1,
+			outputFormatter: function(receipts) {
+				var formatted = [];
+				for (var i = 0; i < receipts.length; i++) {
+					formatted.push(web3._extend.formatters.outputTransactionReceiptFormatter(receipts[i]));
+				}
+				return formatted;
+			}
+		}),
+		new web3._extend.Method({
 			name: 'getHeaderByNumber',
 			call: 'eth_getHeaderByNumber',
 			params: 1,
