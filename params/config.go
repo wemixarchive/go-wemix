@@ -29,7 +29,7 @@ import (
 var (
 	MainnetGenesisHash      = common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
 	RopstenGenesisHash      = common.HexToHash("0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d")
-	WemixMainnetGenesisHash = common.HexToHash("0xf1b2a543e2dd402fc905d6f2caf9565e796ef83f5356970b2b0a993f01316e27")
+	WemixMainnetGenesisHash = common.HexToHash("0xa4e17f33b057aa2f78685aba4d6a60a79fc0a366fe8a521a3af1d6eceb1cf3cd")
 	WemixTestnetGenesisHash = common.HexToHash("0x15f522870e65c4e66230341b71b63ca421a61d4b5432f59d4906f021802435c6")
 	SepoliaGenesisHash      = common.HexToHash("0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9")
 	RinkebyGenesisHash      = common.HexToHash("0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177")

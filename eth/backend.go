@@ -55,7 +55,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/dnsdisc"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -275,12 +274,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 func makeExtraData(extra []byte) []byte {
 	if len(extra) == 0 {
 		// create default extradata
-		extra, _ = rlp.EncodeToBytes([]interface{}{
-			uint(params.VersionMajor<<16 | params.VersionMinor<<8 | params.VersionPatch),
-			"geth",
-			runtime.Version(),
-			runtime.GOOS,
-		})
+		extra = []byte(fmt.Sprintf("gwemix/v%v.%v.%v/%v/%v", params.VersionMajor, params.VersionMinor, params.VersionPatch, runtime.GOOS, runtime.Version()))
 	}
 	if uint64(len(extra)) > params.MaximumExtraDataSize {
 		log.Warn("Miner extra data exceed limit", "extra", hexutil.Bytes(extra), "limit", params.MaximumExtraDataSize)
