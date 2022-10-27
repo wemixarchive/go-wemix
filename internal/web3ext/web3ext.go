@@ -613,7 +613,7 @@ web3._extend({
 		}),
 		new web3._extend.Method({
 			name: 'getReceipts',
-			call: 'wemix_getReceipts',
+			call: 'eth_getReceipts',
 			params: 1,
 			outputFormatter: function(receipts) {
 				var formatted = [];
