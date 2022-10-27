@@ -1,4 +1,4 @@
-module github.com/ethereum/go-ethereum
+module github.com/wemixarchive/go-wemix
 
 go 1.19
 
