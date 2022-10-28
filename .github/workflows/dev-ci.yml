@@ -1,0 +1,60 @@
+name: dev-ci
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+jobs:
+  build_test:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+      
+    - name: Build Go-WEMIX
+      run: make gwemix.tar.gz
+    - name: Check Build
+      run: ls -al build/gwemix.tar.gz
+
+  lint_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [1.17, 1.18, 1.19]
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: ${{ matrix.version }}
+      
+    - name: Check Lint
+      run: make lint
+
+  unit_test:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.19
+
+    - name: Check golang Test Cases 
+      run: |
+        unset ANDROID_HOME
+        make test-short
