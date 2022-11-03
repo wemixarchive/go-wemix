@@ -612,8 +612,8 @@ web3._extend({
 			inputFormatter: [web3._extend.formatters.inputTransactionFormatter]
 		}),
 		new web3._extend.Method({
-			name: 'getReceipts',
-			call: 'eth_getReceipts',
+			name: 'getReceiptsByHash',
+			call: 'eth_getReceiptsByHash',
 			params: 1,
 			outputFormatter: function(receipts) {
 				var formatted = [];
