@@ -644,7 +644,7 @@ func (s *PublicBlockChainAPI) BlockNumber() hexutil.Uint64 {
 }
 
 // GetBlockReceipts returns all the transaction receipts for the given block hash.
-func (s *PublicBlockChainAPI) GetReceipts(ctx context.Context, blockHash common.Hash) ([]map[string]interface{}, error) {
+func (s *PublicBlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash common.Hash) ([]map[string]interface{}, error) {
 	receipts, err1 := s.b.GetReceipts(ctx, blockHash)
 	if err1 != nil {
 		return nil, err1
