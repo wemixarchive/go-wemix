@@ -98,6 +98,14 @@ func (db *EphemeralRDB) NewBatch() ethdb.Batch {
 	return db.rdb.NewBatch()
 }
 
+func (db *EphemeralRDB) NewBatchWithSize(size int) ethdb.Batch {
+	return db.rdb.NewBatchWithSize(size)
+}
+
+func (db *EphemeralRDB) NewSnapshot() (ethdb.Snapshot, error) {
+	return db.rdb.NewSnapshot()
+}
+
 func TestRocksDB(t *testing.T) {
 	t.Run("DatabaseSuite", func(t *testing.T) {
 		dbtest.TestDatabaseSuite(t, func() ethdb.KeyValueStore {
