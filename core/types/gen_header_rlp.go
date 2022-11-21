@@ -41,7 +41,11 @@ func (obj *Header) EncodeRLP(_w io.Writer) error {
 	w.WriteBytes(obj.MixDigest[:])
 	w.WriteBytes(obj.Nonce[:])
 	_tmp1 := obj.BaseFee != nil
-	if _tmp1 {
+	_tmp2 := obj.Fees != nil
+	_tmp3 := len(obj.Rewards) > 0
+	_tmp4 := len(obj.MinerNodeId) > 0
+	_tmp5 := len(obj.MinerNodeSig) > 0
+	if _tmp1 || _tmp2 || _tmp3 || _tmp4 || _tmp5 {
 		if obj.BaseFee == nil {
 			w.Write(rlp.EmptyString)
 		} else {
@@ -50,6 +54,25 @@ func (obj *Header) EncodeRLP(_w io.Writer) error {
 			}
 			w.WriteBigInt(obj.BaseFee)
 		}
+	}
+	if _tmp2 || _tmp3 || _tmp4 || _tmp5 {
+		if obj.Fees == nil {
+			w.Write(rlp.EmptyString)
+		} else {
+			if obj.Fees.Sign() == -1 {
+				return rlp.ErrNegativeBigInt
+			}
+			w.WriteBigInt(obj.Fees)
+		}
+	}
+	if _tmp3 || _tmp4 || _tmp5 {
+		w.WriteBytes(obj.Rewards)
+	}
+	if _tmp4 || _tmp5 {
+		w.WriteBytes(obj.MinerNodeId)
+	}
+	if _tmp5 {
+		w.WriteBytes(obj.MinerNodeSig)
 	}
 	w.ListEnd(_tmp0)
 	return w.Flush()
