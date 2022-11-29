@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // hookedBackfiller is a tester backfiller with all interface methods mocked and
@@ -398,6 +399,11 @@ func TestSkeletonSyncInit(t *testing.T) {
 // Tests that a running skeleton sync can be extended with properly linked up
 // headers but not with side chains.
 func TestSkeletonSyncExtend(t *testing.T) {
+	if params.ConsensusMethod == params.ConsensusPoW {
+		// wemix: not applicable
+		return
+	}
+
 	// Create a few key headers
 	var (
 		genesis  = &types.Header{Number: big.NewInt(0)}
