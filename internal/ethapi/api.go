@@ -20,8 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/big"
+	"os"
 	"strings"
 	"time"
 
@@ -271,7 +271,7 @@ func (s *PublicAccountAPI) Accounts() []common.Address {
 
 // return genesis.json if available
 func (s *PublicAccountAPI) Genesis() (string, error) {
-	genesis, err := ioutil.ReadFile(params.WemixGenesisFile)
+	genesis, err := os.ReadFile(params.WemixGenesisFile)
 	if err != nil {
 		return "", err
 	} else {

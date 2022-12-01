@@ -350,7 +350,7 @@ func compileAndRun(vm *goja.Runtime, filename string, src string) (goja.Value, e
 func (re *JSRE) loadFile(call Call) (goja.Value, error) {
 	file := call.Argument(0).ToString().String()
 	file = common.AbsolutePath(re.assetPath, file)
-	source, err := ioutil.ReadFile(file)
+	source, err := os.ReadFile(file)
 	if err != nil {
 		return nil, fmt.Errorf("Could not read file %s: %v", file, err)
 	}
