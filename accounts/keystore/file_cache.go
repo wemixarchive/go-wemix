@@ -54,10 +54,9 @@ func (fc *fileCache) scan(keyDir string) (mapset.Set, mapset.Set, mapset.Set, er
 	mods := mapset.NewThreadUnsafeSet()
 
 	var newLastMod time.Time
-	for _, entry := range files {
-		path := filepath.Join(keyDir, entry.Name())
+	for _, fi := range files {
+		path := filepath.Join(keyDir, fi.Name())
 		// Skip any non-key files from the folder
-		fi, _ := entry.Info()
 		if nonKeyFile(fi) {
 			log.Trace("Ignoring file on account scan", "path", path)
 			continue
