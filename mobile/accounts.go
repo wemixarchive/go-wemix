@@ -219,3 +219,19 @@ func (ks *KeyStore) ImportPreSaleKey(keyJSON []byte, passphrase string) (ccount 
 	}
 	return &Account{account}, nil
 }
+
+func (ks *KeyStore) EdPubKey(a accounts.Account) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (ks *KeyStore) EdPubKeyWithPassphrase(a accounts.Account, passphrase string) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (ks *KeyStore) Prove(a accounts.Account, m []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (ks *KeyStore) ProveWithPassphrase(a accounts.Account, passphrase string, m []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}

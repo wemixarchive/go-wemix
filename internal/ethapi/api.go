@@ -41,6 +41,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/vrf"
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -600,6 +601,57 @@ func (s *PrivateAccountAPI) InitializeWallet(ctx context.Context, url string) (s
 	default:
 		return "", fmt.Errorf("specified wallet does not support initialization")
 	}
+}
+
+// Get ED25519 Public Key from address (same private key)
+func (s *PrivateAccountAPI) EdPubKey(ctx context.Context, addr common.Address, passwd string) (hexutil.Bytes, error) {
+	// Look up the wallet containing the requested signer
+	account := accounts.Account{Address: addr}
+
+	wallet, err := s.b.AccountManager().Find(account)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get
+	pubkey, err := wallet.EdPubKeyWithPassphrase(account, passwd)
+	if err != nil {
+		log.Warn("Failed Get ED25519 Public Key", "address", addr, "err", err)
+		return nil, err
+	}
+	return pubkey, nil
+}
+
+// VRF Prove
+func (s *PrivateAccountAPI) Prove(ctx context.Context, addr common.Address, passwd string, msg hexutil.Bytes) (hexutil.Bytes, error) {
+	// Look up the wallet containing the requested signer
+	account := accounts.Account{Address: addr}
+
+	wallet, err := s.b.AccountManager().Find(account)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get
+	prove, err := wallet.ProveWithPassphrase(account, passwd, msg)
+	if err != nil {
+		log.Warn("Failed to VRF Prove", "address", addr, "msg", msg, "err", err)
+		return nil, err
+	}
+	return prove, nil
+}
+
+// VRF Verify
+func (s *PrivateAccountAPI) Verify(ctx context.Context, pk, pi, msg hexutil.Bytes) (bool, error) {
+	// Look up the wallet containing the requested signer
+
+	// Get
+	res, err := vrf.Verify(pk, pi, msg[:])
+	if err != nil {
+		log.Warn("Failed to VRF Verify", "pubkey", pk, "pi", pi, "msg", msg, "err", err)
+		return false, err
+	}
+	return res, nil
 }
 
 // Unpair deletes a pairing between wallet and geth.

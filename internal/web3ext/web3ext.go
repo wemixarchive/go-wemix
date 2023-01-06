@@ -823,7 +823,22 @@ web3._extend({
 			name: 'initializeWallet',
 			call: 'personal_initializeWallet',
 			params: 1
-		})
+		}),
+		new web3._extend.Method({
+			name: 'edPubKey',
+			call: 'personal_edPubKey',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'prove',
+			call: 'personal_prove',
+			params: 3
+		}),
+		new web3._extend.Method({
+			name: 'verify',
+			call: 'personal_verify',
+			params: 3
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

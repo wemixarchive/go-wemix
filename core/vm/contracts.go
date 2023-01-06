@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/blake2b"
 	"github.com/ethereum/go-ethereum/crypto/bls12381"
 	"github.com/ethereum/go-ethereum/crypto/bn256"
+	"github.com/ethereum/go-ethereum/crypto/vrf"
 	"github.com/ethereum/go-ethereum/params"
 
 	//lint:ignore SA1019 Needed for precompile
@@ -104,6 +105,7 @@ var PrecompiledContractsBLS = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{16}): &bls12381Pairing{},
 	common.BytesToAddress([]byte{17}): &bls12381MapG1{},
 	common.BytesToAddress([]byte{18}): &bls12381MapG2{},
+	common.BytesToAddress([]byte{19}): &vrfVerify{}, // TODO (lukepark327): hardfork
 }
 
 var (
@@ -1043,4 +1045,39 @@ func (c *bls12381MapG2) Run(input []byte) ([]byte, error) {
 
 	// Encode the G2 point to 256 bytes
 	return g.EncodePoint(r), nil
+}
+
+// vrf implemented as a native contract.
+type vrfVerify struct{}
+
+// RequiredGas returns the gas required to execute the pre-compiled contract.
+func (c *vrfVerify) RequiredGas(input []byte) uint64 {
+	return params.VrfVerifyGas
+}
+
+func (c *vrfVerify) Run(input []byte) ([]byte, error) {
+	length := uint64(len(input))
+
+	var (
+		pk  = getData(input, 0, 32)
+		pi  = getData(input, 32, 81)
+		msg = getData(input, 113, length-113)
+	)
+
+	// fmt.Println(hex.EncodeToString(pk))
+	// fmt.Println(hex.EncodeToString(pi))
+	// fmt.Println(hex.EncodeToString(msg))
+
+	res, err := vrf.Verify(pk, pi, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	// fmt.Println(hex.EncodeToString(bytesTrue))
+	// fmt.Println(hex.EncodeToString(bytesFalse))
+
+	if res {
+		return true32Byte, nil
+	}
+	return false32Byte, nil
 }

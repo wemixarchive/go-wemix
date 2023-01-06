@@ -65,6 +65,7 @@ var allPrecompiles = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{16}):   &bls12381Pairing{},
 	common.BytesToAddress([]byte{17}):   &bls12381MapG1{},
 	common.BytesToAddress([]byte{18}):   &bls12381MapG2{},
+	common.BytesToAddress([]byte{19}):   &vrfVerify{},
 }
 
 // EIP-152 test vectors
@@ -391,3 +392,7 @@ func BenchmarkPrecompiledBLS12381G2MultiExpWorstCase(b *testing.B) {
 	}
 	benchmarkPrecompiled("0f", testcase, b)
 }
+
+func TestPrecompiledVRF(t *testing.T) { testJson("vrf", "13", t) }
+
+func BenchmarkPrecompiledVRF(b *testing.B) { benchJson("vrf", "13", b) }
