@@ -1,6 +1,6 @@
 # VRF
 
-## Install Dependencies
+# Install Dependencies
 
 ```bash
 $ go get github.com/ethereum/go-ethereum/crypto/vrf
@@ -66,4 +66,16 @@ $ /usr/local/go/bin/go test -timeout 30s -run ^TestPrecompiledVRF$ github.com/et
 
 ```bash
 $ /usr/local/go/bin/go test -benchmem -run=^$ -bench ^BenchmarkPrecompiledVRF$ github.com/ethereum/go-ethereum/core/vm
+```
+
+# Node
+
+```bash
+$ ./build/bin/geth --datadir data account new
+
+$ ./build/bin/geth --datadir data --networkid 327 --allow-insecure-unlock --http --http.api 'web3,eth,net,debug,personal' --http.corsdomain '*' --http.addr 0.0.0.0 --http.port 8545 --port 30301
+```
+
+```bash
+$ ./build/bin/geth attach http://localhost:8545
 ```

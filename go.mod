@@ -67,6 +67,7 @@ require (
 	gopkg.in/olebedev/go-duktape.v3 v3.0.0-20200619000410-60c24ae608a6
 	gopkg.in/urfave/cli.v1 v1.20.0
 	github.com/yoseplee/vrf v0.0.0-20210814110709-d1caf509310b
+	github.com/yahoo/coname v0.0.0-20170609175141-84592ddf8673
 )
 
 require (
