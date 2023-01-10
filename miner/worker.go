@@ -1219,24 +1219,15 @@ func (w *worker) throttleMining(ts []int64) (int64, int64) {
 }
 
 func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart time.Time) bool {
-	interval := 10 * time.Millisecond
 
-	// committed transactions in this round
+	// committed transactions
 	committedTxs := map[common.Hash]*types.Transaction{}
-	round := 0
-	for {
-		round++
 
-		// Fill the block with all available pending transactions.
-		pending := w.eth.TxPool().Pending(true)
-		// Short circuit if there is no available pending transactions
-		if len(pending) == 0 {
-			if time.Until(*env.till) <= 0 {
-				break
-			}
-			time.Sleep(interval)
-			continue
-		}
+	// Fill the block with all available pending transactions.
+	pending := w.eth.TxPool().Pending(true)
+
+	// Short circuit if there is no available pending transactions
+	if len(pending) != 0 {
 
 		// using new simple round-robin ordering instead of old one.
 		if params.PrefetchCount == 0 {
@@ -1268,13 +1259,11 @@ func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart
 			}
 		}
 
-		if time.Until(*env.till) <= 0 {
-			break
-		}
-		time.Sleep(interval)
-		round++
 	}
-	log.Debug("Block", "number", env.header.Number.Int64(), "elapsed", common.PrettyDuration(time.Since(tstart)), "txs", len(committedTxs), "round", round)
+
+	time.Sleep(time.Until(*env.till))
+
+	log.Debug("Block", "number", env.header.Number.Int64(), "elapsed", common.PrettyDuration(time.Since(tstart)), "txs", len(committedTxs))
 
 	return false
 }
