@@ -26,7 +26,7 @@ abstract contract VRF {
             let memPtr := mload(0x40)
             let success := staticcall(
                 gas(),
-                0x14,
+                0x13,
                 add(input, 0x20),
                 mload(input),
                 memPtr,
