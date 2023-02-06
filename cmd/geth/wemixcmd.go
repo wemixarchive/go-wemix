@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"net/http"
 	"os"
@@ -291,7 +290,7 @@ type genesisConfig struct {
 
 func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 	var config genesisConfig
-	if data, err := ioutil.ReadAll(r); err != nil {
+	if data, err := io.ReadAll(r); err != nil {
 		return nil, err
 	} else if err = json.Unmarshal(data, &config); err != nil {
 		return nil, err
@@ -329,7 +328,7 @@ func genGenesis(ctx *cli.Context) error {
 	var genesis map[string]interface{}
 	if fn := ctx.String(genesisTemplateFlag.Name); fn == "" {
 		utils.Fatalf("Genesis template is not specified.")
-	} else if data, err := ioutil.ReadFile(fn); err != nil {
+	} else if data, err := os.ReadFile(fn); err != nil {
 		return err
 	} else if err = json.Unmarshal(data, &genesis); err != nil {
 		return err
