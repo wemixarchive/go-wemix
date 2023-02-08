@@ -130,7 +130,7 @@ rocksdb:
 else
 rocksdb:
 	@[ ! -e rocksdb/.git ] && git submodule update --init rocksdb;	\
-	cd $(ROCKSDB_DIR) && make -j8 static_lib;
+	cd $(ROCKSDB_DIR) && PORTABLE=1 make -j8 static_lib;
 endif
 
 AWK_CODE='								\
