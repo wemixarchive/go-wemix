@@ -462,13 +462,6 @@ func (ma *wemixAdmin) etcdAutoJoin() error {
 		<-etcdAutoJoinLock
 	}()
 
-	// boot node
-	if ma.nodeInfo != nil && ma.nodeInfo.ID == ma.bootNodeId {
-		etcdLock.Lock()
-		defer etcdLock.Unlock()
-		return ma.etcdInit()
-	}
-
 	// collect miners that haven't joined the etcd network yet
 	var sz, gap, ix int64
 	if states := getMiners("", 0); len(states) > 0 {
