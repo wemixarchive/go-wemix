@@ -130,7 +130,7 @@ type CacheConfig struct {
 	TrieTimeLimit       time.Duration // Time limit after which to flush the current in-memory trie to disk
 	SnapshotLimit       int           // Memory allowance (MB) to use for caching snapshot entries in memory
 	Preimages           bool          // Whether to store preimage of trie key to the disk
-    TriesInMemory       uint64        // Number of recent tries to keep in memory
+	TriesInMemory       uint64        // Number of recent tries to keep in memory
 
 	SnapshotWait bool // Wait for snapshot construction on startup. TODO(karalabe): This is a dirty hack for testing, nuke it
 }
@@ -224,8 +224,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	}
 
 	if cacheConfig.TriesInMemory <= 0 {
-        cacheConfig.TriesInMemory = DefaultCacheConfig.TriesInMemory
-    }
+		cacheConfig.TriesInMemory = DefaultCacheConfig.TriesInMemory
+	}
 
 	bodyCache, _ := lru.New(bodyCacheLimit)
 	bodyRLPCache, _ := lru.New(bodyCacheLimit)
