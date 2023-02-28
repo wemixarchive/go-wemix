@@ -448,6 +448,11 @@ var (
 		Name:  "cache.preimages",
 		Usage: "Enable recording the SHA3/keccak preimages of trie keys",
 	}
+	TriesInMemoryFlag = cli.Uint64Flag{
+		Name:  "cache.triesinmemory",
+		Usage: "Number of block states (tries) to keep in memory (default = 128)",
+		Value: 128,
+	}
 	FDLimitFlag = cli.IntFlag{
 		Name:  "fdlimit",
 		Usage: "Raise the open file descriptor resource limit (default = system fd limit)",
@@ -1756,6 +1761,10 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheSnapshotFlag.Name) {
 		cfg.SnapshotCache = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheSnapshotFlag.Name) / 100
 	}
+	if ctx.GlobalIsSet(TriesInMemoryFlag.Name) {
+		cfg.TriesInMemory = ctx.GlobalUint64(TriesInMemoryFlag.Name)
+	}
+
 	if !ctx.GlobalBool(SnapshotFlag.Name) {
 		// If snap-sync is requested, this flag is also required
 		if cfg.SyncMode == downloader.SnapSync {
@@ -2183,6 +2192,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 		TrieTimeLimit:       ethconfig.Defaults.TrieTimeout,
 		SnapshotLimit:       ethconfig.Defaults.SnapshotCache,
 		Preimages:           ctx.GlobalBool(CachePreimagesFlag.Name),
+		TriesInMemory:       ctx.GlobalUint64(TriesInMemoryFlag.Name),
 	}
 	if cache.TrieDirtyDisabled && !cache.Preimages {
 		cache.Preimages = true
@@ -2196,6 +2206,9 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 	}
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheGCFlag.Name) {
 		cache.TrieDirtyLimit = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
+	}
+	if ctx.GlobalIsSet(TriesInMemoryFlag.Name) {
+		cache.TriesInMemory = ctx.GlobalUint64(TriesInMemoryFlag.Name)
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.GlobalBool(VMEnableDebugFlag.Name)}
 
