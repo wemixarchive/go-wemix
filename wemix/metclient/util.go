@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"reflect"
@@ -54,7 +53,7 @@ func LoadAccount(password, fileName string) (*keystore.Key, error) {
 		}
 	} else if password[0] == '@' {
 		var pw []byte
-		pw, err = ioutil.ReadFile(password[1:])
+		pw, err = os.ReadFile(password[1:])
 		if err != nil {
 			return nil, err
 		}
@@ -62,7 +61,7 @@ func LoadAccount(password, fileName string) (*keystore.Key, error) {
 	}
 
 	var keyJson []byte
-	keyJson, err = ioutil.ReadFile(fileName)
+	keyJson, err = os.ReadFile(fileName)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +83,7 @@ func LoadJsonContract(r io.Reader) (*ContractData, error) {
 		err                         error
 	)
 
-	fileData, err = ioutil.ReadAll(r)
+	fileData, err = io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}

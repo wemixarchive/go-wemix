@@ -248,6 +248,42 @@ case "$1" in
     dir=$(get_data_dir $2)
     PIDS=$(get_gwemix_pids ${dir})
     if [ ! "$PIDS" = "" ]; then
+        # check if we're the miner or leader
+        CMD='
+function check_if_mining() {
+  for (var i = 0; i < 15; i++) {
+    try {
+      var token = debug.etcdGet("token")
+      eval("token = " + token)
+      // console.log("miner -> " + token.miner)
+      if (token.miner != admin.wemixInfo.self.name) {
+        break
+      } else {
+        console.log("we are the miner, sleeping...")
+        admin.sleep(0.25)
+      }
+    } catch {
+      admin.sleep(0.25)
+    }
+  }
+}
+if (admin.wemixInfo != null && admin.wemixInfo.self != null) {
+  check_if_mining()
+  if (admin.wemixInfo.etcd.leader.name == admin.wemixInfo.self.name) {
+    var nodes = admin.wemixNodes("", 0)
+    for (var n of nodes) {
+      if (admin.wemixInfo.etcd.leader.name != admin.wemixInfo.self.name) {
+        break
+      }
+      if (n.status == "up" && n.name != admin.wemixInfo.self.name) {
+        console.log("moving leader to " + n.name)
+        admin.etcdMoveLeader(n.name)
+      }
+    }
+  }
+  check_if_mining()
+}'
+	${dir}/bin/gwemix attach ipc:${dir}/gwemix.ipc --exec "$CMD" | grep -v "undefined"
 	echo $PIDS | xargs -L1 kill
     fi
     for i in {1..200}; do
