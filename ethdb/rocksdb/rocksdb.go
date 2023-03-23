@@ -25,6 +25,8 @@ import (
 var (
 	_stats_enabled                                             = false
 	_r_count, _r_bytes, _w_count, _w_bytes, _l_count, _d_count uint64
+
+	errRocksdbNotFound = errors.New("not found")
 )
 
 type RDBDatabase struct {
@@ -242,6 +244,13 @@ func (db *RDBDatabase) NewIteratorWithPrefix(prefix []byte) ethdb.Iterator {
 	}
 }
 
+// NewSnapshot creates a database snapshot based on the current state.
+// The created snapshot will not be affected by all following mutations
+// happened on the database.
+func (db *RDBDatabase) NewSnapshot() (ethdb.Snapshot, error) {
+	return newSnapshot(db), nil
+}
+
 func incrBytes(bz []byte) []byte {
 	if len(bz) == 0 {
 		return nil
@@ -357,6 +366,13 @@ func (db *RDBDatabase) NewBatch() ethdb.Batch {
 	return bb
 }
 
+func (db *RDBDatabase) NewBatchWithSize(size int) ethdb.Batch {
+	b := C.rocksdb_writebatch_create()
+	bb := &rdbBatch{db: db.db, b: b, wopts: db.wopts, data: nil, size: size}
+	runtime.SetFinalizer(bb, rdbBatchFinalizer)
+	return bb
+}
+
 type rdbBatchOp struct {
 	del   bool
 	key   []byte
@@ -430,4 +446,86 @@ func Stats(device string) (disk_r_count, disk_r_bytes, disk_w_couhnt, disk_w_byt
 	var diskStats metrics.DiskStats
 	metrics.ReadProcDiskStats(device, &diskStats)
 	return uint64(diskStats.ReadCount), uint64(diskStats.ReadBytes), uint64(diskStats.WriteCount), uint64(diskStats.WriteBytes), _r_count, _r_bytes, _w_count, _w_bytes, _l_count, _d_count
+}
+
+// snapshot wraps a batch of key-value entries deep copied from the in-memory
+// database for implementing the Snapshot interface.
+type snapshot struct {
+	db    *C.rocksdb_t
+	snap  *C.rocksdb_snapshot_t
+	ropts *C.rocksdb_readoptions_t
+}
+
+// newSnapshot initializes the snapshot with the given database instance.
+func newSnapshot(db *RDBDatabase) *snapshot {
+
+	var ropts *C.rocksdb_readoptions_t
+	var snap *C.rocksdb_snapshot_t
+
+	ropts = C.rocksdb_readoptions_create()
+	snap = C.rocksdb_create_snapshot(db.db)
+
+	C.rocksdb_readoptions_set_snapshot(ropts, snap)
+
+	return &snapshot{db: db.db, snap: snap, ropts: ropts}
+}
+
+// Has retrieves if a key is present in the snapshot backing by a key-value
+// data store.
+func (snap *snapshot) Has(key []byte) (bool, error) {
+	if _stats_enabled {
+		atomic.AddUint64(&_l_count, 1)
+	}
+	var cerr *C.char
+	var cvl C.size_t
+	ck := b2c(key)
+	cv := C.rocksdb_get(snap.db, snap.ropts, ck, C.size_t(len(key)), &cvl, &cerr)
+	if cerr != nil {
+		return false, cerror(cerr)
+	}
+	if cv == nil {
+		return false, errRocksdbNotFound
+	}
+	defer C.free(unsafe.Pointer(cv))
+	return true, nil
+}
+
+// Get retrieves the given key if it's present in the snapshot backing by
+// key-value data store.
+func (snap *snapshot) Get(key []byte) ([]byte, error) {
+	if _stats_enabled {
+		atomic.AddUint64(&_r_count, 1)
+	}
+	var cerr *C.char
+	var cvl C.size_t
+	ck := b2c(key)
+	cv := C.rocksdb_get(snap.db, snap.ropts, ck, C.size_t(len(key)), &cvl, &cerr)
+	if cerr != nil {
+		if _stats_enabled {
+			atomic.AddUint64(&_r_bytes, uint64(len(key)))
+		}
+		return nil, cerror(cerr)
+	}
+	if cv == nil {
+		if _stats_enabled {
+			atomic.AddUint64(&_r_bytes, uint64(len(key)))
+		}
+		return nil, errRocksdbNotFound
+	}
+	if _stats_enabled {
+		atomic.AddUint64(&_r_bytes, uint64(len(key))+uint64(C.int(cvl)))
+	}
+	defer C.free(unsafe.Pointer(cv))
+	return C.GoBytes(unsafe.Pointer(cv), C.int(cvl)), nil
+}
+
+// Release releases associated resources. Release should always succeed and can
+// be called multiple times without causing error.
+func (snap *snapshot) Release() {
+
+	C.rocksdb_release_snapshot(snap.db, snap.snap)
+
+	snap.db = nil
+	snap.snap = nil
+	snap.ropts = nil
 }

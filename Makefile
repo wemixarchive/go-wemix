@@ -106,7 +106,6 @@ clean:
 
 devtools:
 	env GOBIN= go install golang.org/x/tools/cmd/stringer@latest
-	env GOBIN= go install github.com/kevinburke/go-bindata/go-bindata@latest
 	env GOBIN= go install github.com/fjl/gencodec@latest
 	env GOBIN= go install github.com/golang/protobuf/protoc-gen-go@latest
 	env GOBIN= go install ./cmd/abigen
@@ -131,7 +130,7 @@ rocksdb:
 else
 rocksdb:
 	@[ ! -e rocksdb/.git ] && git submodule update --init rocksdb;	\
-	cd $(ROCKSDB_DIR) && make -j8 static_lib;
+	cd $(ROCKSDB_DIR) && PORTABLE=1 make -j8 static_lib;
 endif
 
 AWK_CODE='								\
