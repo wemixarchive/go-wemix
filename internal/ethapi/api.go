@@ -649,7 +649,9 @@ func (s *PublicBlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash c
 		return nil, err1
 	}
 	block, err2 := s.b.BlockByHash(ctx, blockHash)
-	if err2 != nil {
+	if block == nil {
+		return nil, errors.New("block does not exist in blockchain")
+	} else if err2 != nil {
 		return nil, err2
 	}
 
