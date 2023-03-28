@@ -45,6 +45,7 @@ const (
 	LegacyTxType = iota
 	AccessListTxType
 	DynamicFeeTxType
+	FeeDelegateDynamicFeeTxType = 22 // fee delegation
 )
 
 // Transaction is an Ethereum transaction.
@@ -53,9 +54,10 @@ type Transaction struct {
 	time  time.Time // Time first seen locally (spam avoidance)
 
 	// caches
-	hash atomic.Value
-	size atomic.Value
-	from atomic.Value
+	hash     atomic.Value
+	size     atomic.Value
+	from     atomic.Value
+	feePayer atomic.Value // fee delegation
 }
 
 type TransactionEx struct {
@@ -90,6 +92,9 @@ type TxData interface {
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
+	// fee delegation
+	feePayer() *common.Address
+	rawFeePayerSignatureValues() (v, r, s *big.Int)
 }
 
 // EncodeRLP implements rlp.Encoder
@@ -189,6 +194,11 @@ func (tx *Transaction) decodeTyped(b []byte) (TxData, error) {
 		var inner DynamicFeeTx
 		err := rlp.DecodeBytes(b[1:], &inner)
 		return &inner, err
+	// fee delegation
+	case FeeDelegateDynamicFeeTxType:
+		var inner FeeDelegateDynamicFeeTx
+		err := rlp.DecodeBytes(b[1:], &inner)
+		return &inner, err
 	default:
 		return nil, ErrTxTypeNotSupported
 	}
@@ -284,6 +294,16 @@ func (tx *Transaction) Value() *big.Int { return new(big.Int).Set(tx.inner.value
 // Nonce returns the sender account nonce of the transaction.
 func (tx *Transaction) Nonce() uint64 { return tx.inner.nonce() }
 
+// fee delegation
+// FeePayer returns the feePayer's address of the transaction.
+func (tx *Transaction) FeePayer() *common.Address { return tx.inner.feePayer() }
+
+// RawFeePayerSignatureValues returns the feePayer's FV, FR, FS signature values of the transaction.
+// The return values should not be modified by the caller.
+func (tx *Transaction) RawFeePayerSignatureValues() (v, r, s *big.Int) {
+	return tx.inner.rawFeePayerSignatureValues()
+}
+
 // To returns the recipient address of the transaction.
 // For contract-creation transactions, To returns nil.
 func (tx *Transaction) To() *common.Address {
@@ -292,9 +312,37 @@ func (tx *Transaction) To() *common.Address {
 
 // Cost returns gas * gasPrice + value.
 func (tx *Transaction) Cost() *big.Int {
+	// fee delegation
+	if tx.Type() == FeeDelegateDynamicFeeTxType {
+		signer := LatestSignerForChainID(tx.ChainId())
+		from, _ := Sender(signer, tx)
+		if *tx.FeePayer() != from {
+			total := tx.Value()
+			return total
+		} else {
+			total := new(big.Int).Mul(tx.GasPrice(), new(big.Int).SetUint64(tx.Gas()))
+			total.Add(total, tx.Value())
+			return total
+		}
+	}
 	total := new(big.Int).Mul(tx.GasPrice(), new(big.Int).SetUint64(tx.Gas()))
 	total.Add(total, tx.Value())
 	return total
+}
+
+// fee delegation
+// FeePayerCost returns feePayer's gas * gasPrice + value.
+func (tx *Transaction) FeePayerCost() *big.Int {
+	signer := LatestSignerForChainID(tx.ChainId())
+	from, _ := Sender(signer, tx)
+	if *tx.FeePayer() != from {
+		total := new(big.Int).Mul(tx.GasPrice(), new(big.Int).SetUint64(tx.Gas()))
+		return total
+	} else {
+		total := new(big.Int).Mul(tx.GasPrice(), new(big.Int).SetUint64(tx.Gas()))
+		total.Add(total, tx.Value())
+		return total
+	}
 }
 
 // RawSignatureValues returns the V, R, S signature values of the transaction.
@@ -627,6 +675,8 @@ type Message struct {
 	data       []byte
 	accessList AccessList
 	isFake     bool
+	// fee delegation
+	feePayer *common.Address
 }
 
 func NewMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice, gasFeeCap, gasTipCap *big.Int, data []byte, accessList AccessList, isFake bool) Message {
@@ -659,6 +709,10 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 		accessList: tx.AccessList(),
 		isFake:     false,
 	}
+	// fee delegation
+	if tx.FeePayer() != nil {
+		msg.feePayer = tx.FeePayer()
+	}
 	// If baseFee provided, set gasPrice to effectiveGasPrice.
 	if baseFee != nil {
 		msg.gasPrice = math.BigMin(msg.gasPrice.Add(msg.gasTipCap, baseFee), msg.gasFeeCap)
@@ -679,6 +733,9 @@ func (m Message) Nonce() uint64          { return m.nonce }
 func (m Message) Data() []byte           { return m.data }
 func (m Message) AccessList() AccessList { return m.accessList }
 func (m Message) IsFake() bool           { return m.isFake }
+
+// fee delegation
+func (m Message) FeePayer() *common.Address { return m.feePayer }
 
 // copyAddressPtr copies an address.
 func copyAddressPtr(a *common.Address) *common.Address {

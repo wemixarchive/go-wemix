@@ -521,6 +521,16 @@ func (c *ChainConfig) IsPangyo(num *big.Int) bool {
 	return isForked(c.PangyoBlock, num)
 }
 
+// fee delegation
+// IsFeeDelegation returns whether num is either equal to the fee delegation fork block or greater.
+func (c *ChainConfig) IsFeeDelegation(num *big.Int) bool {
+	// TBD
+	// Test code
+	//FeeDelegateBlock := big.NewInt(277000)
+	//return isForked(FeeDelegateBlock, num)
+	return false
+}
+
 // IsArrowGlacier returns whether num is either equal to the Arrow Glacier (EIP-4345) fork block or greater.
 func (c *ChainConfig) IsArrowGlacier(num *big.Int) bool {
 	return isForked(c.ArrowGlacierBlock, num)
