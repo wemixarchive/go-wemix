@@ -644,13 +644,17 @@ func (s *PublicBlockChainAPI) BlockNumber() hexutil.Uint64 {
 
 // GetBlockReceipts returns all the transaction receipts for the given block hash.
 func (s *PublicBlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash common.Hash) ([]map[string]interface{}, error) {
-	receipts, err1 := s.b.GetReceipts(ctx, blockHash)
-	if err1 != nil {
+
+	block, err1 := s.b.BlockByHash(ctx, blockHash)
+	if block == nil && err1 == nil {
+		return nil, nil
+	} else if err1 != nil {
 		return nil, err1
 	}
-	block, err2 := s.b.BlockByHash(ctx, blockHash)
-	if block == nil {
-		return nil, nil
+
+	receipts, err2 := s.b.GetReceipts(ctx, blockHash)
+	if receipts == nil && err2 == nil {
+		return make([]map[string]interface{}, 0), nil
 	} else if err2 != nil {
 		return nil, err2
 	}
@@ -681,6 +685,32 @@ func (s *PublicBlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash c
 			"logsBloom":         receipt.Bloom,
 			"type":              hexutil.Uint(txs[index].Type()),
 		}
+
+		// Assign the effective gas price paid
+		if !s.b.ChainConfig().IsLondon(bigblock) {
+			fields["effectiveGasPrice"] = txs[index].GasPrice()
+		} else {
+			header, err := s.b.HeaderByHash(ctx, blockHash)
+			if err != nil {
+				return nil, err
+			}
+			gasPrice := new(big.Int).Add(header.BaseFee, txs[index].EffectiveGasTipValue(header.BaseFee))
+			fields["effectiveGasPrice"] = gasPrice
+		}
+		// Assign receipt status or post state.
+		if len(receipt.PostState) > 0 {
+			fields["root"] = hexutil.Bytes(receipt.PostState)
+		} else {
+			fields["status"] = hexutil.Uint(receipt.Status)
+		}
+		if receipt.Logs == nil {
+			fields["logs"] = []*types.Log{}
+		}
+		// If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
+		if receipt.ContractAddress != (common.Address{}) {
+			fields["contractAddress"] = receipt.ContractAddress
+		}
+
 		fieldsList = append(fieldsList, fields)
 	}
 	return fieldsList, nil
