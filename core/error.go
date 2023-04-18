@@ -99,13 +99,13 @@ var (
 
 	// fee delegation
 	// ErrInvalidFeePayer is returned if the transaction contains an invalid feePayer's signature.
-	ErrInvalidFeePayer = errors.New("invalid fee delegation feePayer")
+	ErrInvalidFeePayer = errors.New("fee delegation : invalid feePayer")
 
 	// ErrFeePayerInsufficientFunds is returned if the fee cost of executing a transaction
 	// is higher than the balance of the feePayer's account.
-	ErrFeePayerInsufficientFunds = errors.New("fee delegation feePayer's insufficient funds for gas * price")
+	ErrFeePayerInsufficientFunds = errors.New("fee delegation : feePayer insufficient funds for gas * price")
 
 	// ErrSenderInsufficientFunds is returned if the value cost of executing a transaction
 	// is higher than the balance of the sender's account.
-	ErrSenderInsufficientFunds = errors.New("fee delegation sender's account insufficient funds for value")
+	ErrSenderInsufficientFunds = errors.New("fee delegation : sender insufficient funds for value")
 )
