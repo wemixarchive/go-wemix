@@ -334,7 +334,7 @@ var GovernanceDeployer = new function() {
             data.env.MaxIdleBlockInterval || 5,
             data.env.blockCreationTime || 1000,
             // mint amount: 1 wemix
-            data.env. blockRewardAmount || web3.toWei(1, 'ether'),
+            data.env.blockRewardAmount || web3.toWei(1, 'ether'),
             // tip: 100 gwei
             data.env.maxPriorityFeePerGas || web3.toWei(100, 'gwei'),
             // NCPs, WEMIX Staker, Eco System, Maintenance
