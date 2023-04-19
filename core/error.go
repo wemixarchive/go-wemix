@@ -107,5 +107,5 @@ var (
 
 	// ErrSenderInsufficientFunds is returned if the value cost of executing a transaction
 	// is higher than the balance of the sender's account.
-	ErrSenderInsufficientFunds = errors.New("fee delegation: insufficient sender funds for value")
+	ErrSenderInsufficientFunds = errors.New("fee delegation: insufficient sender's funds for value")
 )
