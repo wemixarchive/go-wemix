@@ -98,6 +98,38 @@ func TestDistributeRewards(t *testing.T) {
 			fees: hexToBigInt("0x0"),
 			want: `[{"addr":"0x02b4b2d83786c8ee315db2ddac704794850d2149","reward":191708602923556195},{"addr":"0xb16d2494fddfa4c000deaf642d47673e5ca74e07","reward":105439731607955907},{"addr":"0x452893ed818c0e3ea6f415aeab8ef08778087fc6","reward":91061586388689192},{"addr":"0xf4404494ab647d29a62c57118c3a739c521fa004","reward":11790079079798706},{"addr":"0x6f488615e6b462ce8909e9cd34c3f103994ab2fb","reward":100000000000000000},{"addr":"0x6bd26c4a45e7d7cac2a389142f99f12e5713d719","reward":250000000000000000},{"addr":"0x816e30b6c314ba5d1a67b1b54be944ce4554ed87","reward":250000000000000000}]`,
 		},
+		{
+			name:   "with feeCollector",
+			height: hexToBigInt("0x2a"),
+			rp: &rewardParameters{
+				rewardAmount: hexToBigInt("0xde0b6b3a7640000"),
+				staker:       hexToAddressPtr("0xf5ed7476157980e831516cdd5493f5334a35b23e"),
+				ecoSystem:    hexToAddressPtr("0x6bd26c4a45e7d7cac2a389142f99f12e5713d719"),
+				maintenance:  hexToAddressPtr("0x816e30b6c314ba5d1a67b1b54be944ce4554ed87"),
+				feeCollector: hexToAddressPtr("0x6f488615e6b462ce8909e9cd34c3f103994ab2fb"),
+				members: []*wemixMember{
+					{
+						Staker: common.HexToAddress("0x02b4b2d83786c8ee315db2ddac704794850d2149"),
+						Reward: common.HexToAddress("0x02b4b2d83786c8ee315db2ddac704794850d2149"),
+						Stake:  hexToBigInt("0x1a784379d99db42000000"),
+					},
+					{
+						Staker: common.HexToAddress("0xb16d2494fddfa4c000deaf642d47673e5ca74e07"),
+						Reward: common.HexToAddress("0xb16d2494fddfa4c000deaf642d47673e5ca74e07"),
+						Stake:  hexToBigInt("0xe8ef1e96ae3897800000"),
+					},
+					{
+						Staker: common.HexToAddress("0x452893ed818c0e3ea6f415aeab8ef08778087fc6"),
+						Reward: common.HexToAddress("0x452893ed818c0e3ea6f415aeab8ef08778087fc6"),
+						Stake:  hexToBigInt("0xc92b9a6adc4825c00000"),
+					},
+				},
+				blocksPer:          1,
+				distributionMethod: []*big.Int{big.NewInt(4000), big.NewInt(1000), big.NewInt(2500), big.NewInt(2500)},
+			},
+			fees: hexToBigInt("0xadc5e885b956557f"),
+			want: `[{"addr":"0x02b4b2d83786c8ee315db2ddac704794850d2149","reward":197530864197530865},{"addr":"0xb16d2494fddfa4c000deaf642d47673e5ca74e07","reward":108641975308641975},{"addr":"0x452893ed818c0e3ea6f415aeab8ef08778087fc6","reward":93827160493827160},{"addr":"0xf5ed7476157980e831516cdd5493f5334a35b23e","reward":100000000000000000},{"addr":"0x6bd26c4a45e7d7cac2a389142f99f12e5713d719","reward":250000000000000000},{"addr":"0x816e30b6c314ba5d1a67b1b54be944ce4554ed87","reward":250000000000000000},{"addr":"0x6f488615e6b462ce8909e9cd34c3f103994ab2fb","reward":12521670000011269503}]`,
+		},
 	}
 
 	for _, tt := range tests {

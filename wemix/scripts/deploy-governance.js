@@ -59,6 +59,11 @@ var GovernanceDeployer = new function() {
                 throw "Invalid maintenance address " + data.maintenance
             data.maintenance = web3.toChecksumAddress(data.maintenance)
         }
+        if (data.feecollector) {
+            if (!web3.isAddress(data.feecollector))
+                throw "Invalid feecollector address " + data.feecollector
+            data.feecollector = web3.toChecksumAddress(data.feecollector)
+        }
     }
 
     // bytes packNum(int num)
@@ -67,7 +72,10 @@ var GovernanceDeployer = new function() {
         return web3.padLeft(web3.toHex(num).substr(2), 64, "0")
     }
 
-    // { "nodes": string, "stakes": string, "staker": address, "ecosystem": address, "maintenance": address } getInitialGovernanceMembersAndNodes(json data)
+    // { "nodes": string, "stakes": string, "staker": address,
+    //   "ecosystem": address, "maintenance": address, "feecollector": address,
+    //   "env": { env variables } }
+    // getInitialGovernanceMembersAndNodes(json data)
     this.getInitialGovernanceMembersAndNodes = function(data) {
         var nodes = "0x", stakes = "0x"
 
@@ -106,7 +114,7 @@ var GovernanceDeployer = new function() {
                 this.packNum(m.ip.length) + web3.fromAscii(m.ip).substr(2) +
                 this.packNum(m.port)
 
-            stakes += web3.padLeft(m.addr, 64, "0") +
+            stakes += web3.padLeft(m.staker, 64, "0") +
                 this.packNum(m.stake)
         }
         return {
@@ -114,7 +122,9 @@ var GovernanceDeployer = new function() {
             "stakes": stakes,
             "staker": data.staker,
             "ecosystem": data.ecosystem,
-            "maintenance": data.maintenance
+            "maintenance": data.maintenance,
+            "feecollector": data.feecollector,
+            "env": data.env
         }
     }
 
@@ -173,9 +183,9 @@ var GovernanceDeployer = new function() {
         throw "Cannot get a transaction receipt for " + tx
     }
 
-    this.sendStakingDeposit = function (to, data) {
+    this.sendStakingDeposit = function (to, data, stake) {
         var tx = { from: this.from, to: to, gas: this.gas, gasPrice: this.gasPrice, nonce: this.nonce(), value: "0" }
-        tx.value = "1500000" + "0".repeat(18)
+        tx.value = stake
         if (data) tx.data = data
         var stx = offlineWalletSignTx(this.wallet.id, tx, eth.chainId())
 
@@ -285,13 +295,16 @@ var GovernanceDeployer = new function() {
             txs[txs.length] = this.sendTx(registry.address, null,
                 registry.setContractDomain.getData(
                     "Maintenance", initData.maintenance))
+        if (initData.feecollector)
+            txs[txs.length] = this.sendTx(registry.address, null,
+                registry.setContractDomain.getData(
+                    "FeeCollector", initData.feecollector))
 
         // no need to wait for the receipts for the above
 
         // 4. initialize environment storage data:
-        // blocksPer, ballotDurationMin, ballotDurationMax,
-        // stakingMin, stakingMax, gasPrice
         this.log("Initializing environment storage...")
+        data.env = data.env || {}
         // Just changing address doesn't work here. Address is embedded in
         // the methods. Have to re-construct temporary EnvStorageImp here.
         var tmpEnvStorageImp = web3.eth.contract(envStorageImp.abi).at(envStorage.address)
@@ -310,18 +323,30 @@ var GovernanceDeployer = new function() {
             web3.sha3("maxBaseFee"),
             web3.sha3("blockGasLimit"),
             web3.sha3("baseFeeMaxChangeRate"),
-            web3.sha3("gasTargetPercentage") ],
-            envValues = [
-                1,
-                86400, 604800,
-                1500000000000000000000000, 1500000000000000000000000,
-                5,
-                1000,
-                web3.toWei(1, 'ether'),    // mint amount: 1 wemix
-                web3.toWei(100, 'gwei'),   // tip: 100 gwei
-                4000, 1000, 2500, 2500,    // NCPs, WEMIX Staker, Eco System, Maintenance
-                web3.toWei(50000, 'gwei'), // maxBaseFee * 21000 -> 1.05 wemix
-                5000 * 21000, 55, 30 ]
+            web3.sha3("gasTargetPercentage") ]
+        var rewardDistributionMethod = data.env.rewardDistributionMethod || [ 4000, 1000, 2500, 2500 ]
+        var envValues = [
+            1,
+            data.env.ballotDurationMin || 86400,
+            data.env.ballotDurationMax || 604800,
+            data.env.stakingMin || 1500000000000000000000000,
+            data.env.stakingMax || 1500000000000000000000000,
+            data.env.MaxIdleBlockInterval || 5,
+            data.env.blockCreationTime || 1000,
+            // mint amount: 1 wemix
+            data.env. blockRewardAmount || web3.toWei(1, 'ether'),
+            // tip: 100 gwei
+            data.env.maxPriorityFeePerGas || web3.toWei(100, 'gwei'),
+            // NCPs, WEMIX Staker, Eco System, Maintenance
+            rewardDistributionMethod[0],
+            rewardDistributionMethod[1],
+            rewardDistributionMethod[2],
+            rewardDistributionMethod[3],
+            // maxBaseFee * 21000 -> 1.05 wemix
+            data.env.maxBaseFee || web3.toWei(50000, 'gwei'),
+            data.env.blockGasLimit || 5000 * 21000,
+            data.env.baseFeeMaxChangeRate || 55,
+            data.env.gasTargetPercentage || 30 ]
         txs[txs.length] = this.sendTx(envStorage.address, null,
             tmpEnvStorageImp.initialize.getData(registry.address, envNames, envValues))
 
@@ -330,7 +355,7 @@ var GovernanceDeployer = new function() {
         code = tmpStakingImp.init.getData(registry.address,
             doInitOnce ? initData.stakes : "", {data: Staking_data})
         txs[txs.length] = this.sendTx(staking.address, null, code);
-        txs[txs.length] = this.sendStakingDeposit(staking.address, tmpStakingImp.deposit.getData());
+        txs[txs.length] = this.sendStakingDeposit(staking.address, tmpStakingImp.deposit.getData(), web3.toBigNumber(bootNode.stake).toString(10));
         for(i=0;i<txs.length;i++){
             if (!this.checkReceipt(txs[i]))
             throw "Failed to initialize data. Tx is " + txs[i]
