@@ -80,6 +80,8 @@ type Message interface {
 	IsFake() bool
 	Data() []byte
 	AccessList() types.AccessList
+	// fee delegation
+	FeePayer() *common.Address
 }
 
 // ExecutionResult includes all output after executing given evm
@@ -194,24 +196,57 @@ func (st *StateTransition) to() common.Address {
 }
 
 func (st *StateTransition) buyGas() error {
-	mgval := new(big.Int).SetUint64(st.msg.Gas())
-	mgval = mgval.Mul(mgval, st.gasPrice)
-	balanceCheck := mgval
-	if st.gasFeeCap != nil {
-		balanceCheck = new(big.Int).SetUint64(st.msg.Gas())
-		balanceCheck = balanceCheck.Mul(balanceCheck, st.gasFeeCap)
-		balanceCheck.Add(balanceCheck, st.value)
-	}
-	if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
-		return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
-	}
-	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
-		return err
-	}
-	st.gas += st.msg.Gas()
+	// fee delegation
+	if st.msg.FeePayer() != nil {
+		if !st.evm.ChainConfig().IsFeeDelegation(st.evm.Context.BlockNumber) {
+			return fmt.Errorf("%w: fee delegation type not supported", ErrTxTypeNotSupported)
+		}
+		FDmgval := new(big.Int).SetUint64(st.msg.Gas())
+		FDmgval = FDmgval.Mul(FDmgval, st.gasFeeCap)
+		feePayer := *st.msg.FeePayer()
+		if feePayer == st.msg.From() {
+			FDbalanceCheck := new(big.Int).SetUint64(st.msg.Gas())
+			FDbalanceCheck = FDbalanceCheck.Mul(FDbalanceCheck, st.gasFeeCap)
+			FDbalanceCheck.Add(FDbalanceCheck, st.value)
+			if have, want := st.state.GetBalance(feePayer), FDbalanceCheck; have.Cmp(want) < 0 {
+				return ErrFeePayerInsufficientFunds
+			}
+		} else {
+			if have, want := st.state.GetBalance(feePayer), FDmgval; have.Cmp(want) < 0 {
+				return ErrFeePayerInsufficientFunds
+			}
+			if have, want := st.state.GetBalance(st.msg.From()), st.value; have.Cmp(want) < 0 {
+				return fmt.Errorf("%w: sender address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
+			}
+		}
+		if err := st.gp.SubGas(st.msg.Gas()); err != nil {
+			return err
+		}
+		st.gas += st.msg.Gas()
 
-	st.initialGas = st.msg.Gas()
-	st.state.SubBalance(st.msg.From(), mgval)
+		st.initialGas = st.msg.Gas()
+		st.state.SubBalance(feePayer, FDmgval)
+	} else {
+		mgval := new(big.Int).SetUint64(st.msg.Gas())
+		mgval = mgval.Mul(mgval, st.gasPrice)
+		balanceCheck := mgval
+		if st.gasFeeCap != nil {
+			balanceCheck = new(big.Int).SetUint64(st.msg.Gas())
+			balanceCheck = balanceCheck.Mul(balanceCheck, st.gasFeeCap)
+			balanceCheck.Add(balanceCheck, st.value)
+		}
+
+		if have, want := st.state.GetBalance(st.msg.From()), balanceCheck; have.Cmp(want) < 0 {
+			return fmt.Errorf("%w: address %v have %v want %v", ErrInsufficientFunds, st.msg.From().Hex(), have, want)
+		}
+		if err := st.gp.SubGas(st.msg.Gas()); err != nil {
+			return err
+		}
+		st.gas += st.msg.Gas()
+
+		st.initialGas = st.msg.Gas()
+		st.state.SubBalance(st.msg.From(), mgval)
+	}
 	return nil
 }
 
@@ -374,8 +409,13 @@ func (st *StateTransition) refundGas(refundQuotient uint64) {
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)
-	st.state.AddBalance(st.msg.From(), remaining)
 
+	// fee delegation
+	if st.msg.FeePayer() != nil {
+		st.state.AddBalance(*st.msg.FeePayer(), remaining)
+	} else {
+		st.state.AddBalance(st.msg.From(), remaining)
+	}
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.
 	st.gp.AddGas(st.gas)

@@ -103,6 +103,11 @@ func (tx *LegacyTx) value() *big.Int        { return tx.Value }
 func (tx *LegacyTx) nonce() uint64          { return tx.Nonce }
 func (tx *LegacyTx) to() *common.Address    { return tx.To }
 
+// fee delegation
+func (tx *LegacyTx) feePayer() *common.Address { return nil }
+func (tx *LegacyTx) rawFeePayerSignatureValues() (v, r, s *big.Int) {
+	return nil, nil, nil
+}
 func (tx *LegacyTx) rawSignatureValues() (v, r, s *big.Int) {
 	return tx.V, tx.R, tx.S
 }

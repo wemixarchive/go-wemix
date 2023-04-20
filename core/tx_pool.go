@@ -248,6 +248,8 @@ type TxPool struct {
 	istanbul bool // Fork indicator whether we are in the istanbul stage.
 	eip2718  bool // Fork indicator whether we are using EIP-2718 type transactions.
 	eip1559  bool // Fork indicator whether we are using EIP-1559 type transactions.
+	// fee delegation
+	feedelegation bool // Fork indicator whether we are using fee delegation type transactions.
 
 	currentState  *state.StateDB // Current state in the blockchain head
 	pendingNonces *txNoncer      // Pending state tracking virtual nonces
@@ -393,6 +395,20 @@ func (pool *TxPool) loop() {
 		case <-evict.C:
 			pool.mu.Lock()
 			for addr := range pool.queue {
+				// fee delegation
+				if pool.feedelegation {
+					list := pool.queue[addr].Flatten()
+					for _, tx := range list {
+						if tx.Type() == types.FeeDelegateDynamicFeeTxType && tx.FeePayer() != nil {
+							// check feePayer's balance
+							if pool.currentState.GetBalance(*tx.FeePayer()).Cmp(tx.FeePayerCost()) < 0 {
+								pool.removeTx(tx.Hash(), true)
+								queuedEvictionMeter.Mark(int64(1))
+							}
+						}
+					}
+				}
+
 				// Skip local transactions from the eviction mechanism
 				if pool.locals.contains(addr) {
 					continue
@@ -639,6 +655,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if !pool.eip1559 && tx.Type() == types.DynamicFeeTxType {
 		return ErrTxTypeNotSupported
 	}
+	// fee delegation
+	// Reject fee delegation dynamic fee transactions until feedelegation activates.
+	if !pool.feedelegation && tx.Type() == types.FeeDelegateDynamicFeeTxType {
+		return ErrTxTypeNotSupported
+	}
 	// Reject transactions over defined size to prevent DOS attacks
 	if uint64(tx.Size()) > txMaxSize {
 		return ErrOversizedData
@@ -682,8 +703,24 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
-	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
-		return ErrInsufficientFunds
+
+	// fee delegation
+	if tx.Type() == types.FeeDelegateDynamicFeeTxType {
+		// Make sure the transaction is signed properly.
+		feePayer, err := types.FeePayer(types.NewFeeDelegateSigner(pool.chainconfig.ChainID), tx)
+		if *tx.FeePayer() != feePayer || err != nil {
+			return ErrInvalidFeePayer
+		}
+		if pool.currentState.GetBalance(feePayer).Cmp(tx.FeePayerCost()) < 0 {
+			return ErrFeePayerInsufficientFunds
+		}
+		if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+			return ErrSenderInsufficientFunds
+		}
+	} else {
+		if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+			return ErrInsufficientFunds
+		}
 	}
 	// Ensure the transaction has more gas than the basic tx fee.
 	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
@@ -1358,6 +1395,8 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	pool.istanbul = pool.chainconfig.IsIstanbul(next)
 	pool.eip2718 = pool.chainconfig.IsBerlin(next)
 	pool.eip1559 = pool.chainconfig.IsLondon(next)
+	// fee delegation
+	pool.feedelegation = pool.chainconfig.IsFeeDelegation(next)
 }
 
 // promoteExecutables moves transactions that have become processable from the
@@ -1382,6 +1421,21 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 		log.Trace("Removed old queued transactions", "count", len(forwards))
 		// Drop all transactions that are too costly (low balance or out of gas)
 		drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+
+		// fee delegation
+		if pool.feedelegation {
+			for _, tx := range list.Flatten() {
+				if tx.Type() == types.FeeDelegateDynamicFeeTxType && tx.FeePayer() != nil {
+					feePayer := *tx.FeePayer()
+					if pool.currentState.GetBalance(feePayer).Cmp(tx.FeePayerCost()) < 0 {
+						log.Trace("promoteExecutables", "hash", tx.Hash().String())
+						list.Remove(tx)
+						drops = append(drops, tx)
+					}
+				}
+			}
+		}
+
 		for _, tx := range drops {
 			hash := tx.Hash()
 			pool.all.Remove(hash)
@@ -1579,6 +1633,21 @@ func (pool *TxPool) demoteUnexecutables() {
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
 		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+
+		// fee delegation
+		if pool.feedelegation {
+			for _, tx := range list.Flatten() {
+				if tx.Type() == types.FeeDelegateDynamicFeeTxType && tx.FeePayer() != nil {
+					feePayer := *tx.FeePayer()
+					if pool.currentState.GetBalance(feePayer).Cmp(tx.FeePayerCost()) < 0 {
+						log.Trace("demoteUnexecutables", "hash", tx.Hash().String())
+						list.Remove(tx)
+						drops = append(drops, tx)
+					}
+				}
+			}
+		}
+
 		for _, tx := range drops {
 			hash := tx.Hash()
 			log.Trace("Removed unpayable pending transaction", "hash", hash)
