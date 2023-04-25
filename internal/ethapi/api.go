@@ -693,14 +693,14 @@ func (s *PublicBlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash c
 
 		// Assign the effective gas price paid
 		if !s.b.ChainConfig().IsLondon(bigblock) {
-			fields["effectiveGasPrice"] = txs[index].GasPrice()
+			fields["effectiveGasPrice"] = (*hexutil.Big)(txs[index].GasPrice())
 		} else {
 			header, err := s.b.HeaderByHash(ctx, blockHash)
 			if err != nil {
 				return nil, err
 			}
 			gasPrice := new(big.Int).Add(header.BaseFee, txs[index].EffectiveGasTipValue(header.BaseFee))
-			fields["effectiveGasPrice"] = gasPrice
+			fields["effectiveGasPrice"] = (*hexutil.Big)(gasPrice)
 		}
 		// Assign receipt status or post state.
 		if len(receipt.PostState) > 0 {
@@ -1697,14 +1697,14 @@ func (s *PublicTransactionPoolAPI) GetTransactionReceipt(ctx context.Context, ha
 	}
 	// Assign the effective gas price paid
 	if !s.b.ChainConfig().IsLondon(bigblock) {
-		fields["effectiveGasPrice"] = tx.GasPrice()
+		fields["effectiveGasPrice"] = (*hexutil.Big)(tx.GasPrice())
 	} else {
 		header, err := s.b.HeaderByHash(ctx, blockHash)
 		if err != nil {
 			return nil, err
 		}
 		gasPrice := new(big.Int).Add(header.BaseFee, tx.EffectiveGasTipValue(header.BaseFee))
-		fields["effectiveGasPrice"] = gasPrice
+		fields["effectiveGasPrice"] = (*hexutil.Big)(gasPrice)
 	}
 	// Assign receipt status or post state.
 	if len(receipt.PostState) > 0 {
