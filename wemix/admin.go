@@ -50,8 +50,9 @@ type wemixNode struct {
 }
 
 type wemixMember struct {
-	Addr  common.Address `json:"address"`
-	Stake *big.Int       `json:"stake"`
+	Staker common.Address `json:"address"`
+	Reward common.Address `json:"reward"`
+	Stake  *big.Int       `json:"stake"`
 }
 
 type wemixAdmin struct {
@@ -113,11 +114,11 @@ type blockBuildParameters struct {
 
 // reward related parameters
 type rewardParameters struct {
-	rewardAmount                   *big.Int
-	staker, ecoSystem, maintenance *common.Address
-	members                        []*wemixMember
-	distributionMethod             []*big.Int
-	blocksPer                      int64
+	rewardAmount                                 *big.Int
+	staker, ecoSystem, maintenance, feeCollector *common.Address
+	members                                      []*wemixMember
+	distributionMethod                           []*big.Int
+	blocksPer                                    int64
 }
 
 var (
@@ -280,7 +281,7 @@ func (ma *wemixAdmin) getInt(ctx context.Context, contract *metclient.RemoteCont
 }
 
 // TODO: error handling
-func (ma *wemixAdmin) getRegGovEnvContracts(ctx context.Context, height *big.Int) (reg, gov, env *metclient.RemoteContract, err error) {
+func (ma *wemixAdmin) getRegGovEnvContracts(ctx context.Context, height *big.Int) (reg, gov, env, staking *metclient.RemoteContract, err error) {
 	if ma.registry == nil {
 		err = wemixminer.ErrNotInitialized
 		return
@@ -296,6 +297,10 @@ func (ma *wemixAdmin) getRegGovEnvContracts(ctx context.Context, height *big.Int
 	gov = &metclient.RemoteContract{
 		Cli: ma.cli,
 		Abi: ma.gov.Abi,
+	}
+	staking = &metclient.RemoteContract{
+		Cli: ma.cli,
+		Abi: ma.staking.Abi,
 	}
 	if ma.registry.To != nil {
 		reg.To = ma.registry.To
@@ -324,6 +329,14 @@ func (ma *wemixAdmin) getRegGovEnvContracts(ctx context.Context, height *big.Int
 	}
 	env.To = &common.Address{}
 	env.To.SetBytes(addr.Bytes())
+
+	input = []interface{}{metclient.ToBytes32("Staking")}
+	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
+		err = wemixminer.ErrNotInitialized
+		return
+	}
+	staking.To = &common.Address{}
+	staking.To.SetBytes(addr.Bytes())
 
 	return
 }
@@ -419,7 +432,7 @@ func (ma *wemixAdmin) getWemixNodes(ctx context.Context, block *big.Int) ([]*wem
 			return nil, err
 		}
 
-		if err = metclient.CallContract(ctx, ma.gov, "getReward", input, &addr, block); err != nil {
+		if err = metclient.CallContract(ctx, ma.gov, "getMember", input, &addr, block); err != nil {
 			return nil, err
 		}
 
@@ -445,7 +458,7 @@ func (ma *wemixAdmin) getWemixNodes(ctx context.Context, block *big.Int) ([]*wem
 
 func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*rewardParameters, error) {
 	rp := &rewardParameters{}
-	reg, gov, env, err := ma.getRegGovEnvContracts(ctx, height)
+	reg, gov, env, staking, err := ma.getRegGovEnvContracts(ctx, height)
 	if err != nil {
 		return nil, err
 	}
@@ -481,6 +494,15 @@ func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*re
 	rp.maintenance = &common.Address{}
 	rp.maintenance.SetBytes(addr.Bytes())
 
+	input = []interface{}{metclient.ToBytes32("FeeCollector")}
+	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
+		// ignore error
+		rp.feeCollector = nil
+	} else {
+		rp.feeCollector = &common.Address{}
+		rp.feeCollector.SetBytes(addr.Bytes())
+	}
+
 	rp.blocksPer, err = ma.getInt(ctx, env, height, "getBlocksPer")
 	if err != nil {
 		return nil, err
@@ -490,16 +512,25 @@ func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*re
 		return nil, err
 	} else {
 		for i := int64(1); i <= count; i++ {
+			var rewardAddress common.Address
+			var stake *big.Int
+
 			input = []interface{}{big.NewInt(i)}
-			if err = metclient.CallContract(ctx, gov, "getReward", input, &addr, height); err != nil {
+			if err = metclient.CallContract(ctx, gov, "getMember", input, &addr, height); err != nil {
 				return nil, err
 			}
-			// NB. no staking consideration
-			// if err = metclient.CallContract(ctx, staking, "lockedBalanceOf", input, &stake, height); err != nil {
-			//	return nil, err
-			// }
+			input = []interface{}{big.NewInt(i)}
+			if err = metclient.CallContract(ctx, gov, "getReward", input, &rewardAddress, height); err != nil {
+				return nil, err
+			}
+			input = []interface{}{addr}
+			if err = metclient.CallContract(ctx, staking, "lockedBalanceOf", input, &stake, height); err != nil {
+				return nil, err
+			}
 			rp.members = append(rp.members, &wemixMember{
-				Addr: addr,
+				Staker: addr,
+				Reward: rewardAddress,
+				Stake:  stake,
 			})
 		}
 	}
@@ -540,9 +571,16 @@ func (ma *wemixAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (re
 	}
 
 	for i := int64(1); i <= count; i++ {
+		var rewardAddress common.Address
+
 		input = []interface{}{big.NewInt(i)}
-		err = metclient.CallContract(ctx, ma.gov, "getReward", input,
+		err = metclient.CallContract(ctx, ma.gov, "getMember", input,
 			&addr, block)
+		if err != nil {
+			return
+		}
+		err = metclient.CallContract(ctx, ma.gov, "getReward", input,
+			&rewardAddress, block)
 		if err != nil {
 			return
 		}
@@ -554,8 +592,9 @@ func (ma *wemixAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (re
 		}
 
 		members = append(members, &wemixMember{
-			Addr:  addr,
-			Stake: stake,
+			Staker: addr,
+			Reward: rewardAddress,
+			Stake:  stake,
 		})
 	}
 
@@ -1010,6 +1049,8 @@ func handleBlock94Rewards(height *big.Int, rp *rewardParameters, fees *big.Int) 
 	return testnetBlock94Rewards
 }
 
+// distributeRewards divides the rewardAmount among members according to their
+// stakes, and allocates rewards to staker, ecoSystem, and maintenance accounts.
 func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]reward, error) {
 	dm := new(big.Int)
 	for i := 0; i < len(rp.distributionMethod); i++ {
@@ -1032,27 +1073,56 @@ func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]
 	maintenanceAmount.Sub(maintenanceAmount, stakerAmount)
 	maintenanceAmount.Sub(maintenanceAmount, ecoSystemAmount)
 
-	// fees go to maintenance
-	maintenanceAmount.Add(maintenanceAmount, fees)
+	// if feeCollector is not specified, i.e. nil, fees go to maintenance
+	if rp.feeCollector == nil {
+		maintenanceAmount.Add(maintenanceAmount, fees)
+	}
 
 	var rewards []reward
 	if n := len(rp.members); n > 0 {
-		v0, v1 := big.NewInt(0), big.NewInt(1)
-		vn := big.NewInt(int64(n))
-		b := new(big.Int).Set(minerAmount)
-		d := new(big.Int)
-		d.Div(b, vn)
+		stakeTotal, equalStakes := big.NewInt(0), true
 		for i := 0; i < n; i++ {
-			rewards = append(rewards, reward{
-				Addr:   rp.members[i].Addr,
-				Reward: new(big.Int).Set(d),
-			})
+			if equalStakes && i < n-1 && rp.members[i].Stake.Cmp(rp.members[i+1].Stake) != 0 {
+				equalStakes = false
+			}
+			stakeTotal.Add(stakeTotal, rp.members[i].Stake)
 		}
-		d.Mul(d, vn)
-		b.Sub(b, d)
-		for i, ix := 0, height.Int64()%int64(n); b.Cmp(v0) > 0; i, ix = i+1, (ix+1)%int64(n) {
-			rewards[ix].Reward.Add(rewards[ix].Reward, v1)
-			b.Sub(b, v1)
+
+		if equalStakes {
+			v0, v1 := big.NewInt(0), big.NewInt(1)
+			vn := big.NewInt(int64(n))
+			b := new(big.Int).Set(minerAmount)
+			d := new(big.Int)
+			d.Div(b, vn)
+			for i := 0; i < n; i++ {
+				rewards = append(rewards, reward{
+					Addr:   rp.members[i].Reward,
+					Reward: new(big.Int).Set(d),
+				})
+			}
+			d.Mul(d, vn)
+			b.Sub(b, d)
+			for i, ix := 0, height.Int64()%int64(n); b.Cmp(v0) > 0; i, ix = i+1, (ix+1)%int64(n) {
+				rewards[ix].Reward.Add(rewards[ix].Reward, v1)
+				b.Sub(b, v1)
+			}
+		} else {
+			// rewards distributed according to stakes
+			v0, v1 := big.NewInt(0), big.NewInt(1)
+			remainder := new(big.Int).Set(minerAmount)
+			for i := 0; i < n; i++ {
+				memberReward := new(big.Int).Mul(minerAmount, rp.members[i].Stake)
+				memberReward.Div(memberReward, stakeTotal)
+				remainder.Sub(remainder, memberReward)
+				rewards = append(rewards, reward{
+					Addr:   rp.members[i].Reward,
+					Reward: memberReward,
+				})
+			}
+			for ix := height.Int64() % int64(n); remainder.Cmp(v0) > 0; ix = (ix + 1) % int64(n) {
+				rewards[ix].Reward.Add(rewards[ix].Reward, v1)
+				remainder.Sub(remainder, v1)
+			}
 		}
 	}
 	rewards = append(rewards, reward{
@@ -1067,6 +1137,12 @@ func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]
 		Addr:   *rp.maintenance,
 		Reward: maintenanceAmount,
 	})
+	if rp.feeCollector != nil {
+		rewards = append(rewards, reward{
+			Addr:   *rp.feeCollector,
+			Reward: fees,
+		})
+	}
 	return rewards, nil
 }
 
@@ -1100,7 +1176,7 @@ func (ma *wemixAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalan
 	if len(rp.members) > 0 {
 		mix := int(num.Int64()/ma.blocksPer) % len(rp.members)
 		coinbase = &common.Address{}
-		coinbase.SetBytes(rp.members[mix].Addr.Bytes())
+		coinbase.SetBytes(rp.members[mix].Reward.Bytes())
 	}
 
 	rr, errr := distributeRewards(num, rp, fees)
@@ -1151,7 +1227,7 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 
 	// get nodeid from the coinbase
 	num := new(big.Int).Sub(height, common.Big1)
-	_, gov, _, err := admin.getRegGovEnvContracts(ctx, num)
+	_, gov, _, _, err := admin.getRegGovEnvContracts(ctx, num)
 	if err != nil {
 		return err == wemixminer.ErrNotInitialized
 	} else if count, err := admin.getInt(ctx, gov, num, "getMemberLength"); err != nil || count == 0 {
@@ -1339,7 +1415,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 	defer cancel()
 
 	var env, gov *metclient.RemoteContract
-	if _, gov, env, err = admin.getRegGovEnvContracts(ctx, height); err != nil {
+	if _, gov, env, _, err = admin.getRegGovEnvContracts(ctx, height); err != nil {
 		err = wemixminer.ErrNotInitialized
 		return
 	} else if count, err2 := admin.getInt(ctx, gov, height, "getMemberLength"); err2 != nil || count == 0 {
