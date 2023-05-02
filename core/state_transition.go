@@ -198,7 +198,7 @@ func (st *StateTransition) to() common.Address {
 func (st *StateTransition) buyGas() error {
 	// fee delegation
 	if st.msg.FeePayer() != nil {
-		if !st.evm.ChainConfig().IsFeeDelegation(st.evm.Context.BlockNumber) {
+		if !st.evm.ChainConfig().IsApplepie(st.evm.Context.BlockNumber) {
 			return fmt.Errorf("%w: fee delegation type not supported", ErrTxTypeNotSupported)
 		}
 		FDmgval := new(big.Int).SetUint64(st.msg.Gas())

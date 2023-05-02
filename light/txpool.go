@@ -321,7 +321,7 @@ func (pool *TxPool) setNewHead(head *types.Header) {
 	pool.istanbul = pool.config.IsIstanbul(next)
 	pool.eip2718 = pool.config.IsBerlin(next)
 	// fee delegation
-	pool.feedelegation = pool.config.IsFeeDelegation(next)
+	pool.feedelegation = pool.config.IsApplepie(next)
 }
 
 // Stop stops the light transaction pool
