@@ -128,15 +128,19 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 		var baseFeeDelta *big.Int
 		if wemixminer.IsPoW() {
 			baseFeeDelta = x.Div(y, baseFeeChangeDenominator)
+			return math.BigMax(
+				x.Sub(parent.BaseFee, baseFeeDelta),
+				common.Big1,
+			)
 		} else {
 			baseFeeDelta = x.Div(y.Mul(y, baseFeeChangeRate), big.NewInt(100))
 			if baseFeeDelta.Cmp(common.Big0) == 0 && parent.BaseFee.Cmp(common.Big1) > 0 {
 				baseFeeDelta.SetUint64(1)
 			}
+			return math.BigMin(math.BigMax(
+				x.Sub(parent.BaseFee, baseFeeDelta),
+				common.Big1,
+			), maxBaseFee)
 		}
-		return math.BigMax(
-			x.Sub(parent.BaseFee, baseFeeDelta),
-			common.Big1,
-		)
 	}
 }
