@@ -696,6 +696,12 @@ web3._extend({
 			call: 'eth_getLogs',
 			params: 1,
 		}),
+        // fee delegation
+		new web3._extend.Method({
+			name: 'signRawFeeDelegateTransaction',
+			call: 'eth_signRawFeeDelegateTransaction',
+			params: 2,
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
@@ -852,6 +858,11 @@ web3._extend({
 			name: 'verify',
 			call: 'personal_verify',
 			params: 3
+    // fee delegation
+    new web3._extend.Method({
+			name: 'signRawFeeDelegateTransaction',
+			call: 'personal_signRawFeeDelegateTransaction',
+			params: 3,
 		}),
 	],
 	properties: [
