@@ -202,7 +202,7 @@ func (st *StateTransition) buyGas() error {
 			return fmt.Errorf("%w: fee delegation type not supported", ErrTxTypeNotSupported)
 		}
 		FDmgval := new(big.Int).SetUint64(st.msg.Gas())
-		FDmgval = FDmgval.Mul(FDmgval, st.gasFeeCap)
+		FDmgval = FDmgval.Mul(FDmgval, st.gasPrice)
 		feePayer := *st.msg.FeePayer()
 		if feePayer == st.msg.From() {
 			FDbalanceCheck := new(big.Int).SetUint64(st.msg.Gas())

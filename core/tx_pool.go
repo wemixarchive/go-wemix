@@ -707,8 +707,11 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// fee delegation
 	if tx.Type() == types.FeeDelegateDynamicFeeTxType {
 		// Make sure the transaction is signed properly.
+		if tx.FeePayer() == nil {
+			return ErrInvalidFeePayer
+		}
 		feePayer, err := types.FeePayer(types.NewFeeDelegateSigner(pool.chainconfig.ChainID), tx)
-		if *tx.FeePayer() != feePayer || err != nil {
+		if err != nil || *tx.FeePayer() != feePayer {
 			return ErrInvalidFeePayer
 		}
 		if pool.currentState.GetBalance(feePayer).Cmp(tx.FeePayerCost()) < 0 {
