@@ -194,7 +194,7 @@ func (tx *FeeDelegateDynamicFeeTx) setSignatureValues(chainID, v, r, s *big.Int)
 }
 ```
 
-### 7.Add Fee Delegation Signier
+### 7.Add Fee Delegation Signer
 
 * Include core/types/transaction_signing.go
 
