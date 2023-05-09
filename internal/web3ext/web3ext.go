@@ -858,8 +858,9 @@ web3._extend({
 			name: 'verify',
 			call: 'personal_verify',
 			params: 3
-    // fee delegation
-    new web3._extend.Method({
+		}),
+    	// fee delegation
+    	new web3._extend.Method({
 			name: 'signRawFeeDelegateTransaction',
 			call: 'personal_signRawFeeDelegateTransaction',
 			params: 3,
