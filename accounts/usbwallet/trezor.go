@@ -189,6 +189,22 @@ func (w *trezorDriver) SignTypedMessage(path accounts.DerivationPath, domainHash
 	return nil, accounts.ErrNotSupported
 }
 
+func (w *trezorDriver) EdPubKey(a accounts.Account) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *trezorDriver) EdPubKeyWithPassphrase(a accounts.Account, passphrase string) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *trezorDriver) Prove(a accounts.Account, m []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *trezorDriver) ProveWithPassphrase(a accounts.Account, passphrase string, m []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
 // trezorDerive sends a derivation request to the Trezor device and returns the
 // Ethereum address located on that path.
 func (w *trezorDriver) trezorDerive(derivationPath []uint32) (common.Address, error) {

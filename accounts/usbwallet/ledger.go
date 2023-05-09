@@ -190,6 +190,22 @@ func (w *ledgerDriver) SignTypedMessage(path accounts.DerivationPath, domainHash
 	return w.ledgerSignTypedMessage(path, domainHash, messageHash)
 }
 
+func (w *ledgerDriver) EdPubKey(a accounts.Account) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *ledgerDriver) EdPubKeyWithPassphrase(a accounts.Account, passphrase string) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *ledgerDriver) Prove(a accounts.Account, m []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *ledgerDriver) ProveWithPassphrase(a accounts.Account, passphrase string, m []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
 // ledgerVersion retrieves the current version of the Ethereum wallet app running
 // on the Ledger wallet.
 //

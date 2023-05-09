@@ -800,6 +800,22 @@ func (w *Wallet) findAccountPath(account accounts.Account) (accounts.DerivationP
 	return accounts.ParseDerivationPath(parts[1])
 }
 
+func (w *Wallet) EdPubKey(account accounts.Account) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *Wallet) EdPubKeyWithPassphrase(account accounts.Account, passphrase string) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *Wallet) Prove(account accounts.Account, message []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *Wallet) ProveWithPassphrase(account accounts.Account, passphrase string, message []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
 // Session represents a secured communication session with the wallet.
 type Session struct {
 	Wallet   *Wallet               // A handle to the wallet that opened the session
