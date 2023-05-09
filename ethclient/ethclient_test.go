@@ -405,6 +405,7 @@ func testTransactionInBlockInterrupted(t *testing.T, client *rpc.Client) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	tx, err := ec.TransactionInBlock(ctx, block.Hash(), 0)
+	t.Log(fmt.Sprintf("XXX: tx=%v, err=%v\n", tx, err))
 	if tx != nil {
 		t.Fatal("transaction should be nil")
 	}
