@@ -22,6 +22,7 @@ package keystore
 
 import (
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	crand "crypto/rand"
 	"errors"
 	"math/big"
@@ -36,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/vrf"
 	"github.com/ethereum/go-ethereum/event"
 )
 
@@ -43,6 +45,7 @@ var (
 	ErrLocked  = accounts.NewAuthNeededError("password or unlock")
 	ErrNoMatch = errors.New("no key for given address or file")
 	ErrDecrypt = errors.New("could not decrypt key with given password")
+	ErrVrf     = errors.New("errors on VRF functions") // TODO (lukepark327): more details
 
 	// ErrAccountAlreadyExists is returned if an account attempted to import is
 	// already present in the keystore.
@@ -283,6 +286,11 @@ func (ks *KeyStore) SignTx(a accounts.Account, tx *types.Transaction, chainID *b
 	if !found {
 		return nil, ErrLocked
 	}
+	// fee delegation
+	if tx.Type() == types.FeeDelegateDynamicFeeTxType {
+		signer := types.NewFeeDelegateSigner(chainID)
+		return types.SignTx(tx, signer, unlockedKey.PrivateKey)
+	}
 	// Depending on the presence of the chain ID, sign with 2718 or homestead
 	signer := types.LatestSignerForChainID(chainID)
 	return types.SignTx(tx, signer, unlockedKey.PrivateKey)
@@ -308,6 +316,12 @@ func (ks *KeyStore) SignTxWithPassphrase(a accounts.Account, passphrase string, 
 		return nil, err
 	}
 	defer zeroKey(key.PrivateKey)
+	// fee delegation
+	if tx.Type() == types.FeeDelegateDynamicFeeTxType {
+		signer := types.NewFeeDelegateSigner(chainID)
+		return types.SignTx(tx, signer, key.PrivateKey)
+	}
+
 	// Depending on the presence of the chain ID, sign with or without replay protection.
 	signer := types.LatestSignerForChainID(chainID)
 	return types.SignTx(tx, signer, key.PrivateKey)
@@ -504,4 +518,84 @@ func zeroKey(k *ecdsa.PrivateKey) {
 	for i := range b {
 		b[i] = 0
 	}
+}
+
+func (ks *KeyStore) EdPubKey(a accounts.Account) ([]byte, error) {
+	// Look up the key to sign with and abort if it cannot be found
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+
+	unlockedKey, found := ks.unlocked[a.Address]
+	if !found {
+		return nil, ErrLocked
+	}
+
+	return edPubKeyFromPrivateKey(unlockedKey.PrivateKey)
+}
+
+func (ks *KeyStore) EdPubKeyWithPassphrase(a accounts.Account, passphrase string) ([]byte, error) {
+	_, key, err := ks.getDecryptedKey(a, passphrase)
+	if err != nil {
+		return nil, err
+	}
+	defer zeroKey(key.PrivateKey)
+
+	return edPubKeyFromPrivateKey(key.PrivateKey)
+}
+
+func edPubKeyFromPrivateKey(k *ecdsa.PrivateKey) ([]byte, error) {
+	// get private key
+	seed := k.D.Bytes()
+	sk := ed25519.NewKeyFromSeed(seed)
+	pk := sk.Public()
+
+	xx, ok := pk.(ed25519.PublicKey)
+	if !ok {
+		return nil, ErrVrf
+	}
+	return xx, nil
+}
+
+func (ks *KeyStore) Prove(a accounts.Account, m []byte) ([]byte, error) {
+	// Look up the key to sign with and abort if it cannot be found
+	ks.mu.RLock()
+	defer ks.mu.RUnlock()
+
+	unlockedKey, found := ks.unlocked[a.Address]
+	if !found {
+		return nil, ErrLocked
+	}
+
+	pi, _, err := prove(unlockedKey.PrivateKey, m)
+	if err != nil {
+		return nil, err
+	}
+	return pi, err
+}
+
+func (ks *KeyStore) ProveWithPassphrase(a accounts.Account, passphrase string, m []byte) ([]byte, error) {
+	_, key, err := ks.getDecryptedKey(a, passphrase)
+	if err != nil {
+		return nil, err
+	}
+	defer zeroKey(key.PrivateKey)
+
+	pi, _, err := prove(key.PrivateKey, m)
+	if err != nil {
+		return nil, err
+	}
+	return pi, err
+}
+
+func prove(k *ecdsa.PrivateKey, msg []byte) ([]byte, []byte, error) {
+	// get private key
+	seed := k.D.Bytes()
+	sk := ed25519.NewKeyFromSeed(seed)
+	pk := sk.Public()
+
+	xx, ok := pk.(ed25519.PublicKey)
+	if !ok {
+		return nil, nil, ErrVrf
+	}
+	return vrf.Prove(xx, sk, msg[:])
 }

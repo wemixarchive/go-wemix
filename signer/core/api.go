@@ -647,3 +647,19 @@ func (api *SignerAPI) SignGnosisSafeTx(ctx context.Context, signerAddress common
 func (api *SignerAPI) Version(ctx context.Context) (string, error) {
 	return ExternalAPIVersion, nil
 }
+
+func (api *SignerAPI) EdPubKey(account accounts.Account) ([]byte, error) {
+	return nil, fmt.Errorf("vrf-operations not supported on signers yet") // TODO
+}
+
+func (api *SignerAPI) EdPubKeyWithPassphrase(account accounts.Account, passphrase string) ([]byte, error) {
+	return nil, fmt.Errorf("vrf-operations not supported on signers yet") // TODO
+}
+
+func (api *SignerAPI) Prove(account accounts.Account, message []byte) ([]byte, error) {
+	return nil, fmt.Errorf("vrf-operations not supported on signers yet") // TODO
+}
+
+func (api *SignerAPI) ProveWithPassphrase(account accounts.Account, passphrase string, message []byte) ([]byte, error) {
+	return nil, fmt.Errorf("vrf-operations not supported on signers yet") // TODO
+}

@@ -26,7 +26,7 @@ func (ma *wemixAdmin) collectMinerStates(height *big.Int) []*wemixapi.WemixMiner
 		err error
 	)
 	ctx = context.Background()
-	if _, gov, _, err = ma.getRegGovEnvContracts(ctx, height); err != nil {
+	if _, gov, _, _, err = ma.getRegGovEnvContracts(ctx, height); err != nil {
 		return nil
 	}
 	e, err := getCoinbaseEnodeCache(ctx, height, gov)
@@ -123,7 +123,7 @@ func enodeExists(ctx context.Context, height *big.Int, gov *metclient.RemoteCont
 // returns wemix nodes at given height
 func getNodesAt(height *big.Int) ([]*wemixNode, error) {
 	ctx := context.Background()
-	if _, gov, _, err := admin.getRegGovEnvContracts(ctx, height); err != nil {
+	if _, gov, _, _, err := admin.getRegGovEnvContracts(ctx, height); err != nil {
 		return nil, wemixminer.ErrNotInitialized
 	} else if e, err := getCoinbaseEnodeCache(ctx, height, gov); err != nil {
 		return nil, err
@@ -214,7 +214,7 @@ func (ma *wemixAdmin) isEligibleMiner(height *big.Int) (bool, error) {
 	if err != nil {
 		return false, wemixminer.ErrNotInitialized
 	}
-	if _, gov, _, err = ma.getRegGovEnvContracts(ctx, prev); err != nil {
+	if _, gov, _, _, err = ma.getRegGovEnvContracts(ctx, prev); err != nil {
 		return false, wemixminer.ErrNotInitialized
 	}
 	e, err := getCoinbaseEnodeCache(ctx, prev, gov)
@@ -252,7 +252,7 @@ func (ma *wemixAdmin) nextMinerCandidates(height *big.Int) ([]*wemixNode, error)
 		err error
 	)
 	ctx = context.Background()
-	if _, gov, _, err = ma.getRegGovEnvContracts(ctx, height); err != nil {
+	if _, gov, _, _, err = ma.getRegGovEnvContracts(ctx, height); err != nil {
 		return nil, wemixminer.ErrNotInitialized
 	}
 	e, err := getCoinbaseEnodeCache(ctx, height, gov)

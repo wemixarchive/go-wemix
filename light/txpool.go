@@ -69,6 +69,8 @@ type TxPool struct {
 
 	istanbul bool // Fork indicator whether we are in the istanbul stage.
 	eip2718  bool // Fork indicator whether we are in the eip2718 stage.
+	// fee delegation
+	feedelegation bool // Fork indicator whether we are in the fee delegation stage.
 }
 
 // TxRelayBackend provides an interface to the mechanism that forwards transacions
@@ -318,6 +320,8 @@ func (pool *TxPool) setNewHead(head *types.Header) {
 	next := new(big.Int).Add(head.Number, big.NewInt(1))
 	pool.istanbul = pool.config.IsIstanbul(next)
 	pool.eip2718 = pool.config.IsBerlin(next)
+	// fee delegation
+	pool.feedelegation = pool.config.IsApplepie(next)
 }
 
 // Stop stops the light transaction pool
@@ -380,8 +384,27 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
-	if b := currentState.GetBalance(from); b.Cmp(tx.Cost()) < 0 {
-		return core.ErrInsufficientFunds
+
+	// fee delegation
+	if tx.Type() == types.FeeDelegateDynamicFeeTxType {
+		if !pool.feedelegation {
+			return core.ErrTxTypeNotSupported
+		}
+		// Make sure the transaction is signed properly.
+		feePayer, err := types.FeePayer(types.NewFeeDelegateSigner(pool.config.ChainID), tx)
+		if *tx.FeePayer() != feePayer || err != nil {
+			return core.ErrInvalidFeePayer
+		}
+		if currentState.GetBalance(feePayer).Cmp(tx.FeePayerCost()) < 0 {
+			return core.ErrFeePayerInsufficientFunds
+		}
+		if currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+			return core.ErrSenderInsufficientFunds
+		}
+	} else {
+		if b := currentState.GetBalance(from); b.Cmp(tx.Cost()) < 0 {
+			return core.ErrInsufficientFunds
+		}
 	}
 
 	// Should supply enough intrinsic gas
