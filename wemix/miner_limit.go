@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
@@ -108,16 +109,16 @@ func coinbaseExists(ctx context.Context, height *big.Int, gov *metclient.RemoteC
 }
 
 // returns true if enode exists in governance at given height-1
-func enodeExists(ctx context.Context, height *big.Int, gov *metclient.RemoteContract, enode []byte) (bool, error) {
+func enodeExists(ctx context.Context, height *big.Int, gov *metclient.RemoteContract, enode []byte) (common.Address, error) {
 	e, err := getCoinbaseEnodeCache(ctx, new(big.Int).Sub(height, common.Big1), gov)
 	if err != nil {
-		return false, err
+		return common.Address{}, err
 	}
 	ix, ok := e.enode2index[string(enode)]
 	if !ok {
-		return false, nil
+		return common.Address{}, ethereum.NotFound
 	}
-	return ix >= 1, nil
+	return e.nodes[ix-1].Addr, nil
 }
 
 // returns wemix nodes at given height

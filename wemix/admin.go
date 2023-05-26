@@ -1214,7 +1214,23 @@ func signBlock(height *big.Int, hash common.Hash) (coinbase common.Address, sig 
 	prvKey := admin.stack.Server().PrivateKey
 	sig, err = crypto.Sign(data, prvKey)
 	if admin.self != nil {
-		coinbase = admin.self.Addr
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		num := new(big.Int).Sub(height, common.Big1)
+		_, gov, _, _, err2 := admin.getRegGovEnvContracts(ctx, num)
+		if err2 != nil {
+			err = err2
+			return
+		}
+
+		nodeId := crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
+		if addr, err2 := enodeExists(ctx, height, gov, nodeId); err2 != nil {
+			err = err2
+			return
+		} else {
+			coinbase = addr
+		}
 	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
 		coinbase = admin.bootAccount
 	}
@@ -1244,7 +1260,7 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 		data = append(height.Bytes(), hash.Bytes()...)
 		data = crypto.Keccak256(data)
 	} else {
-		if ok, err := enodeExists(ctx, height, gov, nodeId); err != nil || !ok {
+		if _, err := enodeExists(ctx, height, gov, nodeId); err != nil {
 			return false
 		}
 		data = hash.Bytes()
