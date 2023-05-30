@@ -158,6 +158,7 @@ var (
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
 		PangyoBlock:         big.NewInt(0),
+		ApplepieBlock:       big.NewInt(20_476_911),
 		Ethash:              new(EthashConfig),
 	}
 
