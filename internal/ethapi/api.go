@@ -730,7 +730,7 @@ func (s *PublicBlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash c
 
 		fields := map[string]interface{}{
 			"blockHash":         blockHash,
-			"blockNumber":       bigblock,
+			"blockNumber":       hexutil.Uint64(block.NumberU64()),
 			"transactionHash":   receipt.TxHash,
 			"transactionIndex":  hexutil.Uint64(index),
 			"from":              from,
