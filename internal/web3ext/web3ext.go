@@ -696,6 +696,12 @@ web3._extend({
 			call: 'eth_getLogs',
 			params: 1,
 		}),
+        // fee delegation
+		new web3._extend.Method({
+			name: 'signRawFeeDelegateTransaction',
+			call: 'eth_signRawFeeDelegateTransaction',
+			params: 2,
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
@@ -837,7 +843,28 @@ web3._extend({
 			name: 'initializeWallet',
 			call: 'personal_initializeWallet',
 			params: 1
-		})
+		}),
+		new web3._extend.Method({
+			name: 'edPubKey',
+			call: 'personal_edPubKey',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'prove',
+			call: 'personal_prove',
+			params: 3
+		}),
+		new web3._extend.Method({
+			name: 'verify',
+			call: 'personal_verify',
+			params: 3
+		}),
+		// fee delegation
+		new web3._extend.Method({
+			name: 'signRawFeeDelegateTransaction',
+			call: 'personal_signRawFeeDelegateTransaction',
+			params: 3,
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

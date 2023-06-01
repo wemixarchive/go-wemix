@@ -148,3 +148,39 @@ func (w *keystoreWallet) SignTxWithPassphrase(account accounts.Account, passphra
 	// Account seems valid, request the keystore to sign
 	return w.keystore.SignTxWithPassphrase(account, passphrase, tx, chainID)
 }
+
+func (w *keystoreWallet) EdPubKey(account accounts.Account) ([]byte, error) {
+	// Make sure the requested account is contained within
+	if !w.Contains(account) {
+		return nil, accounts.ErrUnknownAccount
+	}
+	// Account seems valid, request the keystore to get EdPubKey
+	return w.keystore.EdPubKey(account)
+}
+
+func (w *keystoreWallet) EdPubKeyWithPassphrase(account accounts.Account, passphrase string) ([]byte, error) {
+	// Make sure the requested account is contained within
+	if !w.Contains(account) {
+		return nil, accounts.ErrUnknownAccount
+	}
+	// Account seems valid, request the keystore to get EdPubKey
+	return w.keystore.EdPubKeyWithPassphrase(account, passphrase)
+}
+
+func (w *keystoreWallet) Prove(account accounts.Account, message []byte) ([]byte, error) {
+	// Make sure the requested account is contained within
+	if !w.Contains(account) {
+		return nil, accounts.ErrUnknownAccount
+	}
+	// Account seems valid, request the keystore to prove
+	return w.keystore.Prove(account, message)
+}
+
+func (w *keystoreWallet) ProveWithPassphrase(account accounts.Account, passphrase string, message []byte) ([]byte, error) {
+	// Make sure the requested account is contained within
+	if !w.Contains(account) {
+		return nil, accounts.ErrUnknownAccount
+	}
+	// Account seems valid, request the keystore to prove
+	return w.keystore.ProveWithPassphrase(account, passphrase, message)
+}

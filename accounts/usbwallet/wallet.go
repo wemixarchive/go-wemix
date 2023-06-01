@@ -69,6 +69,14 @@ type driver interface {
 	SignTx(path accounts.DerivationPath, tx *types.Transaction, chainID *big.Int) (common.Address, *types.Transaction, error)
 
 	SignTypedMessage(path accounts.DerivationPath, messageHash []byte, domainHash []byte) ([]byte, error)
+
+	EdPubKey(account accounts.Account) ([]byte, error)
+
+	EdPubKeyWithPassphrase(account accounts.Account, passphrase string) ([]byte, error)
+
+	Prove(account accounts.Account, message []byte) ([]byte, error)
+
+	ProveWithPassphrase(account accounts.Account, passphrase string, message []byte) ([]byte, error)
 }
 
 // wallet represents the common functionality shared by all USB hardware
@@ -637,4 +645,20 @@ func (w *wallet) SignTextWithPassphrase(account accounts.Account, passphrase str
 // Since USB wallets don't rely on passphrases, these are silently ignored.
 func (w *wallet) SignTxWithPassphrase(account accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
 	return w.SignTx(account, tx, chainID)
+}
+
+func (w *wallet) EdPubKey(account accounts.Account) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *wallet) EdPubKeyWithPassphrase(account accounts.Account, passphrase string) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *wallet) Prove(account accounts.Account, message []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *wallet) ProveWithPassphrase(account accounts.Account, passphrase string, message []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
 }

@@ -72,6 +72,8 @@ require (
 	golang.org/x/tools v0.1.8-0.20211029000441-d6a9af8af023
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
 	gopkg.in/urfave/cli.v1 v1.20.0
+	github.com/yoseplee/vrf v0.0.0-20210814110709-d1caf509310b
+	github.com/yahoo/coname v0.0.0-20170609175141-84592ddf8673
 )
 
 require (

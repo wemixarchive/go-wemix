@@ -151,6 +151,18 @@ type Wallet interface {
 
 	// SignTxWithPassphrase is identical to SignTx, but also takes a password
 	SignTxWithPassphrase(account Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error)
+
+	// Get pk from sk based on ed25519
+	EdPubKey(account Account) ([]byte, error)
+
+	// Get pk from sk based on ed25519 with account password
+	EdPubKeyWithPassphrase(account Account, passphrase string) ([]byte, error)
+
+	// Get prove
+	Prove(account Account, message []byte) ([]byte, error)
+
+	// Get prove with account password
+	ProveWithPassphrase(account Account, passphrase string, message []byte) ([]byte, error)
 }
 
 // Backend is a "wallet provider" that may contain a batch of accounts they can

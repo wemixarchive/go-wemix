@@ -256,6 +256,22 @@ func (api *ExternalSigner) SignDataWithPassphrase(account accounts.Account, pass
 	return nil, fmt.Errorf("password-operations not supported on external signers")
 }
 
+func (api *ExternalSigner) EdPubKey(account accounts.Account) ([]byte, error) {
+	return nil, fmt.Errorf("vrf-operations not supported on external signers yet") // TODO (lukepark327)
+}
+
+func (api *ExternalSigner) EdPubKeyWithPassphrase(account accounts.Account, passphrase string) ([]byte, error) {
+	return nil, fmt.Errorf("vrf-operations not supported on external signers yet") // TODO (lukepark327)
+}
+
+func (api *ExternalSigner) Prove(account accounts.Account, message []byte) ([]byte, error) {
+	return nil, fmt.Errorf("vrf-operations not supported on external signers yet") // TODO (lukepark327)
+}
+
+func (api *ExternalSigner) ProveWithPassphrase(account accounts.Account, passphrase string, message []byte) ([]byte, error) {
+	return nil, fmt.Errorf("vrf-operations not supported on external signers yet") // TODO (lukepark327)
+}
+
 func (api *ExternalSigner) listAccounts() ([]common.Address, error) {
 	var res []common.Address
 	if err := api.client.Call(&res, "account_list"); err != nil {

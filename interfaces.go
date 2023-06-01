@@ -142,6 +142,8 @@ type CallMsg struct {
 	Data      []byte          // input data, usually an ABI-encoded contract method invocation
 
 	AccessList types.AccessList // EIP-2930 access list.
+	// fee delegation
+	FeePayer *common.Address
 }
 
 // A ContractCaller provides contract calls, essentially transactions that are executed by

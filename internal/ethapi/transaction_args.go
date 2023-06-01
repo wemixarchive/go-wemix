@@ -52,6 +52,13 @@ type TransactionArgs struct {
 	// Introduced by AccessListTxType transaction.
 	AccessList *types.AccessList `json:"accessList,omitempty"`
 	ChainID    *hexutil.Big      `json:"chainId,omitempty"`
+
+	// fee delegation
+	FeePayer *common.Address `json:"feePayer"`
+	// Signature values
+	V *hexutil.Big `json:"v"`
+	R *hexutil.Big `json:"r"`
+	S *hexutil.Big `json:"s"`
 }
 
 // from retrieves the transaction sender address.
@@ -263,6 +270,29 @@ func (args *TransactionArgs) toTransaction() *types.Transaction {
 			Value:      (*big.Int)(args.Value),
 			Data:       args.data(),
 			AccessList: al,
+		}
+		// fee delegation
+		if args.FeePayer != nil && args.V != nil && args.R != nil && args.S != nil {
+			SenderTx := types.DynamicFeeTx{
+				To:         args.To,
+				ChainID:    (*big.Int)(args.ChainID),
+				Nonce:      uint64(*args.Nonce),
+				Gas:        uint64(*args.Gas),
+				GasFeeCap:  (*big.Int)(args.MaxFeePerGas),
+				GasTipCap:  (*big.Int)(args.MaxPriorityFeePerGas),
+				Value:      (*big.Int)(args.Value),
+				Data:       args.data(),
+				AccessList: al,
+				V:          (*big.Int)(args.V),
+				R:          (*big.Int)(args.R),
+				S:          (*big.Int)(args.S),
+			}
+			FeeDelegateDynamicFeeTx := &types.FeeDelegateDynamicFeeTx{
+				FeePayer: args.FeePayer,
+			}
+
+			FeeDelegateDynamicFeeTx.SetSenderTx(SenderTx)
+			return types.NewTx(FeeDelegateDynamicFeeTx)
 		}
 	case args.AccessList != nil:
 		data = &types.AccessListTx{

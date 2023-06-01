@@ -699,6 +699,18 @@ func (w *Wallet) signHash(account accounts.Account, hash []byte) ([]byte, error)
 // the needed details via SignTxWithPassphrase, or by other means (e.g. unlock
 // the account in a keystore).
 func (w *Wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
+
+	// fee delegation
+	if tx.Type() == types.FeeDelegateDynamicFeeTxType {
+		signer := types.NewFeeDelegateSigner(chainID)
+		hash := signer.Hash(tx)
+		sig, err := w.signHash(account, hash[:])
+		if err != nil {
+			return nil, err
+		}
+		return tx.WithSignature(signer, sig)
+	}
+
 	signer := types.LatestSignerForChainID(chainID)
 	hash := signer.Hash(tx)
 	sig, err := w.signHash(account, hash[:])
@@ -786,6 +798,22 @@ func (w *Wallet) findAccountPath(account accounts.Account) (accounts.DerivationP
 	}
 
 	return accounts.ParseDerivationPath(parts[1])
+}
+
+func (w *Wallet) EdPubKey(account accounts.Account) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *Wallet) EdPubKeyWithPassphrase(account accounts.Account, passphrase string) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *Wallet) Prove(account accounts.Account, message []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
+}
+
+func (w *Wallet) ProveWithPassphrase(account accounts.Account, passphrase string, message []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported // TODO
 }
 
 // Session represents a secured communication session with the wallet.
