@@ -236,7 +236,7 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 	return SetupGenesisBlockWithOverride(db, genesis, nil, nil)
 }
 
-func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, overrideArrowGlacier, overrideTerminalTotalDifficulty *big.Int) (*params.ChainConfig, common.Hash, error) {
+func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, overrideGrayGlacier, overrideTerminalTotalDifficulty *big.Int) (*params.ChainConfig, common.Hash, error) {
 	if genesis != nil && genesis.Config == nil {
 		return params.AllEthashProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
@@ -282,8 +282,8 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	}
 	// Get the existing chain configuration.
 	newcfg := genesis.configOrDefault(stored)
-	if overrideArrowGlacier != nil {
-		newcfg.ArrowGlacierBlock = overrideArrowGlacier
+	if overrideGrayGlacier != nil {
+		newcfg.GrayGlacierBlock = overrideGrayGlacier
 	}
 	if overrideTerminalTotalDifficulty != nil {
 		newcfg.TerminalTotalDifficulty = overrideTerminalTotalDifficulty
@@ -304,8 +304,8 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// apply the overrides.
 	if genesis == nil && !(stored == params.MainnetGenesisHash || stored == params.WemixMainnetGenesisHash) {
 		newcfg = storedcfg
-		if overrideArrowGlacier != nil {
-			newcfg.ArrowGlacierBlock = overrideArrowGlacier
+		if overrideGrayGlacier != nil {
+			newcfg.GrayGlacierBlock = overrideGrayGlacier
 		}
 		if overrideTerminalTotalDifficulty != nil {
 			newcfg.TerminalTotalDifficulty = overrideTerminalTotalDifficulty
@@ -483,6 +483,7 @@ func DefaultGenesisBlock() *Genesis {
 		if err := json.NewDecoder(strings.NewReader(wemixMainnetGenesisJson)).Decode(genesis); err != nil {
 			panic("Cannot parse default wemix mainnet genesis.")
 		}
+		genesis.Config = genesis.configOrDefault(params.WemixMainnetGenesisHash) //set WemixMainnetChainConfig
 		return genesis
 	}
 }
@@ -503,6 +504,7 @@ func DefaultTestnetGenesisBlock() *Genesis {
 		if err := json.NewDecoder(strings.NewReader(wemixTestnetGenesisJson)).Decode(genesis); err != nil {
 			panic("Cannot parse default wemix testnet genesis.")
 		}
+		genesis.Config = genesis.configOrDefault(params.WemixTestnetGenesisHash) //set WemixTestnetChainConfig
 		return genesis
 	}
 }
