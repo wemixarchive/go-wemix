@@ -9,7 +9,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential ca-certificates curl libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev git
 
 # golang
-RUN curl -sL -o /tmp/go.tar.gz https://dl.google.com/go/$(curl -sL https://golang.org/VERSION?m=text).linux-amd64.tar.gz && \
+RUN curl -sL -o /tmp/go.tar.gz https://dl.google.com/go/$(curl -sL https://golang.org/VERSION?m=text | head -1).linux-amd64.tar.gz && \
     pushd /usr/local/ && \
     tar xfz /tmp/go.tar.gz && \
     cd /usr/local/bin/ && \
