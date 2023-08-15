@@ -1627,16 +1627,16 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,
 	})
+	if !wemixminer.IsPoW() { // Wemix
+		if coinbase, err := wemixminer.GetCoinbase(work.header.Number); err == nil {
+			work.coinbase = coinbase
+		}
+	}
 	if err != nil {
 		return
 	}
 
 	if !wemixminer.IsPoW() { // Wemix
-		parent := w.chain.CurrentBlock()
-		getCoinbase, err := wemixminer.GetCoinbase(parent.Number())
-		if err == nil {
-			work.coinbase = getCoinbase
-		}
 		if !w.commitTransactionsEx(work, interrupt, start) {
 			w.commitEx(work, w.fullTaskHook, true, start)
 		}
