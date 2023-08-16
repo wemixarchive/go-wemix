@@ -1204,6 +1204,36 @@ func verifyRewards(num *big.Int, rewards string) error {
 	//return admin.verifyRewards(num, rewards)
 }
 
+func getCoinbase(height *big.Int) (coinbase common.Address, err error) {
+	if admin == nil {
+		err = wemixminer.ErrNotInitialized
+		return
+	}
+	prvKey := admin.stack.Server().PrivateKey
+	if admin.self != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		num := new(big.Int).Sub(height, common.Big1)
+		_, gov, _, _, err2 := admin.getRegGovEnvContracts(ctx, num)
+		if err2 != nil {
+			err = err2
+			return
+		}
+
+		nodeId := crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
+		if addr, err2 := enodeExists(ctx, height, gov, nodeId); err2 != nil {
+			err = err2
+			return
+		} else {
+			coinbase = addr
+		}
+	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
+		coinbase = admin.bootAccount
+	}
+	return
+}
+
 func signBlock(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error) {
 	if admin == nil {
 		err = wemixminer.ErrNotInitialized
@@ -1787,6 +1817,7 @@ func init() {
 	wemixminer.SuggestGasPriceFunc = suggestGasPrice
 	wemixminer.CalculateRewardsFunc = calculateRewards
 	wemixminer.VerifyRewardsFunc = verifyRewards
+	wemixminer.GetCoinbaseFunc = getCoinbase
 	wemixminer.SignBlockFunc = signBlock
 	wemixminer.VerifyBlockSigFunc = verifyBlockSig
 	wemixminer.RequirePendingTxsFunc = requirePendingTxs
