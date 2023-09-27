@@ -18,6 +18,7 @@ var (
 	AmHubFunc                   func(string) int
 	CalculateRewardsFunc        func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
 	VerifyRewardsFunc           func(*big.Int, string) error
+	GetCoinbaseFunc             func(height *big.Int) (coinbase common.Address, err error)
 	SignBlockFunc               func(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error)
 	VerifyBlockSigFunc          func(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool
 	RequirePendingTxsFunc       func() bool
@@ -92,6 +93,15 @@ func VerifyRewards(num *big.Int, rewards string) error {
 	} else {
 		return VerifyRewardsFunc(num, rewards)
 	}
+}
+
+func GetCoinbase(height *big.Int) (coinbase common.Address, err error) {
+	if GetCoinbaseFunc == nil {
+		err = ErrNotInitialized
+	} else {
+		coinbase, err = GetCoinbaseFunc(height)
+	}
+	return
 }
 
 func SignBlock(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error) {
