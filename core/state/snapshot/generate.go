@@ -618,8 +618,7 @@ func generateAccounts(ctx *generatorContext, dl *diskLayer, accMarker []byte) er
 		// If the iterated account is the contract, create a further loop to
 		// verify or regenerate the contract storage.
 		if acc.Root == emptyRoot {
-			log.Debug("removeStorageAt skip for rocksdb")
-			// ctx.removeStorageAt(account)
+			ctx.removeStorageAt(account)
 		} else {
 			var storeMarker []byte
 			if accMarker != nil && bytes.Equal(account[:], accMarker) && len(dl.genMarker) > common.HashLength {

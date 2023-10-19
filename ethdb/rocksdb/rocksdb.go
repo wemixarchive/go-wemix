@@ -272,6 +272,11 @@ func (it *RDBIterator) Next() bool {
 	if it.first {
 		it.first = false
 	} else {
+		// Added conditions to prevent Rocksdb Iterator error.
+		// Valid() call is a RocksDB requirement.
+		if C.rocksdb_iter_valid(it.it) == 0 {
+			return false
+		}
 		C.rocksdb_iter_next(it.it)
 	}
 	return C.rocksdb_iter_valid(it.it) != 0
