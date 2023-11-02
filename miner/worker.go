@@ -1216,7 +1216,6 @@ func (w *worker) throttleMining(ts []int64) (int64, int64) {
 }
 
 func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart time.Time) bool {
-
 	// committed transactions
 	committedTxs := map[common.Hash]*types.Transaction{}
 
@@ -1225,7 +1224,6 @@ func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart
 
 	// Short circuit if there is no available pending transactions
 	if len(pending) != 0 {
-
 		// using new simple round-robin ordering instead of old one.
 		if params.PrefetchCount == 0 {
 			// remove processed txs from 'pending'
@@ -1255,7 +1253,6 @@ func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart
 				return true
 			}
 		}
-
 	}
 
 	time.Sleep(time.Until(*env.till))

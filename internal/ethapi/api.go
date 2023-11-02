@@ -694,7 +694,6 @@ func (s *BlockChainAPI) BlockNumber() hexutil.Uint64 {
 
 // GetBlockReceipts returns all the transaction receipts for the given block hash.
 func (s *BlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash common.Hash) ([]map[string]interface{}, error) {
-
 	block, err1 := s.b.BlockByHash(ctx, blockHash)
 	if block == nil && err1 == nil {
 		return nil, nil
@@ -716,7 +715,6 @@ func (s *BlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash common.
 	fieldsList := make([]map[string]interface{}, 0, len(receipts))
 
 	for index, receipt := range receipts {
-
 		bigblock := new(big.Int).SetUint64(block.NumberU64())
 		signer := types.MakeSigner(s.b.ChainConfig(), bigblock)
 		from, _ := types.Sender(signer, txs[index])
@@ -1031,6 +1029,7 @@ type BlockOverrides struct {
 	GasLimit   *hexutil.Uint64
 	Coinbase   *common.Address
 	Random     *common.Hash
+	BaseFee    *hexutil.Big
 }
 
 // Apply overrides the given header fields into the given block context.
@@ -1055,6 +1054,9 @@ func (diff *BlockOverrides) Apply(blockCtx *vm.BlockContext) {
 	}
 	if diff.Random != nil {
 		blockCtx.Random = diff.Random
+	}
+	if diff.BaseFee != nil {
+		blockCtx.BaseFee = diff.BaseFee.ToInt()
 	}
 }
 
@@ -1437,7 +1439,7 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 	switch tx.Type() {
 	case types.LegacyTxType:
 		// if a legacy transaction has an EIP-155 chain id, include it explicitly
-		if id := tx.ChainId(); id.Sign() == 0 {
+		if id := tx.ChainId(); id.Sign() != 0 {
 			result.ChainID = (*hexutil.Big)(id)
 		}
 	case types.AccessListTxType:
@@ -2168,7 +2170,7 @@ func (api *DebugAPI) SeedHash(ctx context.Context, number uint64) (string, error
 	if block == nil {
 		return "", fmt.Errorf("block #%d not found", number)
 	}
-	return fmt.Sprintf("0x%x", ethash.SeedHash(number)), nil
+	return fmt.Sprintf("%#x", ethash.SeedHash(number)), nil
 }
 
 // ChaindbProperty returns leveldb properties of the key-value database.

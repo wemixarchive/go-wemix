@@ -12,7 +12,6 @@ import (
 
 // TestDistributeRewards tests the DistributeRewards function
 func TestDistributeRewards(t *testing.T) {
-
 	hexToAddressPtr := func(addr string) *common.Address {
 		address := common.HexToAddress(addr)
 		return &address

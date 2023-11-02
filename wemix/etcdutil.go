@@ -895,7 +895,6 @@ again:
 				}
 			}
 		}
-
 	}
 	return err
 }
@@ -990,7 +989,6 @@ again:
 	).Commit()
 
 	if err == nil && !txresp.Succeeded {
-
 		var (
 			tokenFound, workFound bool = false, false
 			foundToken            []byte
