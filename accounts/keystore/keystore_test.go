@@ -218,7 +218,7 @@ func TestWalletNotifierLifecycle(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	// Create a temporary kesytore to test with
+	// Create a temporary keystore to test with
 	_, ks := tmpKeyStore(t, false)
 
 	// Ensure that the notification updater is not running yet
