@@ -100,7 +100,7 @@ function init_gov ()
     PORT=$(grep PORT ${d}/.rc | sed -e 's/PORT=//')
     [ "$PORT" = "" ] && PORT=8588
 
-    exec ${GWEMIX} attach http://localhost:${PORT} --preload "$d/conf/WemixGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'", '${INIT_ONCE}')'
+    exec ${GWEMIX} --preload "$d/conf/WemixGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'", '${INIT_ONCE}')' attach http://localhost:${PORT}
 }
 
 function wipe ()
@@ -147,6 +147,8 @@ function start ()
     [ "$PORT" = "" ] || RPCOPT="${RPCOPT} --http.port ${PORT}"
     RPCOPT="${RPCOPT} --ws --ws.addr 0.0.0.0"
     [ "$PORT" = "" ] || RPCOPT="${RPCOPT} --ws.port $((${PORT}+10))"
+    RPCOPT="${RPCOPT} --authrpc.addr 0.0.0.0"
+    [ "$PORT" = "" ] || RPCOPT="${RPCOPT} --authrpc.port $((${PORT}+11))"
     [ "$NONCE_LIMIT" = "" ] || NONCE_LIMIT="--noncelimit $NONCE_LIMIT"
     [ "$BOOT_NODES" = "" ] || BOOT_NODES="--bootnodes $BOOT_NODES"
     [ "$TESTNET" = "1" ] && TESTNET=--wemix-testnet
@@ -285,7 +287,7 @@ if (admin.wemixInfo != null && admin.wemixInfo.self != null) {
   }
   check_if_mining()
 }'
-	${dir}/bin/gwemix attach ipc:${dir}/gwemix.ipc --exec "$CMD" | grep -v "undefined"
+	${dir}/bin/gwemix --exec "$CMD" attach ipc:${dir}/gwemix.ipc | grep -v "undefined"
 	echo $PIDS | xargs -L1 kill
     fi
     for i in {1..200}; do

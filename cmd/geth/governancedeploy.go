@@ -17,7 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
-	"gopkg.in/urfave/cli.v1"
+	cli "github.com/urfave/cli/v2"
 )
 
 func getInitialGovernanceMembersAndNodes(configJsFile string) (nodes []byte, stakes []byte, rewardPoolAccount, maintenanceAccount *common.Address, err error) {
@@ -97,7 +97,7 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 		gasPrice = 80000000000
 	}
 
-	if len(url) == 0 || len(cliCtx.Args()) != 3 {
+	if len(url) == 0 || cliCtx.NArg() != 3 {
 		return fmt.Errorf("Invalid Arguments")
 	}
 
@@ -106,7 +106,8 @@ func deployGovernanceContracts(cliCtx *cli.Context) error {
 		return fmt.Errorf("Invalid Arguments")
 	}
 
-	contractsFile, configJsFile, accountFile := cliCtx.Args()[0], cliCtx.Args()[1], cliCtx.Args()[2]
+	args := cliCtx.Args().Slice()
+	contractsFile, configJsFile, accountFile := args[0], args[1], args[2]
 
 	// account
 	var from *keystore.Key
