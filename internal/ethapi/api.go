@@ -738,17 +738,24 @@ func (s *PublicBlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash c
 	apiRequestsEnter()
 	defer apiRequestsLeave()
 
+	select {
+	case <-ctx.Done():
+		return nil, io.EOF
+	default:
+	}
+
+	if apiRequestsCache != nil {
+		if fields, err := apiCacheGetReceipts(apiRequestsCache, blockHash.Bytes()); err == nil {
+			log.Debug("API Cache", "found receipts", blockHash)
+			return fields, nil
+		}
+	}
+
 	block, err1 := s.b.BlockByHash(ctx, blockHash)
 	if block == nil && err1 == nil {
 		return nil, nil
 	} else if err1 != nil {
 		return nil, err1
-	}
-
-	select {
-	case <-ctx.Done():
-		return nil, io.EOF
-	default:
 	}
 
 	receipts, err2 := s.b.GetReceipts(ctx, blockHash)
@@ -816,6 +823,9 @@ func (s *PublicBlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash c
 		}
 
 		fieldsList = append(fieldsList, fields)
+	}
+	if apiRequestsCache != nil {
+		apiCachePutReceipts(apiRequestsCache, blockHash.Bytes(), fieldsList)
 	}
 	return fieldsList, nil
 }
@@ -1372,8 +1382,8 @@ func RPCMarshalBlock(ctx context.Context, block *types.Block, inclTx bool, fullT
 	}
 
 	if fullTx && apiRequestsCache != nil {
-		if fields, err := apiCacheGetMarshaledBlock(apiRequestsCache, block.Hash().Bytes()); err == nil {
-			log.Debug("API Cache", "found", block.Number())
+		if fields, err := apiCacheGetBlock(apiRequestsCache, block.Hash().Bytes()); err == nil {
+			log.Debug("API Cache", "found block", block.Number())
 			return fields, nil
 		}
 	}
@@ -1413,7 +1423,7 @@ func RPCMarshalBlock(ctx context.Context, block *types.Block, inclTx bool, fullT
 	fields["uncles"] = uncleHashes
 
 	if fullTx && apiRequestsCache != nil {
-		apiCachePutMarshaledBlock(apiRequestsCache, block.Hash().Bytes(), fields)
+		apiCachePutBlock(apiRequestsCache, block.Hash().Bytes(), fields)
 	}
 
 	return fields, nil

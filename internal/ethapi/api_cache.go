@@ -26,8 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
-var marshaledBlockPrefix = []byte(".block.")
-var marshaledReceiptsPrefix = []byte(".receipts.")
+var marshaledBlockPrefix = []byte(".blck.")
+var marshaledReceiptsPrefix = []byte(".rcpt.")
 
 func apiCacheOpen(fn string) (ethdb.Database, error) {
 	return rawdb.NewDB(fn, 0, 0, "", false)
@@ -37,8 +37,8 @@ func apiCacheClose(db ethdb.Database) {
 	db.Close()
 }
 
-func apiCacheGetMarshaledBlock(db ethdb.Database, hash []byte) (map[string]interface{}, error) {
-	key := append(marshaledBlockPrefix, hash...)
+func apiCacheGet(db ethdb.Database, prefix, hash []byte) ([]byte, error) {
+	key := append(prefix, hash...)
 	data, err := db.Get(key)
 	if err != nil {
 		return nil, err
@@ -54,41 +54,73 @@ func apiCacheGetMarshaledBlock(db ethdb.Database, hash []byte) (map[string]inter
 	if err != nil {
 		return nil, err
 	}
+	return decompressedData, nil
+}
+
+func apiCacheHas(db ethdb.Database, prefix, hash []byte) (bool, error) {
+	key := append(prefix, hash...)
+	return db.Has(key)
+}
+
+func apiCachePut(db ethdb.Database, prefix, hash, data []byte) error {
+	var buf bytes.Buffer
+	gzWriter := gzip.NewWriter(&buf)
+	if _, err := gzWriter.Write(data); err != nil {
+		return err
+	}
+	if err := gzWriter.Close(); err != nil {
+		return err
+	}
+
+	key := append(prefix, hash...)
+	return db.Put(key, buf.Bytes())
+}
+
+func apiCacheDelete(db ethdb.Database, prefix, hash []byte) error {
+	key := append(prefix, hash...)
+	return db.Delete(key)
+}
+
+func apiCacheGetBlock(db ethdb.Database, hash []byte) (map[string]interface{}, error) {
+	data, err := apiCacheGet(db, marshaledBlockPrefix, hash)
+	if err != nil {
+		return nil, err
+	}
 
 	var fields map[string]interface{}
-	if err = json.Unmarshal(decompressedData, &fields); err != nil {
+	if err = json.Unmarshal(data, &fields); err != nil {
 		return nil, err
 	}
 	return fields, nil
 }
 
-func apiCacheHasMarshaledBlock(db ethdb.Database, hash []byte) (bool, error) {
-	key := append(marshaledBlockPrefix, hash...)
-	return db.Has(key)
-}
-
-func apiCachePutMarshaledBlock(db ethdb.Database, hash []byte, fields map[string]interface{}) error {
+func apiCachePutBlock(db ethdb.Database, hash []byte, fields map[string]interface{}) error {
 	data, err := json.Marshal(fields)
 	if err != nil {
 		return err
 	}
-
-	var buf bytes.Buffer
-	gzWriter := gzip.NewWriter(&buf)
-	if _, err = gzWriter.Write(data); err != nil {
-		return err
-	}
-	if err = gzWriter.Close(); err != nil {
-		return err
-	}
-
-	key := append(marshaledBlockPrefix, hash...)
-	return db.Put(key, buf.Bytes())
+	return apiCachePut(db, marshaledBlockPrefix, hash, data)
 }
 
-func apiCacheDeleteMarshaledBlock(db ethdb.Database, hash []byte) error {
-	key := append(marshaledBlockPrefix, hash...)
-	return db.Delete(key)
+func apiCacheGetReceipts(db ethdb.Database, hash []byte) ([]map[string]interface{}, error) {
+	data, err := apiCacheGet(db, marshaledReceiptsPrefix, hash)
+	if err != nil {
+		return nil, err
+	}
+
+	var fields []map[string]interface{}
+	if err = json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	return fields, nil
+}
+
+func apiCachePutReceipts(db ethdb.Database, hash []byte, fields []map[string]interface{}) error {
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	return apiCachePut(db, marshaledReceiptsPrefix, hash, data)
 }
 
 // EoF
