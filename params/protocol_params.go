@@ -204,5 +204,5 @@ var (
 	BlockTrailTime       int64 = 300  // Time to leave for block data transfer transfer in ms
 
 	PublicRequestsCacheLocation string = ""  // Cache DB location
-	MaxPublicRequests           int64  = 100 // Max # of public requests per second
+	MaxPublicRequests           int64  = 100 // Max # of concurrent public requests
 )
