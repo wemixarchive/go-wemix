@@ -916,6 +916,16 @@ var (
 		Usage: "Time to leave for block data transfer in ms",
 		Value: params.BlockTrailTime,
 	}
+	PublicRequestsCacheLocation = cli.StringFlag{
+		Name:  "wemix.publicrequests.cache",
+		Usage: "Public requests cache location",
+		Value: params.PublicRequestsCacheLocation,
+	}
+	MaxPublicRequests = cli.Int64Flag{
+		Name:  "wemix.publicrequests.max",
+		Usage: "Max # of concurrent public requests",
+		Value: params.MaxPublicRequests,
+	}
 )
 
 var (
@@ -1981,6 +1991,12 @@ func SetWemixConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 	if ctx.GlobalIsSet(BlockTrailTime.Name) {
 		params.BlockTrailTime = ctx.GlobalInt64(BlockTrailTime.Name)
+	}
+	if ctx.GlobalIsSet(PublicRequestsCacheLocation.Name) {
+		params.PublicRequestsCacheLocation = ctx.GlobalString(PublicRequestsCacheLocation.Name)
+	}
+	if ctx.GlobalIsSet(MaxPublicRequests.Name) {
+		params.MaxPublicRequests = ctx.GlobalInt64(MaxPublicRequests.Name)
 	}
 
 	if params.ConsensusMethod == params.ConsensusInvalid {
