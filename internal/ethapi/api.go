@@ -25,6 +25,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -53,8 +54,9 @@ import (
 	"github.com/tyler-smith/go-bip39"
 )
 
-var apiRequestsThrottle chan struct{}
 var apiRequestsCache ethdb.Database
+var apiRequestsThrottle chan struct{}
+var apiRequestsTokens chan struct{}
 
 func apiRequestsEnter() {
 	if len(apiRequestsThrottle) >= int(params.MaxPublicRequests) {
@@ -714,6 +716,11 @@ func NewPublicBlockChainAPI(b Backend) *PublicBlockChainAPI {
 		}
 	}
 	apiRequestsThrottle = make(chan struct{}, params.MaxPublicRequests)
+	tokens := runtime.NumCPU() * 8 / 10
+	if tokens < 4 {
+		tokens = 4
+	}
+	apiRequestsTokens = make(chan struct{}, tokens)
 
 	return &PublicBlockChainAPI{b}
 }
@@ -1402,16 +1409,33 @@ func RPCMarshalBlock(ctx context.Context, block *types.Block, inclTx bool, fullT
 		}
 		txs := block.Transactions()
 		transactions := make([]interface{}, len(txs))
+		var wg sync.WaitGroup
 		var err error
 		for i, tx := range txs {
-			if transactions[i], err = formatTx(tx); err != nil {
+			wg.Add(1)
+			go func(ii int, itx *types.Transaction) {
+				apiRequestsTokens <- struct{}{}
+				defer func() {
+					wg.Done()
+					<-apiRequestsTokens
+				}()
+
 				select {
 				case <-ctx.Done():
-					return nil, io.EOF
+					err = io.EOF
+					return
 				default:
 				}
-				return nil, err
-			}
+				var err2 error
+				transactions[ii], err2 = formatTx(itx)
+				if err2 != nil {
+					err = err2
+				}
+			}(i, tx)
+		}
+		wg.Wait()
+		if err != nil {
+			return nil, err
 		}
 		fields["transactions"] = transactions
 	}
