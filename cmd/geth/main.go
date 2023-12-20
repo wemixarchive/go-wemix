@@ -225,6 +225,7 @@ var (
 		utils.BlockMinBuildTime,
 		utils.BlockMinBuildTxs,
 		utils.BlockTrailTime,
+		utils.BootnodeCount,
 	}
 )
 

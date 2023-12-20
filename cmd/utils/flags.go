@@ -23,6 +23,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"math/rand"
 	"os"
 	"path/filepath"
 	godebug "runtime/debug"
@@ -916,6 +917,11 @@ var (
 		Usage: "Time to leave for block data transfer in ms",
 		Value: params.BlockTrailTime,
 	}
+	BootnodeCount = cli.IntFlag{
+		Name:  "wemix.bootnodecount",
+		Usage: "Default bootnode peer count",
+		Value: params.BootnodeCount,
+	}
 )
 
 var (
@@ -1011,15 +1017,40 @@ func setNodeUserIdent(ctx *cli.Context, cfg *node.Config) {
 	}
 }
 
+// setRandomBootstrapNodes setting a random list of bootstrap nodes using the command line
+func setRandomBootstrapNodes(ctx *cli.Context, bootnodes []string) []string {
+	rand.Seed(time.Now().UnixNano())
+	bootnodeslen := len(bootnodes)
+
+	// check command line
+	if ctx.GlobalIsSet(BootnodeCount.Name) {
+		setcount := ctx.GlobalInt(BootnodeCount.Name)
+		if setcount > 0 && setcount <= bootnodeslen {
+			params.BootnodeCount = setcount
+		}
+	}
+	// select random bootnodes
+	selectcount := params.BootnodeCount
+	urls := make([]string, selectcount)
+	tempnode := make([]string, bootnodeslen)
+	copy(tempnode, bootnodes)
+	for i := 0; i < selectcount; i++ {
+		index := rand.Intn(len(tempnode))
+		urls = append(urls, tempnode[index])
+		tempnode = append(tempnode[:index], tempnode[index+1:]...)
+	}
+	return urls
+}
+
 // setBootstrapNodes creates a list of bootstrap nodes from the command line
 // flags, reverting to pre-configured ones if none have been specified.
 func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
-	urls := params.WemixMainnetBootnodes
+	urls := setRandomBootstrapNodes(ctx, params.WemixMainnetBootnodes)
 	switch {
 	case ctx.GlobalIsSet(BootnodesFlag.Name):
 		urls = SplitAndTrim(ctx.GlobalString(BootnodesFlag.Name))
 	case ctx.GlobalBool(WemixTestnetFlag.Name):
-		urls = params.WemixTestnetBootnodes
+		urls = setRandomBootstrapNodes(ctx, params.WemixTestnetBootnodes)
 	case ctx.GlobalBool(RopstenFlag.Name):
 		urls = params.RopstenBootnodes
 	case ctx.GlobalBool(SepoliaFlag.Name):
