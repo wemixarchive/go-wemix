@@ -237,6 +237,7 @@ var AppHelpFlagGroups = []flags.FlagGroup{
 			utils.BlockTrailTime,
 			utils.PublicRequestsCacheLocation,
 			utils.MaxPublicRequests,
+			utils.BootnodeCount,
 		},
 	},
 	{

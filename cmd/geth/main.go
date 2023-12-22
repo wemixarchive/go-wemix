@@ -227,6 +227,7 @@ var (
 		utils.BlockTrailTime,
 		utils.PublicRequestsCacheLocation,
 		utils.MaxPublicRequests,
+		utils.BootnodeCount,
 	}
 )
 
