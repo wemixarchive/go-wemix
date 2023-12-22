@@ -75,11 +75,7 @@ func (b *EthAPIBackend) HeaderByNumber(ctx context.Context, number rpc.BlockNumb
 		return b.eth.blockchain.CurrentBlock().Header(), nil
 	}
 	if number == rpc.FinalizedBlockNumber {
-		block := b.eth.blockchain.CurrentFinalizedBlock()
-		if block != nil {
-			return block.Header(), nil
-		}
-		return nil, errors.New("finalized block not found")
+		return b.eth.blockchain.CurrentBlock().Header(), nil
 	}
 	if number == rpc.SafeBlockNumber {
 		block := b.eth.blockchain.CurrentSafeBlock()
@@ -123,7 +119,7 @@ func (b *EthAPIBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumbe
 		return b.eth.blockchain.CurrentBlock(), nil
 	}
 	if number == rpc.FinalizedBlockNumber {
-		return b.eth.blockchain.CurrentFinalizedBlock(), nil
+		return b.eth.blockchain.CurrentBlock(), nil
 	}
 	if number == rpc.SafeBlockNumber {
 		return b.eth.blockchain.CurrentSafeBlock(), nil

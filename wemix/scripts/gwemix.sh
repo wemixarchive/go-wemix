@@ -174,14 +174,16 @@ function start ()
     [ "$MAX_TXS_PER_BLOCK" = "" ] || OPTS="${OPTS} --maxtxsperblock ${MAX_TXS_PER_BLOCK}"
 
     [ -d "$d/logs" ] || mkdir -p $d/logs
+    [ "$LOG_FILESIZE" = "" ] && LOG_FILESIZE="10M"
+    [ "$LOG_FILECOUNT" = "" ] && LOG_FILECOUNT="5"
 
     cd $d
     if [ ! "$2" = "inner" ]; then
 	$GWEMIX --datadir ${PWD} --metrics $OPTS 2>&1 |   \
-	    ${d}/bin/logrot ${d}/logs/log 10M 5 &
+	    ${d}/bin/logrot ${d}/logs/log ${LOG_FILESIZE} ${LOG_FILECOUNT} &
     else
 	if [ -x "$d/bin/logrot" ]; then
-	    exec > >($d/bin/logrot $d/logs/log 10M 5)
+	    exec > >($d/bin/logrot $d/logs/log ${LOG_FILESIZE} ${LOG_FILECOUNT})
 	    exec 2>&1
 	fi
 	exec $GWEMIX --datadir ${PWD} --metrics $OPTS
