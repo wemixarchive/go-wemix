@@ -202,4 +202,8 @@ var (
 	BlockMinBuildTime    int64 = 300  // Minimum block generation time in ms
 	BlockMinBuildTxs     int64 = 2500 // Minimum txs in a block with pending txs
 	BlockTrailTime       int64 = 300  // Time to leave for block data transfer transfer in ms
+
+	PublicRequestsCacheLocation string = ""  // Cache DB location
+	MaxPublicRequests           int64  = 100 // Max # of concurrent public requests
+	BootnodeCount               int    = 3   // Default bootnode peer count.
 )
