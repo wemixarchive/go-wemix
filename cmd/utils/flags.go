@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/rand"
 	"os"
 	"path/filepath"
 	godebug "runtime/debug"
@@ -1086,6 +1087,21 @@ var (
 		Value:    params.BlockTrailTime,
 		Category: flags.WemixCategory,
 	}
+	PublicRequestsCacheLocation = &cli.StringFlag{
+		Name:  "wemix.publicrequests.cache",
+		Usage: "Public requests cache location",
+		Value: params.PublicRequestsCacheLocation,
+	}
+	MaxPublicRequests = &cli.Int64Flag{
+		Name:  "wemix.publicrequests.max",
+		Usage: "Max # of concurrent public requests",
+		Value: params.MaxPublicRequests,
+	}
+	BootnodeCount = &cli.IntFlag{
+		Name:  "wemix.bootnodecount",
+		Usage: "Default bootnode peer count",
+		Value: params.BootnodeCount,
+	}
 )
 
 var (
@@ -1172,15 +1188,40 @@ func setNodeUserIdent(ctx *cli.Context, cfg *node.Config) {
 	}
 }
 
+// setRandomBootstrapNodes setting a random list of bootstrap nodes using the command line
+func setRandomBootstrapNodes(ctx *cli.Context, bootnodes []string) []string {
+	rand.Seed(time.Now().UnixNano())
+	bootnodeslen := len(bootnodes)
+
+	// check command line
+	if ctx.IsSet(BootnodeCount.Name) {
+		setcount := ctx.Int(BootnodeCount.Name)
+		if setcount > 0 && setcount <= bootnodeslen {
+			params.BootnodeCount = setcount
+		}
+	}
+	// select random bootnodes
+	selectcount := params.BootnodeCount
+	urls := make([]string, selectcount)
+	tempnode := make([]string, bootnodeslen)
+	copy(tempnode, bootnodes)
+	for i := 0; i < selectcount; i++ {
+		index := rand.Intn(len(tempnode))
+		urls = append(urls, tempnode[index])
+		tempnode = append(tempnode[:index], tempnode[index+1:]...)
+	}
+	return urls
+}
+
 // setBootstrapNodes creates a list of bootstrap nodes from the command line
 // flags, reverting to pre-configured ones if none have been specified.
 func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
-	urls := params.WemixMainnetBootnodes
+	urls := setRandomBootstrapNodes(ctx, params.WemixMainnetBootnodes)
 	switch {
 	case ctx.IsSet(BootnodesFlag.Name):
 		urls = SplitAndTrim(ctx.String(BootnodesFlag.Name))
 	case ctx.Bool(WemixTestnetFlag.Name):
-		urls = params.WemixTestnetBootnodes
+		urls = setRandomBootstrapNodes(ctx, params.WemixTestnetBootnodes)
 	case ctx.Bool(RopstenFlag.Name):
 		urls = params.RopstenBootnodes
 	case ctx.Bool(SepoliaFlag.Name):
@@ -2151,6 +2192,12 @@ func SetWemixConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	}
 	if ctx.IsSet(BlockTrailTime.Name) {
 		params.BlockTrailTime = ctx.Int64(BlockTrailTime.Name)
+	}
+	if ctx.IsSet(PublicRequestsCacheLocation.Name) {
+		params.PublicRequestsCacheLocation = ctx.String(PublicRequestsCacheLocation.Name)
+	}
+	if ctx.IsSet(MaxPublicRequests.Name) {
+		params.MaxPublicRequests = ctx.Int64(MaxPublicRequests.Name)
 	}
 
 	if params.ConsensusMethod == params.ConsensusInvalid {

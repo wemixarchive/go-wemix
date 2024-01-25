@@ -32,7 +32,7 @@ import (
 const (
 	// maxKnownTxs is the maximum transactions hashes to keep in the known list
 	// before starting to randomly evict them.
-	maxKnownTxs = 2000000
+	maxKnownTxs = 100000
 
 	// maxKnownBlocks is the maximum block hashes to keep in the known list
 	// before starting to randomly evict them.

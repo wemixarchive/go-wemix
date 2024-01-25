@@ -20,9 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -42,6 +45,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/vrf"
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
@@ -49,6 +53,29 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/tyler-smith/go-bip39"
 )
+
+var apiRequestsCache ethdb.Database
+var apiRequestsThrottle chan struct{}
+var apiRequestsTokens chan struct{}
+
+func apiRequestsEnter() {
+	if len(apiRequestsThrottle) >= int(params.MaxPublicRequests) {
+		pc, _, _, _ := runtime.Caller(1)
+		var name string
+		parts := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+		if len(parts) > 0 {
+			name = parts[len(parts)-1]
+		} else {
+			name = runtime.FuncForPC(pc).Name()
+		}
+		log.Warn("Too many API requests", "func", name, "count", len(apiRequestsThrottle))
+	}
+	apiRequestsThrottle <- struct{}{}
+}
+
+func apiRequestsLeave() {
+	<-apiRequestsThrottle
+}
 
 // EthereumAPI provides an API to access Ethereum related information.
 type EthereumAPI struct {
@@ -674,6 +701,20 @@ type BlockChainAPI struct {
 
 // NewBlockChainAPI creates a new Ethereum blockchain API.
 func NewBlockChainAPI(b Backend) *BlockChainAPI {
+	if len(params.PublicRequestsCacheLocation) > 0 {
+		var err error
+		apiRequestsCache, err = apiCacheOpen(params.PublicRequestsCacheLocation)
+		if err != nil {
+			panic(err)
+		}
+	}
+	apiRequestsThrottle = make(chan struct{}, params.MaxPublicRequests)
+	tokens := runtime.NumCPU() * 8 / 10
+	if tokens < 4 {
+		tokens = 4
+	}
+	apiRequestsTokens = make(chan struct{}, tokens)
+
 	return &BlockChainAPI{b}
 }
 
@@ -695,6 +736,22 @@ func (s *BlockChainAPI) BlockNumber() hexutil.Uint64 {
 
 // GetBlockReceipts returns all the transaction receipts for the given block hash.
 func (s *BlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash common.Hash) ([]map[string]interface{}, error) {
+	apiRequestsEnter()
+	defer apiRequestsLeave()
+
+	select {
+	case <-ctx.Done():
+		return nil, io.EOF
+	default:
+	}
+
+	if apiRequestsCache != nil {
+		if fields, err := apiCacheGetReceipts(apiRequestsCache, blockHash.Bytes()); err == nil {
+			log.Debug("API Cache", "found receipts", blockHash)
+			return fields, nil
+		}
+	}
+
 	block, err1 := s.b.BlockByHash(ctx, blockHash)
 	if block == nil && err1 == nil {
 		return nil, nil
@@ -716,6 +773,12 @@ func (s *BlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash common.
 	fieldsList := make([]map[string]interface{}, 0, len(receipts))
 
 	for index, receipt := range receipts {
+		select {
+		case <-ctx.Done():
+			return nil, io.EOF
+		default:
+		}
+
 		bigblock := new(big.Int).SetUint64(block.NumberU64())
 		signer := types.MakeSigner(s.b.ChainConfig(), bigblock)
 		from, _ := types.Sender(signer, txs[index])
@@ -761,6 +824,9 @@ func (s *BlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash common.
 		}
 
 		fieldsList = append(fieldsList, fields)
+	}
+	if apiRequestsCache != nil {
+		apiCachePutReceipts(apiRequestsCache, blockHash.Bytes(), fieldsList)
 	}
 	return fieldsList, nil
 }
@@ -876,6 +942,9 @@ func (s *BlockChainAPI) GetHeaderByHash(ctx context.Context, hash common.Hash) m
 //   - When fullTx is true all transactions in the block are returned, otherwise
 //     only the transaction hash is returned.
 func (s *BlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber, fullTx bool) (map[string]interface{}, error) {
+	apiRequestsEnter()
+	defer apiRequestsLeave()
+
 	block, err := s.b.BlockByNumber(ctx, number)
 	if block != nil && err == nil {
 		response, err := s.rpcMarshalBlock(ctx, block, true, fullTx)
@@ -893,6 +962,9 @@ func (s *BlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.BlockNu
 // GetBlockByHash returns the requested block. When fullTx is true all transactions in the block are returned in full
 // detail, otherwise only the transaction hash is returned.
 func (s *BlockChainAPI) GetBlockByHash(ctx context.Context, hash common.Hash, fullTx bool) (map[string]interface{}, error) {
+	apiRequestsEnter()
+	defer apiRequestsLeave()
+
 	block, err := s.b.BlockByHash(ctx, hash)
 	if block != nil {
 		return s.rpcMarshalBlock(ctx, block, true, fullTx)
@@ -902,6 +974,9 @@ func (s *BlockChainAPI) GetBlockByHash(ctx context.Context, hash common.Hash, fu
 
 // GetUncleByBlockNumberAndIndex returns the uncle block for the given block hash and index.
 func (s *BlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (map[string]interface{}, error) {
+	apiRequestsEnter()
+	defer apiRequestsLeave()
+
 	block, err := s.b.BlockByNumber(ctx, blockNr)
 	if block != nil {
 		uncles := block.Uncles()
@@ -917,6 +992,9 @@ func (s *BlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context, block
 
 // GetUncleByBlockHashAndIndex returns the uncle block for the given block hash and index.
 func (s *BlockChainAPI) GetUncleByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) (map[string]interface{}, error) {
+	apiRequestsEnter()
+	defer apiRequestsLeave()
+
 	block, err := s.b.BlockByHash(ctx, blockHash)
 	if block != nil {
 		uncles := block.Uncles()
@@ -932,6 +1010,9 @@ func (s *BlockChainAPI) GetUncleByBlockHashAndIndex(ctx context.Context, blockHa
 
 // GetUncleCountByBlockNumber returns number of uncles in the block for the given block number
 func (s *BlockChainAPI) GetUncleCountByBlockNumber(ctx context.Context, blockNr rpc.BlockNumber) *hexutil.Uint {
+	apiRequestsEnter()
+	defer apiRequestsLeave()
+
 	if block, _ := s.b.BlockByNumber(ctx, blockNr); block != nil {
 		n := hexutil.Uint(len(block.Uncles()))
 		return &n
@@ -941,6 +1022,9 @@ func (s *BlockChainAPI) GetUncleCountByBlockNumber(ctx context.Context, blockNr 
 
 // GetUncleCountByBlockHash returns number of uncles in the block for the given block hash
 func (s *BlockChainAPI) GetUncleCountByBlockHash(ctx context.Context, blockHash common.Hash) *hexutil.Uint {
+	apiRequestsEnter()
+	defer apiRequestsLeave()
+
 	if block, _ := s.b.BlockByHash(ctx, blockHash); block != nil {
 		n := hexutil.Uint(len(block.Uncles()))
 		return &n
@@ -1330,7 +1414,20 @@ func RPCMarshalHeader(head *types.Header) map[string]interface{} {
 // RPCMarshalBlock converts the given block to the RPC output which depends on fullTx. If inclTx is true transactions are
 // returned. When fullTx is true the returned block contains full transaction details, otherwise it will only contain
 // transaction hashes.
-func RPCMarshalBlock(block *types.Block, inclTx bool, fullTx bool, config *params.ChainConfig) (map[string]interface{}, error) {
+func RPCMarshalBlock(ctx context.Context, block *types.Block, inclTx bool, fullTx bool, config *params.ChainConfig) (map[string]interface{}, error) {
+	select {
+	case <-ctx.Done():
+		return nil, io.EOF
+	default:
+	}
+
+	if fullTx && apiRequestsCache != nil {
+		if fields, err := apiCacheGetBlock(apiRequestsCache, block.Hash().Bytes()); err == nil {
+			log.Debug("API Cache", "found block", block.Number())
+			return fields, nil
+		}
+	}
+
 	fields := RPCMarshalHeader(block.Header())
 	fields["size"] = hexutil.Uint64(block.Size())
 
@@ -1345,11 +1442,33 @@ func RPCMarshalBlock(block *types.Block, inclTx bool, fullTx bool, config *param
 		}
 		txs := block.Transactions()
 		transactions := make([]interface{}, len(txs))
+		var wg sync.WaitGroup
 		var err error
 		for i, tx := range txs {
-			if transactions[i], err = formatTx(tx); err != nil {
-				return nil, err
-			}
+			wg.Add(1)
+			go func(ii int, itx *types.Transaction) {
+				apiRequestsTokens <- struct{}{}
+				defer func() {
+					wg.Done()
+					<-apiRequestsTokens
+				}()
+
+				select {
+				case <-ctx.Done():
+					err = io.EOF
+					return
+				default:
+				}
+				var err2 error
+				transactions[ii], err2 = formatTx(itx)
+				if err2 != nil {
+					err = err2
+				}
+			}(i, tx)
+		}
+		wg.Wait()
+		if err != nil {
+			return nil, err
 		}
 		fields["transactions"] = transactions
 	}
@@ -1359,6 +1478,10 @@ func RPCMarshalBlock(block *types.Block, inclTx bool, fullTx bool, config *param
 		uncleHashes[i] = uncle.Hash()
 	}
 	fields["uncles"] = uncleHashes
+
+	if fullTx && apiRequestsCache != nil {
+		apiCachePutBlock(apiRequestsCache, block.Hash().Bytes(), fields)
+	}
 
 	return fields, nil
 }
@@ -1374,7 +1497,7 @@ func (s *BlockChainAPI) rpcMarshalHeader(ctx context.Context, header *types.Head
 // rpcMarshalBlock uses the generalized output filler, then adds the total difficulty field, which requires
 // a `BlockchainAPI`.
 func (s *BlockChainAPI) rpcMarshalBlock(ctx context.Context, b *types.Block, inclTx bool, fullTx bool) (map[string]interface{}, error) {
-	fields, err := RPCMarshalBlock(b, inclTx, fullTx, s.b.ChainConfig())
+	fields, err := RPCMarshalBlock(ctx, b, inclTx, fullTx, s.b.ChainConfig())
 	if err != nil {
 		return nil, err
 	}
