@@ -770,61 +770,73 @@ func (s *BlockChainAPI) GetReceiptsByHash(ctx context.Context, blockHash common.
 	if receipts.Len() != txs.Len() {
 		return nil, fmt.Errorf("the size of transactions and receipts is different in the block (%s)", blockHash.String())
 	}
-	fieldsList := make([]map[string]interface{}, 0, len(receipts))
+
+	isLondon := s.b.ChainConfig().IsLondon(new(big.Int).SetUint64(block.NumberU64()))
+	baseFee := new(big.Int).Set(common.Big0)
+	if isLondon {
+		baseFee = block.BaseFee()
+	}
+
+	fieldsList := make([]map[string]interface{}, len(receipts))
+
+	var wg sync.WaitGroup
 
 	for index, receipt := range receipts {
-		select {
-		case <-ctx.Done():
-			return nil, io.EOF
-		default:
-		}
-
-		bigblock := new(big.Int).SetUint64(block.NumberU64())
-		signer := types.MakeSigner(s.b.ChainConfig(), bigblock)
-		from, _ := types.Sender(signer, txs[index])
-
-		fields := map[string]interface{}{
-			"blockHash":         blockHash,
-			"blockNumber":       hexutil.Uint64(block.NumberU64()),
-			"transactionHash":   receipt.TxHash,
-			"transactionIndex":  hexutil.Uint64(index),
-			"from":              from,
-			"to":                txs[index].To(),
-			"gasUsed":           hexutil.Uint64(receipt.GasUsed),
-			"cumulativeGasUsed": hexutil.Uint64(receipt.CumulativeGasUsed),
-			"contractAddress":   nil,
-			"logs":              receipt.Logs,
-			"logsBloom":         receipt.Bloom,
-			"type":              hexutil.Uint(txs[index].Type()),
-		}
-
-		// Assign the effective gas price paid
-		if !s.b.ChainConfig().IsLondon(bigblock) {
-			fields["effectiveGasPrice"] = (*hexutil.Big)(txs[index].GasPrice())
-		} else {
-			header, err := s.b.HeaderByHash(ctx, blockHash)
-			if err != nil {
-				return nil, err
+		wg.Add(1)
+		go func(i int, txReceipt *types.Receipt, isLondon bool, baseFee *big.Int) {
+			apiRequestsTokens <- struct{}{}
+			defer func() {
+				wg.Done()
+				<-apiRequestsTokens
+			}()
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
-			gasPrice := new(big.Int).Add(header.BaseFee, txs[index].EffectiveGasTipValue(header.BaseFee))
-			fields["effectiveGasPrice"] = (*hexutil.Big)(gasPrice)
-		}
-		// Assign receipt status or post state.
-		if len(receipt.PostState) > 0 {
-			fields["root"] = hexutil.Bytes(receipt.PostState)
-		} else {
-			fields["status"] = hexutil.Uint(receipt.Status)
-		}
-		if receipt.Logs == nil {
-			fields["logs"] = []*types.Log{}
-		}
-		// If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
-		if receipt.ContractAddress != (common.Address{}) {
-			fields["contractAddress"] = receipt.ContractAddress
-		}
 
-		fieldsList = append(fieldsList, fields)
+			bigblock := new(big.Int).SetUint64(block.NumberU64())
+			signer := types.MakeSigner(s.b.ChainConfig(), bigblock)
+			from, _ := types.Sender(signer, txs[i])
+			fields := map[string]interface{}{
+				"blockHash":         blockHash,
+				"blockNumber":       hexutil.Uint64(block.NumberU64()),
+				"transactionHash":   txReceipt.TxHash,
+				"transactionIndex":  hexutil.Uint64(i),
+				"from":              from,
+				"to":                txs[i].To(),
+				"gasUsed":           hexutil.Uint64(txReceipt.GasUsed),
+				"cumulativeGasUsed": hexutil.Uint64(txReceipt.CumulativeGasUsed),
+				"contractAddress":   nil,
+				"logs":              txReceipt.Logs,
+				"logsBloom":         txReceipt.Bloom,
+				"type":              hexutil.Uint(txs[i].Type()),
+			}
+			// Assign the effective gas price paid
+			if !isLondon {
+				fields["effectiveGasPrice"] = (*hexutil.Big)(txs[i].GasPrice())
+			} else {
+				gasPrice := new(big.Int).Add(baseFee, txs[i].EffectiveGasTipValue(baseFee))
+				fields["effectiveGasPrice"] = (*hexutil.Big)(gasPrice)
+			}
+			// Assign receipt status or post state.
+			if len(txReceipt.PostState) > 0 {
+				fields["root"] = hexutil.Bytes(txReceipt.PostState)
+			} else {
+				fields["status"] = hexutil.Uint(txReceipt.Status)
+			}
+			if txReceipt.Logs == nil {
+				fields["logs"] = []*types.Log{}
+			}
+			// If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
+			if txReceipt.ContractAddress != (common.Address{}) {
+				fields["contractAddress"] = txReceipt.ContractAddress
+			}
+			fieldsList[i] = fields
+		}(index, receipt, isLondon, baseFee)
 	}
+	wg.Wait()
+
 	if apiRequestsCache != nil {
 		apiCachePutReceipts(apiRequestsCache, blockHash.Bytes(), fieldsList)
 	}
