@@ -42,7 +42,6 @@ import (
 var (
 	FrontierBlockReward           = big.NewInt(5e+18) // Block reward in wei for successfully mining a block
 	ByzantiumBlockReward          = big.NewInt(3e+18) // Block reward in wei for successfully mining a block upward from Byzantium
-	WemixBlockReward              = big.NewInt(0)     // Block reward in wei for Wemix
 	ConstantinopleBlockReward     = big.NewInt(2e+18) // Block reward in wei for successfully mining a block upward from Constantinople
 	maxUncles                     = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTimeSeconds = int64(15)         // Max seconds from current time allowed for blocks, before they're considered future blocks
@@ -698,9 +697,8 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		}
 		state.AddBalance(header.Coinbase, reward)
 	} else {
-		blockReward = WemixBlockReward
 		coinbase, rewards, err := wemixminer.CalculateRewards(
-			header.Number, blockReward, header.Fees,
+			config, header.Number, header.Fees,
 			func(addr common.Address, amt *big.Int) {
 				state.AddBalance(addr, amt)
 			})
@@ -713,7 +711,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 			if err == wemixminer.ErrNotInitialized {
 				reward := new(big.Int)
 				if header.Fees != nil {
-					reward.Add(blockReward, header.Fees)
+					reward.Add(reward, header.Fees)
 				}
 				state.AddBalance(header.Coinbase, reward)
 				return nil

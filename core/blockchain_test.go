@@ -159,12 +159,19 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 		if err != nil {
 			return err
 		}
-		receipts, _, usedGas, fees, err := blockchain.processor.Process(block, statedb, vm.Config{})
+		appliedHeader, receipts, _, usedGas, fees, err := blockchain.processor.Process(block, statedb, vm.Config{})
 		if err != nil {
 			blockchain.reportBlock(block, receipts, err)
 			return err
 		}
+
 		err = blockchain.validator.ValidateState(block, statedb, receipts, usedGas, fees)
+		if err != nil {
+			blockchain.reportBlock(block, receipts, err)
+			return err
+		}
+
+		err = blockchain.validator.ValidateReward(block.Header(), appliedHeader)
 		if err != nil {
 			blockchain.reportBlock(block, receipts, err)
 			return err
@@ -3769,4 +3776,29 @@ func TestSetCanonical(t *testing.T) {
 	// Reset the chain head to original chain
 	chain.SetCanonical(canon[DefaultCacheConfig.TriesInMemory-1])
 	verify(canon[DefaultCacheConfig.TriesInMemory-1])
+}
+
+func TestRewardValidation(t *testing.T) {
+	// Configure and generate a sample block chain
+	var (
+		db         = rawdb.NewMemoryDatabase()
+		key, _     = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		address    = crypto.PubkeyToAddress(key.PublicKey)
+		funds      = big.NewInt(1000000000)
+		deleteAddr = common.Address{1}
+		gspec      = &Genesis{
+			Config: &params.ChainConfig{ChainID: big.NewInt(1), EIP150Block: big.NewInt(0), EIP155Block: big.NewInt(2), HomesteadBlock: new(big.Int)},
+			Alloc:  GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: new(big.Int)}},
+		}
+		genesis = gspec.MustCommit(db)
+	)
+
+	blockchain, _ := NewBlockChain(db, nil, gspec.Config, ethash.NewFaker(), vm.Config{}, nil, nil)
+	defer blockchain.Stop()
+
+	blocks, _ := GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, 1, nil)
+
+	if _, err := blockchain.InsertChain(blocks); err != nil {
+		t.Fatal(err)
+	}
 }

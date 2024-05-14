@@ -4,11 +4,40 @@ package wemix
 
 import (
 	"encoding/json"
-	"math/big"
-	"testing"
-
 	"github.com/ethereum/go-ethereum/common"
+	"math/big"
+	"strconv"
+	"testing"
+	"time"
 )
+
+func TestBlockMintingQuantity(t *testing.T) {
+	minted, _ := big.NewInt(0).SetString("379886454000000000000000000", 0) // 379,886,454 wemix
+	annualReward, _ := big.NewInt(0).SetString("500000000000000000", 0)    // 0.5 wemix
+	t.Logf("initial minted = %d", minted)
+	t.Logf("reward = %d", annualReward)
+	for i := 2024; i < 2054; i += 2 {
+		minted = new(big.Int).Add(minted, new(big.Int).Mul(annualReward, big.NewInt(63115200)))
+		annualReward = new(big.Int).Div(annualReward, big.NewInt(2))
+		t.Logf("minted = %d", minted)
+		t.Logf("reward = %d", annualReward)
+	}
+	for i := 2054; i < 2100; i += 2 {
+		minted = new(big.Int).Add(minted, new(big.Int).Mul(annualReward, big.NewInt(63115200)))
+	}
+	t.Logf("total minted = %d", minted)
+}
+
+func TestHalvesPeriod(t *testing.T) {
+	halvesTime := big.NewInt(1719792000)  // 2024-07-01 00:00:00 (UTC)
+	blockPeriod := big.NewInt(63_115_200) // 86400 * 730.5
+	loc, _ := time.LoadLocation("UTC")
+	for i := 0; i < 17; i++ {
+		tm, _ := strconv.ParseInt(halvesTime.String(), 10, 64)
+		t.Logf("~ %v(%d)", time.Unix(tm, 0).In(loc), halvesTime)
+		halvesTime.Add(halvesTime, blockPeriod)
+	}
+}
 
 // TestDistributeRewards tests the DistributeRewards function
 func TestDistributeRewards(t *testing.T) {
@@ -135,10 +164,34 @@ func TestDistributeRewards(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call the distributeRewards function
-			rewards, err := distributeRewards(tt.height, tt.rp, tt.fees)
+			rewards, err := distributeRewards(tt.height, tt.rp, big.NewInt(defaultBriocheBlockReward), tt.fees)
 			rewardsString, _ := json.Marshal(rewards)
 			if string(rewardsString) != tt.want {
 				t.Errorf("distributeRewards() failed: %v, %v <-> %v", err, tt.want, string(rewardsString))
+			}
+
+			distTotal := big.NewInt(0)
+			for _, dist := range tt.rp.distributionMethod {
+				distTotal.Add(distTotal, dist)
+			}
+			totalRewards := big.NewInt(0)
+			memberRewards := big.NewInt(0)
+			for i, reward := range rewards {
+				totalRewards.Add(totalRewards, reward.Reward)
+				if i < len(tt.rp.members) {
+					memberRewards.Add(memberRewards, reward.Reward)
+				}
+			}
+			totalAmount := big.NewInt(0).Set(tt.rp.rewardAmount)
+			totalAmount.Add(totalAmount, tt.fees)
+			memberAmount := big.NewInt(0).Set(tt.rp.rewardAmount)
+			memberAmount = memberAmount.Mul(memberAmount, tt.rp.distributionMethod[0])
+			memberAmount = memberAmount.Div(memberAmount, distTotal)
+			if memberRewards.Cmp(memberAmount) != 0 {
+				t.Errorf("members reward amount mismatched! sum=%d, rewards=%d", memberRewards, memberAmount)
+			}
+			if totalRewards.Cmp(totalAmount) != 0 {
+				t.Errorf("total reward amount mismatched! sum=%d, rewards=%d", totalRewards, totalAmount)
 			}
 		})
 	}
