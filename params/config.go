@@ -436,7 +436,7 @@ type BriocheConfig struct {
 	HalvingPeriod     *big.Int `json:"halvingPeriod,omitempty"`     // nil - halving is not work
 	NoRewardHereafter *big.Int `json:"noRewardHereafter,omitempty"` // nil - block reward goes on endlessly
 	HalvingTimes      uint64   `json:"halvingTimes,omitempty"`      // 0 - no halving
-	HalvingRate       uint32   `json:"halvingRate,omitempty"`       // 0<=HalvingRate<=100; 0 - no reward on halving; 100 - no halving
+	HalvingRate       uint32   `json:"halvingRate,omitempty"`       // 0 - no reward on halving; 100 - no halving; >100 - increasing reward
 }
 
 func (bc *BriocheConfig) GetBriocheBlockReward(defaultReward *big.Int, num *big.Int) *big.Int {
@@ -464,7 +464,7 @@ func (bc *BriocheConfig) halveRewards(baseReward *big.Int, num *big.Int) *big.In
 	past.Sub(past, bc.FirstHalvingBlock)
 	halvingTimes := bc.HalvingTimes
 	for ; halvingTimes > 0; halvingTimes-- {
-		result = result.Mul(result, big.NewInt(int64(bc.HalvingRate)))
+		result = result.Mul(result, big.NewInt(int64(bc.HalvingRate))) // `HalvingRate` may be greater than 100 theoretically
 		result = result.Div(result, big.NewInt(100))
 		if past.Cmp(bc.HalvingPeriod) < 0 {
 			break
@@ -807,7 +807,7 @@ type Rules struct {
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsLondon                                      bool
 	IsMerge                                                 bool
-	IsPangyo, IsApplepie                                    bool
+	IsPangyo, IsApplepie, IsBrioche                         bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -831,5 +831,6 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool) Rules {
 		IsMerge:          isMerge,
 		IsPangyo:         c.IsPangyo(num),
 		IsApplepie:       c.IsApplepie(num),
+		IsBrioche:        c.IsBrioche(num),
 	}
 }

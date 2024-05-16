@@ -125,6 +125,7 @@ func TestHalveRewards(t *testing.T) {
 		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 20, big.NewInt(4e16)},
 		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 30, big.NewInt(9e16)},
 		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 90, big.NewInt(81e16)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 200, big.NewInt(4e18)},
 
 		// brioche halving test
 		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(0), 16, 50, big.NewInt(5e17)},
@@ -156,7 +157,7 @@ func TestHalveRewards(t *testing.T) {
 			HalvingTimes:      tc.times,
 			HalvingRate:       tc.rate,
 		}
-		halved := brioche.halveRewards(tc.reward, tc.period)
+		halved := brioche.halveRewards(tc.reward, tc.past)
 		if tc.expected.Cmp(halved) != 0 {
 			t.Errorf("halveRewards mismatched (expected=%v, actual=%v)", tc.expected, halved)
 		}
