@@ -1216,8 +1216,8 @@ func getBriocheBlockReward(brioche *params.BriocheConfig, num *big.Int) *big.Int
 		if brioche.BlockReward != nil {
 			blockReward = big.NewInt(0).Set(brioche.BlockReward)
 		}
-		if brioche.NoRewardHereAfter != nil &&
-			brioche.NoRewardHereAfter.Cmp(num) <= 0 {
+		if brioche.NoRewardHereafter != nil &&
+			brioche.NoRewardHereafter.Cmp(num) <= 0 {
 			blockReward = big.NewInt(0)
 		} else if brioche.FirstHalvingBlock != nil &&
 			brioche.HalvingPeriod != nil &&
@@ -1225,7 +1225,7 @@ func getBriocheBlockReward(brioche *params.BriocheConfig, num *big.Int) *big.Int
 			num.Cmp(brioche.FirstHalvingBlock) >= 0 {
 			past := big.NewInt(0).Set(num)
 			past.Sub(past, brioche.FirstHalvingBlock)
-			blockReward = halveRewards(blockReward, brioche.HalvingPeriod, past, brioche.HalvingTimes)
+			blockReward = halveRewards(blockReward, brioche.HalvingPeriod, past, brioche.HalvingTimes, brioche.HalvingRate)
 		}
 	}
 	return blockReward
@@ -1235,11 +1235,12 @@ func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance
 	return admin.calculateRewards(config, num, fees, addBalance)
 }
 
-func halveRewards(baseReward *big.Int, halvePeriod *big.Int, pastBlocks *big.Int, halvingTimes uint64) *big.Int {
+func halveRewards(baseReward *big.Int, halvePeriod *big.Int, pastBlocks *big.Int, halvingTimes uint64, halvingRate uint32) *big.Int {
 	result := big.NewInt(0).Set(baseReward)
 	past := big.NewInt(0).Set(pastBlocks)
 	for ; halvingTimes > 0; halvingTimes-- {
-		result = result.Div(result, big.NewInt(2))
+		result = result.Mul(result, big.NewInt(int64(halvingRate)))
+		result = result.Div(result, big.NewInt(100))
 		if past.Cmp(halvePeriod) < 0 {
 			break
 		}

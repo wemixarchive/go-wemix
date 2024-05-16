@@ -617,7 +617,7 @@ func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.
 		return err
 	}
 
-	if proposedReward != nil {
+	if proposedReward != nil && chain.Config().IsBrioche(header.Number) {
 		// validate the rewards from the proposed block with calculated value locally
 		if !bytes.Equal(header.Rewards, proposedReward) {
 			return fmt.Errorf("invalid rewards (remote: %x local: %x)", proposedReward, header.Rewards)

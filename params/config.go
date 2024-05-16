@@ -424,12 +424,13 @@ type EthashConfig struct{}
 
 // Brioche halving configuration
 type BriocheConfig struct {
-	// if the chain is on brioche hard fork, `RewardAmount` of gov contract is not used rather this `BlockReward` is used
-	BlockReward       *big.Int `json:"blockReward,omitempty"`       // if nil, then default block reward is 1e18 (=1 wemix)
-	FirstHalvingBlock *big.Int `json:"firstHalvingBlock,omitempty"` // if nil, then halving is not work. including this block
-	HalvingPeriod     *big.Int `json:"halvingPeriod,omitempty"`     // if nil, then halving is not work
-	HalvingTimes      uint64   `json:"halvingTimes,omitempty"`      // if 0, then no halving
-	NoRewardHereAfter *big.Int `json:"noRewardHereAfter,omitempty"` // if nil, block reward goes on endlessly
+	// if the chain is on brioche hard fork, `RewardAmount` of gov contract is not used rather this BlockReward is used
+	BlockReward       *big.Int `json:"blockReward,omitempty"`       // nil - use default block reward(1e18)
+	FirstHalvingBlock *big.Int `json:"firstHalvingBlock,omitempty"` // nil - halving is not work. including this block
+	HalvingPeriod     *big.Int `json:"halvingPeriod,omitempty"`     // nil - halving is not work
+	NoRewardHereafter *big.Int `json:"noRewardHereafter,omitempty"` // nil - block reward goes on endlessly
+	HalvingTimes      uint64   `json:"halvingTimes,omitempty"`      // 0 - no halving
+	HalvingRate       uint32   `json:"halvingRate,omitempty"`       // 0<=HalvingRate<=100; 0 - no reward on halving; 100 - no halving
 }
 
 // String implements the stringer interface, returning the consensus engine details.
