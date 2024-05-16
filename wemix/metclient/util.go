@@ -204,20 +204,6 @@ func LoadContract(fn string, name string) (*ContractData, error) {
 	}
 }
 
-// packNum packs the given number (using the reflect value) and will cast it to appropriate number representation
-func PackNum(value reflect.Value) []byte {
-	switch kind := value.Kind(); kind {
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return math.U256Bytes(new(big.Int).SetUint64(value.Uint()))
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return math.U256Bytes(big.NewInt(value.Int()))
-	case reflect.Ptr:
-		return math.U256Bytes(new(big.Int).Set(value.Interface().(*big.Int)))
-	default:
-		panic("abi: fatal error")
-	}
-}
-
 func getReceipt(ctx context.Context, cli *ethclient.Client, hash common.Hash, isContract bool, msinterval, count int) (receipt *types.Receipt, err error) {
 	d := time.Millisecond * time.Duration(msinterval)
 	nilAddr := common.Address{}
@@ -434,6 +420,20 @@ func ToBytes32(b string) [32]byte {
 	//copy(b32[32-len(b):], []byte(b))
 	copy(b32[:], []byte(b))
 	return b32
+}
+
+// packNum packs the given number (using the reflect value) and will cast it to appropriate number representation
+func PackNum(value reflect.Value) []byte {
+	switch kind := value.Kind(); kind {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return math.U256Bytes(new(big.Int).SetUint64(value.Uint()))
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return math.U256Bytes(big.NewInt(value.Int()))
+	case reflect.Ptr:
+		return math.U256Bytes(new(big.Int).Set(value.Interface().(*big.Int)))
+	default:
+		panic("abi: fatal error")
+	}
 }
 
 // EOF
