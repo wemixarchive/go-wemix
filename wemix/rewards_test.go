@@ -4,9 +4,10 @@ package wemix
 
 import (
 	"encoding/json"
-	"github.com/ethereum/go-ethereum/common"
 	"math/big"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // TestDistributeRewards tests the DistributeRewards function

@@ -1,9 +1,10 @@
 package wemix
 
 import (
-	"github.com/ethereum/go-ethereum/params"
 	"math/big"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/params"
 )
 
 func TestHalveRewards(t *testing.T) {

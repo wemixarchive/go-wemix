@@ -17,7 +17,6 @@
 package core
 
 import (
-	"bytes"
 	"fmt"
 	"math/big"
 
@@ -105,15 +104,6 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	// an error if they don't match.
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
-	}
-	return nil
-}
-
-// ValidateReward validates the reward info of remote block with the reward processed locally
-func (v *BlockValidator) ValidateReward(header *types.Header, localHeader *types.Header) error {
-	// verify rewards info
-	if !bytes.Equal(header.Rewards, localHeader.Rewards) {
-		return fmt.Errorf("invalid rewards (remote: %x local: %x)", header.Rewards, localHeader.Rewards)
 	}
 	return nil
 }

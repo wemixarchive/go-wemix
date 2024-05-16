@@ -604,9 +604,24 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
 func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) error {
+	var proposedReward []byte
+	if header.Rewards != nil {
+		// `accumulateRewards` updates `header.Rewards` field,
+		// so we save `header.Rewards` of proposed block before calling the function
+		// But if we're a miner and are making a block, the field should be nil.
+		proposedReward = header.Rewards
+	}
+
 	// Accumulate any block and uncle rewards and commit the final state root
 	if err := accumulateRewards(chain.Config(), state, header, uncles); err != nil {
 		return err
+	}
+
+	if proposedReward != nil {
+		// validate the rewards from the proposed block with calculated value locally
+		if !bytes.Equal(header.Rewards, proposedReward) {
+			return fmt.Errorf("invalid rewards (remote: %x local: %x)", proposedReward, header.Rewards)
+		}
 	}
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	return nil
