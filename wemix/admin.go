@@ -1180,31 +1180,20 @@ func (ma *wemixAdmin) calculateRewards(config *params.ChainConfig, num, fees *bi
 		coinbase.SetBytes(rp.members[mix].Reward.Bytes())
 	}
 
+	var blockReward *big.Int
+	if config.IsBrioche(num) {
+		blockReward = getBriocheBlockReward(config.Brioche, num)
+	} else {
+		// if the wemix chain is not on brioche hard fork, use the `rewardAmount` from gov contract
+		blockReward = big.NewInt(0).Set(rp.rewardAmount)
+	}
+
 	// block reward
 	// - not brioche chain: use `EnvStorageImp.getBlockRewardAmount()`
 	// - brioche chain
 	//   - config.Brioche.BlockReward != nil: config.Brioche.BlockReward
 	//   - config.Brioche.BlockReward == nil: 1e18
 	//   - apply halving for BlockReward
-	var blockReward *big.Int
-	if config.IsBrioche(num) {
-		if config.Brioche != nil && config.Brioche.BlockReward != nil {
-			blockReward = big.NewInt(0).Set(config.Brioche.BlockReward)
-		} else {
-			blockReward = big.NewInt(defaultBriocheBlockReward) // default brioche block reward
-		}
-		if config.Brioche != nil &&
-			config.Brioche.FirstHalving != nil &&
-			config.Brioche.HalvingPeriod != nil &&
-			num.Cmp(config.Brioche.FirstHalving) >= 0 {
-			past := big.NewInt(0).Set(num)
-			past.Sub(past, config.Brioche.FirstHalving)
-			blockReward = halveRewards(blockReward, config.Brioche.HalvingPeriod, past)
-		}
-	} else {
-		// if the wemix chain is not on brioche hard fork, use the `rewardAmount` from gov contract
-		blockReward = big.NewInt(0).Set(rp.rewardAmount)
-	}
 	rr, errr := distributeRewards(num, rp, blockReward, fees)
 	if errr != nil {
 		err = errr
@@ -1221,14 +1210,35 @@ func (ma *wemixAdmin) calculateRewards(config *params.ChainConfig, num, fees *bi
 	return
 }
 
+func getBriocheBlockReward(brioche *params.BriocheConfig, num *big.Int) *big.Int {
+	blockReward := big.NewInt(defaultBriocheBlockReward) // default brioche block reward
+	if brioche != nil {
+		if brioche.BlockReward != nil {
+			blockReward = big.NewInt(0).Set(brioche.BlockReward)
+		}
+		if brioche.NoRewardHereAfter != nil &&
+			brioche.NoRewardHereAfter.Cmp(num) <= 0 {
+			blockReward = big.NewInt(0)
+		} else if brioche.FirstHalvingBlock != nil &&
+			brioche.HalvingPeriod != nil &&
+			brioche.HalvingTimes > 0 &&
+			num.Cmp(brioche.FirstHalvingBlock) >= 0 {
+			past := big.NewInt(0).Set(num)
+			past.Sub(past, brioche.FirstHalvingBlock)
+			blockReward = halveRewards(blockReward, brioche.HalvingPeriod, past, brioche.HalvingTimes)
+		}
+	}
+	return blockReward
+}
+
 func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
 	return admin.calculateRewards(config, num, fees, addBalance)
 }
 
-func halveRewards(baseReward *big.Int, halvePeriod *big.Int, pastBlocks *big.Int) *big.Int {
+func halveRewards(baseReward *big.Int, halvePeriod *big.Int, pastBlocks *big.Int, halvingTimes uint64) *big.Int {
 	result := big.NewInt(0).Set(baseReward)
 	past := big.NewInt(0).Set(pastBlocks)
-	for {
+	for ; halvingTimes > 0; halvingTimes-- {
 		result = result.Div(result, big.NewInt(2))
 		if past.Cmp(halvePeriod) < 0 {
 			break

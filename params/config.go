@@ -162,9 +162,9 @@ var (
 		BriocheBlock:        big.NewInt(53_557_371), // 24-07-01 00:00:00 (UTC) expected
 		Ethash:              new(EthashConfig),
 		Brioche: &BriocheConfig{
-			BlockReward:   big.NewInt(1e18),
-			FirstHalving:  big.NewInt(53_557_371),
-			HalvingPeriod: big.NewInt(63_115_200),
+			BlockReward:       big.NewInt(1e18),
+			FirstHalvingBlock: big.NewInt(53_557_371),
+			HalvingPeriod:     big.NewInt(63_115_200),
 		},
 	}
 
@@ -189,9 +189,9 @@ var (
 		BriocheBlock:        big.NewInt(60_537_845), // 24-06-17 02:00:00 (UTC) expected
 		Ethash:              new(EthashConfig),
 		Brioche: &BriocheConfig{
-			BlockReward:   big.NewInt(1e18),
-			FirstHalving:  big.NewInt(60_537_845),
-			HalvingPeriod: big.NewInt(63_115_200),
+			BlockReward:       big.NewInt(1e18),
+			FirstHalvingBlock: big.NewInt(60_537_845),
+			HalvingPeriod:     big.NewInt(63_115_200),
 		},
 	}
 
@@ -425,11 +425,11 @@ type EthashConfig struct{}
 // Brioche halving configuration
 type BriocheConfig struct {
 	// if the chain is on brioche hard fork, `RewardAmount` of gov contract is not used rather this `BlockReward` is used
-	BlockReward   *big.Int `json:"blockReward,omitempty"`   // if nil, then default block reward is 1e18 (=1 wemix)
-	FirstHalving  *big.Int `json:"firstHalving,omitempty"`  // if nil, then halving is not work
-	HalvingPeriod *big.Int `json:"halvingPeriod,omitempty"` // if nil, then halving is not work
-	LastHalving   *big.Int `json:"lastHalving,omitempty"`   // if nil, then halving goes on continuously
-	ZeroReward    *big.Int `json:"zeroReward,omitempty"`    // if nil,
+	BlockReward       *big.Int `json:"blockReward,omitempty"`       // if nil, then default block reward is 1e18 (=1 wemix)
+	FirstHalvingBlock *big.Int `json:"firstHalvingBlock,omitempty"` // if nil, then halving is not work. including this block
+	HalvingPeriod     *big.Int `json:"halvingPeriod,omitempty"`     // if nil, then halving is not work
+	HalvingTimes      uint64   `json:"halvingTimes,omitempty"`      // if 0, then no halving
+	NoRewardHereAfter *big.Int `json:"noRewardHereAfter,omitempty"` // if nil, block reward goes on endlessly
 }
 
 // String implements the stringer interface, returning the consensus engine details.
