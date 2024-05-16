@@ -127,7 +127,7 @@ var (
 	etcdClusterName           = "Wemix"
 	big0                      = big.NewInt(0)
 	nilAddress                = common.Address{}
-	defaultBriocheBlockReward = int64(1e18)
+	defaultBriocheBlockReward = big.NewInt(1e18)
 	admin                     *wemixAdmin
 
 	ErrAlreadyRunning = errors.New("already running")
@@ -1182,7 +1182,7 @@ func (ma *wemixAdmin) calculateRewards(config *params.ChainConfig, num, fees *bi
 
 	var blockReward *big.Int
 	if config.IsBrioche(num) {
-		blockReward = getBriocheBlockReward(config.Brioche, num)
+		blockReward = config.Brioche.GetBriocheBlockReward(defaultBriocheBlockReward, num)
 	} else {
 		// if the wemix chain is not on brioche hard fork, use the `rewardAmount` from gov contract
 		blockReward = big.NewInt(0).Set(rp.rewardAmount)
@@ -1210,43 +1210,8 @@ func (ma *wemixAdmin) calculateRewards(config *params.ChainConfig, num, fees *bi
 	return
 }
 
-func getBriocheBlockReward(brioche *params.BriocheConfig, num *big.Int) *big.Int {
-	blockReward := big.NewInt(defaultBriocheBlockReward) // default brioche block reward
-	if brioche != nil {
-		if brioche.BlockReward != nil {
-			blockReward = big.NewInt(0).Set(brioche.BlockReward)
-		}
-		if brioche.NoRewardHereafter != nil &&
-			brioche.NoRewardHereafter.Cmp(num) <= 0 {
-			blockReward = big.NewInt(0)
-		} else if brioche.FirstHalvingBlock != nil &&
-			brioche.HalvingPeriod != nil &&
-			brioche.HalvingTimes > 0 &&
-			num.Cmp(brioche.FirstHalvingBlock) >= 0 {
-			past := big.NewInt(0).Set(num)
-			past.Sub(past, brioche.FirstHalvingBlock)
-			blockReward = halveRewards(blockReward, brioche.HalvingPeriod, past, brioche.HalvingTimes, brioche.HalvingRate)
-		}
-	}
-	return blockReward
-}
-
 func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
 	return admin.calculateRewards(config, num, fees, addBalance)
-}
-
-func halveRewards(baseReward *big.Int, halvePeriod *big.Int, pastBlocks *big.Int, halvingTimes uint64, halvingRate uint32) *big.Int {
-	result := big.NewInt(0).Set(baseReward)
-	past := big.NewInt(0).Set(pastBlocks)
-	for ; halvingTimes > 0; halvingTimes-- {
-		result = result.Mul(result, big.NewInt(int64(halvingRate)))
-		result = result.Div(result, big.NewInt(100))
-		if past.Cmp(halvePeriod) < 0 {
-			break
-		}
-		past = past.Sub(past, halvePeriod)
-	}
-	return result
 }
 
 func verifyRewards(num *big.Int, rewards string) error {

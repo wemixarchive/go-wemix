@@ -165,6 +165,9 @@ var (
 			BlockReward:       big.NewInt(1e18),
 			FirstHalvingBlock: big.NewInt(53_557_371),
 			HalvingPeriod:     big.NewInt(63_115_200),
+			NoRewardHereafter: big.NewInt(1_000_000_000), // TODO fix last reward block
+			HalvingTimes:      16,
+			HalvingRate:       50,
 		},
 	}
 
@@ -186,12 +189,15 @@ var (
 		LondonBlock:         big.NewInt(0),
 		PangyoBlock:         big.NewInt(10_000_000),
 		ApplepieBlock:       big.NewInt(26_240_268),
-		BriocheBlock:        big.NewInt(60_537_845), // 24-06-17 02:00:00 (UTC) expected
+		BriocheBlock:        big.NewInt(60_537_845), // TODO fix hardfork date
 		Ethash:              new(EthashConfig),
 		Brioche: &BriocheConfig{
 			BlockReward:       big.NewInt(1e18),
 			FirstHalvingBlock: big.NewInt(60_537_845),
 			HalvingPeriod:     big.NewInt(63_115_200),
+			NoRewardHereafter: big.NewInt(1_000_000_000), // TODO fix last reward block
+			HalvingTimes:      16,
+			HalvingRate:       50,
 		},
 	}
 
@@ -431,6 +437,41 @@ type BriocheConfig struct {
 	NoRewardHereafter *big.Int `json:"noRewardHereafter,omitempty"` // nil - block reward goes on endlessly
 	HalvingTimes      uint64   `json:"halvingTimes,omitempty"`      // 0 - no halving
 	HalvingRate       uint32   `json:"halvingRate,omitempty"`       // 0<=HalvingRate<=100; 0 - no reward on halving; 100 - no halving
+}
+
+func (bc *BriocheConfig) GetBriocheBlockReward(defaultReward *big.Int, num *big.Int) *big.Int {
+	blockReward := big.NewInt(0).Set(defaultReward) // default brioche block reward
+	if bc != nil {
+		if bc.BlockReward != nil {
+			blockReward = big.NewInt(0).Set(bc.BlockReward)
+		}
+		if bc.NoRewardHereafter != nil &&
+			bc.NoRewardHereafter.Cmp(num) <= 0 {
+			blockReward = big.NewInt(0)
+		} else if bc.FirstHalvingBlock != nil &&
+			bc.HalvingPeriod != nil &&
+			bc.HalvingTimes > 0 &&
+			num.Cmp(bc.FirstHalvingBlock) >= 0 {
+			blockReward = bc.halveRewards(blockReward, num)
+		}
+	}
+	return blockReward
+}
+
+func (bc *BriocheConfig) halveRewards(baseReward *big.Int, num *big.Int) *big.Int {
+	result := big.NewInt(0).Set(baseReward)
+	past := big.NewInt(0).Set(num)
+	past.Sub(past, bc.FirstHalvingBlock)
+	halvingTimes := bc.HalvingTimes
+	for ; halvingTimes > 0; halvingTimes-- {
+		result = result.Mul(result, big.NewInt(int64(bc.HalvingRate)))
+		result = result.Div(result, big.NewInt(100))
+		if past.Cmp(bc.HalvingPeriod) < 0 {
+			break
+		}
+		past = past.Sub(past, bc.HalvingPeriod)
+	}
+	return result
 }
 
 // String implements the stringer interface, returning the consensus engine details.
