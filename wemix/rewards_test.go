@@ -135,7 +135,7 @@ func TestDistributeRewards(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call the distributeRewards function
-			rewards, err := distributeRewards(tt.height, tt.rp, big.NewInt(defaultBriocheBlockReward), tt.fees)
+			rewards, err := distributeRewards(tt.height, tt.rp, defaultBriocheBlockReward, tt.fees)
 			rewardsString, _ := json.Marshal(rewards)
 			if string(rewardsString) != tt.want {
 				t.Errorf("distributeRewards() failed: %v, %v <-> %v", err, tt.want, string(rewardsString))
