@@ -33,7 +33,7 @@ type Validator interface {
 
 	// ValidateState validates the given statedb and optionally the receipts and
 	// gas used.
-	ValidateState(block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64, fees *big.Int) error
+	ValidateState(block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64, fees *big.Int, finalizedOutput interface{}) error
 }
 
 // Prefetcher is an interface for pre-caching transaction signatures and state.
@@ -49,5 +49,5 @@ type Processor interface {
 	// Process processes the state changes according to the Ethereum rules by running
 	// the transaction messages using the statedb and applying any rewards to both
 	// the processor (coinbase) and any included uncles.
-	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, *big.Int, error)
+	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, *big.Int, interface{}, error)
 }

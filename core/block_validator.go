@@ -80,13 +80,10 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // transition, such as amount of used gas, the receipt roots and the state root
 // itself. ValidateState returns a database batch if the validation was a success
 // otherwise nil and an error is returned.
-func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64, fees *big.Int) error {
+func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64, fees *big.Int, finalizedOutput interface{}) error {
 	header := block.Header()
 	if block.GasUsed() != usedGas {
 		return fmt.Errorf("invalid gas used (remote: %d local: %d)", block.GasUsed(), usedGas)
-	}
-	if !wemixminer.IsPoW() && block.Fees().Cmp(fees) != 0 {
-		return fmt.Errorf("invalid fees collected (remote: %v local: %v)", block.Fees(), fees)
 	}
 
 	// Validate the received block's bloom with the one derived from the generated receipts.
@@ -105,7 +102,8 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
-	return nil
+
+	return v.engine.ValidateEngineSpecific(v.bc.chainConfig, header, fees, finalizedOutput)
 }
 
 // CalcGasLimit computes the gas limit of the next block after parent. It aims

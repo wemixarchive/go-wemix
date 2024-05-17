@@ -167,12 +167,14 @@ func TestHalveRewards(t *testing.T) {
 func TestGetBriocheBlockReward(t *testing.T) {
 	defaultBlockReward := big.NewInt(1234e14)
 	testcases := []struct {
+		id            int32
 		briocheConfig *BriocheConfig
 		blockNum      *big.Int
 		expected      *big.Int
 	}{
 		// nil case
 		{
+			id:            1,
 			briocheConfig: nil,
 			blockNum:      big.NewInt(100),
 			expected:      defaultBlockReward,
@@ -180,6 +182,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 
 		// normal case
 		{
+			id: 2,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(1e18),
 				FirstHalvingBlock: big.NewInt(100),
@@ -192,6 +195,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(5e17),
 		},
 		{
+			id: 3,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(1e18),
 				FirstHalvingBlock: big.NewInt(100),
@@ -206,6 +210,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 
 		// base block reward variations
 		{
+			id: 4,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(7e18),
 				FirstHalvingBlock: big.NewInt(100),
@@ -218,6 +223,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(35e17),
 		},
 		{
+			id: 5,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(3),
 				FirstHalvingBlock: big.NewInt(100),
@@ -230,6 +236,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(1),
 		},
 		{
+			id: 6,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(1),
 				FirstHalvingBlock: big.NewInt(100),
@@ -242,6 +249,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(0),
 		},
 		{
+			id: 7,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       nil, // it will use the default block reward
 				FirstHalvingBlock: big.NewInt(100),
@@ -251,11 +259,12 @@ func TestGetBriocheBlockReward(t *testing.T) {
 				HalvingRate:       50,
 			},
 			blockNum: big.NewInt(100),
-			expected: big.NewInt(5e17),
+			expected: big.NewInt(0).Div(defaultBlockReward, big.NewInt(2)),
 		},
 
 		// no halving
 		{
+			id: 8,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       nil, // it will use the default block reward
 				FirstHalvingBlock: nil,
@@ -265,9 +274,10 @@ func TestGetBriocheBlockReward(t *testing.T) {
 				HalvingRate:       50,
 			},
 			blockNum: big.NewInt(100),
-			expected: big.NewInt(1e18),
+			expected: defaultBlockReward,
 		},
 		{
+			id: 9,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(10),
 				FirstHalvingBlock: big.NewInt(100),
@@ -280,6 +290,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(10),
 		},
 		{
+			id: 10,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(10),
 				FirstHalvingBlock: big.NewInt(100),
@@ -292,6 +303,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(10),
 		},
 		{
+			id: 11,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(10),
 				FirstHalvingBlock: big.NewInt(100),
@@ -304,6 +316,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(10),
 		},
 		{
+			id: 12,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(10),
 				FirstHalvingBlock: big.NewInt(100),
@@ -318,6 +331,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 
 		// no reward case
 		{
+			id: 13,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(10),
 				FirstHalvingBlock: big.NewInt(100),
@@ -330,6 +344,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(0),
 		},
 		{
+			id: 14,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(10),
 				FirstHalvingBlock: big.NewInt(100),
@@ -342,6 +357,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(5),
 		},
 		{
+			id: 15,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(10),
 				FirstHalvingBlock: big.NewInt(100),
@@ -356,6 +372,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 
 		// halving rate variations
 		{
+			id: 16,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(1e18),
 				FirstHalvingBlock: big.NewInt(100),
@@ -368,6 +385,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(1e17),
 		},
 		{
+			id: 17,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(1e18),
 				FirstHalvingBlock: big.NewInt(100),
@@ -380,6 +398,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(1e16),
 		},
 		{
+			id: 18,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(1e18),
 				FirstHalvingBlock: big.NewInt(100),
@@ -392,6 +411,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 			expected: big.NewInt(1e12),
 		},
 		{
+			id: 19,
 			briocheConfig: &BriocheConfig{
 				BlockReward:       big.NewInt(1e18),
 				FirstHalvingBlock: big.NewInt(100),
@@ -408,7 +428,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 	for _, tc := range testcases {
 		actual := tc.briocheConfig.GetBriocheBlockReward(defaultBlockReward, tc.blockNum)
 		if tc.expected.Cmp(actual) != 0 {
-			t.Errorf("getBriocheReward mismatched (expected=%v, actual=%v)", tc.expected, actual)
+			t.Errorf("getBriocheReward mismatched (id=%d, expected=%v, actual=%v)", tc.id, tc.expected, actual)
 		}
 	}
 }

@@ -89,8 +89,9 @@ type Engine interface {
 	//
 	// Note: The block header and state database might be updated to reflect any
 	// consensus rules that happen at finalization (e.g. block rewards).
+	// Finalize returns engine specific output which can be validated by ValidateEngineSpecific
 	Finalize(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
-		uncles []*types.Header) error
+		uncles []*types.Header) (interface{}, error)
 
 	// FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
 	// rewards) and assembles the final block.
@@ -99,6 +100,9 @@ type Engine interface {
 	// consensus rules that happen at finalization (e.g. block rewards).
 	FinalizeAndAssemble(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
 		uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error)
+
+	// ValidateEngineSpecific validates some header fields with processed output
+	ValidateEngineSpecific(config *params.ChainConfig, header *types.Header, blockFees *big.Int, output interface{}) error
 
 	// Seal generates a new sealing request for the given input block and pushes
 	// the result into the given channel.

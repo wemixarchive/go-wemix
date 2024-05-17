@@ -1147,17 +1147,7 @@ func distributeRewards(height *big.Int, rp *rewardParameters, blockReward *big.I
 	return rewards, nil
 }
 
-func (ma *wemixAdmin) calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (coinbase *common.Address, rewards []byte, err error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	rp, err := ma.getRewardParams(ctx, big.NewInt(num.Int64()-1))
-	if err != nil {
-		// all goes to the coinbase
-		err = wemixminer.ErrNotInitialized
-		return
-	}
-
+func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (coinbase *common.Address, rewards []byte, err error) {
 	if (rp.staker == nil && rp.ecoSystem == nil && rp.maintenance == nil) || len(rp.members) == 0 {
 		// handle testnet block 94 rewards
 		if rewards94 := handleBlock94Rewards(num, rp, fees); rewards94 != nil {
@@ -1175,7 +1165,7 @@ func (ma *wemixAdmin) calculateRewards(config *params.ChainConfig, num, fees *bi
 
 	// determine coinbase
 	if len(rp.members) > 0 {
-		mix := int(num.Int64()/ma.blocksPer) % len(rp.members)
+		mix := int(num.Int64()/rp.blocksPer) % len(rp.members)
 		coinbase = &common.Address{}
 		coinbase.SetBytes(rp.members[mix].Reward.Bytes())
 	}
@@ -1211,7 +1201,17 @@ func (ma *wemixAdmin) calculateRewards(config *params.ChainConfig, num, fees *bi
 }
 
 func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
-	return admin.calculateRewards(config, num, fees, addBalance)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	rp, err := admin.getRewardParams(ctx, big.NewInt(num.Int64()-1))
+	if err != nil {
+		// all goes to the coinbase
+		err = wemixminer.ErrNotInitialized
+		return nil, nil, err
+	}
+
+	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
 }
 
 func verifyRewards(num *big.Int, rewards string) error {

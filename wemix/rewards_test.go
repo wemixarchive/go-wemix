@@ -8,7 +8,22 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
+	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
+
+func hexToBigInt(hexNum string) *big.Int {
+	if num, ok := new(big.Int).SetString(hexNum[2:], 16); ok {
+		return num
+	} else {
+		return nil
+	}
+}
 
 // TestDistributeRewards tests the DistributeRewards function
 func TestDistributeRewards(t *testing.T) {
@@ -16,14 +31,6 @@ func TestDistributeRewards(t *testing.T) {
 	hexToAddressPtr := func(addr string) *common.Address {
 		address := common.HexToAddress(addr)
 		return &address
-	}
-
-	hexToBigInt := func(hexNum string) *big.Int {
-		if num, ok := new(big.Int).SetString(hexNum[2:], 16); ok {
-			return num
-		} else {
-			return nil
-		}
 	}
 
 	// Test cases
@@ -165,6 +172,77 @@ func TestDistributeRewards(t *testing.T) {
 				t.Errorf("total reward amount mismatched! sum=%d, rewards=%d", totalRewards, totalAmount)
 			}
 		})
+	}
+}
+
+func calculateRewardsForTest(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
+	rp := &rewardParameters{
+		rewardAmount: big.NewInt(1e18),
+		staker:       &common.Address{0x11},
+		ecoSystem:    &common.Address{0x22},
+		maintenance:  &common.Address{0x33},
+		feeCollector: &common.Address{0x44},
+		members: []*wemixMember{
+			{
+				Staker: common.HexToAddress("0x02b4b2d83786c8ee315db2ddac704794850d2149"),
+				Reward: common.HexToAddress("0x02b4b2d83786c8ee315db2ddac704794850d2149"),
+				Stake:  hexToBigInt("0x1a784379d99db42000000"),
+			},
+			{
+				Staker: common.HexToAddress("0xb16d2494fddfa4c000deaf642d47673e5ca74e07"),
+				Reward: common.HexToAddress("0xb16d2494fddfa4c000deaf642d47673e5ca74e07"),
+				Stake:  hexToBigInt("0xe8ef1e96ae3897800000"),
+			},
+			{
+				Staker: common.HexToAddress("0x452893ed818c0e3ea6f415aeab8ef08778087fc6"),
+				Reward: common.HexToAddress("0x452893ed818c0e3ea6f415aeab8ef08778087fc6"),
+				Stake:  hexToBigInt("0xc92b9a6adc4825c00000"),
+			},
+		},
+		blocksPer:          1,
+		distributionMethod: []*big.Int{big.NewInt(4000), big.NewInt(1000), big.NewInt(2500), big.NewInt(2500)},
+	}
+
+	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
+}
+
+func TestRewardValidation(t *testing.T) {
+	// use wemix consensus
+	params.ConsensusMethod = params.ConsensusPoA
+	wemixminer.CalculateRewardsFunc = calculateRewardsForTest
+
+	var (
+		db         = rawdb.NewMemoryDatabase()
+		key, _     = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		address    = crypto.PubkeyToAddress(key.PublicKey)
+		funds      = big.NewInt(1000000000)
+		deleteAddr = common.Address{1}
+		gspec      = &core.Genesis{
+			Config: &params.ChainConfig{
+				ChainID: big.NewInt(1),
+				Brioche: &params.BriocheConfig{
+					BlockReward:       big.NewInt(100),
+					FirstHalvingBlock: big.NewInt(0),
+					HalvingPeriod:     big.NewInt(10),
+					NoRewardHereafter: big.NewInt(30),
+					HalvingTimes:      3,
+					HalvingRate:       50,
+				}},
+			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: big.NewInt(0)}},
+		}
+		genesis = gspec.MustCommit(db)
+	)
+
+	blockchain, _ := core.NewBlockChain(db, nil, gspec.Config, ethash.NewFaker(), vm.Config{}, nil, nil)
+	defer blockchain.Stop()
+
+	gspec.Config.Brioche.BlockReward = big.NewInt(200)
+	// TODO: core.GenerateChain does not make a wemix block including Fees, Rewards etc.
+	// TODO: implement wemix.GenerateChain function
+	blocks, _ := core.GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, 1, nil)
+
+	if _, err := blockchain.InsertChain(blocks); err != nil {
+		t.Fatal(err)
 	}
 }
 

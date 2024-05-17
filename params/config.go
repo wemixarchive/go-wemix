@@ -459,19 +459,16 @@ func (bc *BriocheConfig) GetBriocheBlockReward(defaultReward *big.Int, num *big.
 }
 
 func (bc *BriocheConfig) halveRewards(baseReward *big.Int, num *big.Int) *big.Int {
-	result := big.NewInt(0).Set(baseReward)
-	past := big.NewInt(0).Set(num)
-	past.Sub(past, bc.FirstHalvingBlock)
-	halvingTimes := bc.HalvingTimes
-	for ; halvingTimes > 0; halvingTimes-- {
-		result = result.Mul(result, big.NewInt(int64(bc.HalvingRate))) // `HalvingRate` may be greater than 100 theoretically
-		result = result.Div(result, big.NewInt(100))
-		if past.Cmp(bc.HalvingPeriod) < 0 {
-			break
-		}
-		past = past.Sub(past, bc.HalvingPeriod)
+	elapsed := new(big.Int).Sub(num, bc.FirstHalvingBlock)
+	times := new(big.Int).Add(common.Big1, new(big.Int).Div(elapsed, bc.HalvingPeriod))
+	if times.Uint64() > bc.HalvingTimes {
+		times = big.NewInt(int64(bc.HalvingTimes))
 	}
-	return result
+
+	reward := new(big.Int).Set(baseReward)
+	numerator := new(big.Int).Exp(big.NewInt(int64(bc.HalvingRate)), times, nil)
+	denominator := new(big.Int).Exp(big.NewInt(100), times, nil)
+	return reward.Div(reward.Mul(reward, numerator), denominator)
 }
 
 // String implements the stringer interface, returning the consensus engine details.
