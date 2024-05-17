@@ -97,13 +97,20 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	if receiptSha != header.ReceiptHash {
 		return fmt.Errorf("invalid receipt root hash (remote: %x local: %x)", header.ReceiptHash, receiptSha)
 	}
+
+	// validate engine specific; ethash.engine validate the fees and rewards
+	err := v.engine.ValidateEngineSpecific(v.bc.chainConfig, header, fees, finalizedOutput)
+	if err != nil {
+		return err
+	}
+
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
 
-	return v.engine.ValidateEngineSpecific(v.bc.chainConfig, header, fees, finalizedOutput)
+	return nil
 }
 
 // CalcGasLimit computes the gas limit of the next block after parent. It aims

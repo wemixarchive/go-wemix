@@ -3,14 +3,18 @@
 package wemix
 
 import (
+	"bytes"
+	"crypto/ecdsa"
 	"encoding/json"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -175,7 +179,65 @@ func TestDistributeRewards(t *testing.T) {
 	}
 }
 
-func calculateRewardsForTest(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
+func makeCalculateRewardFunc(rp *rewardParameters) func(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
+	return func(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
+		return calculateRewardsWithParams(config, rp, num, fees, addBalance)
+	}
+}
+
+func makeSignBlockFunc(privateKey *ecdsa.PrivateKey) func(height *big.Int, hash common.Hash) (common.Address, []byte, error) {
+	return func(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error) {
+		data := append(height.Bytes(), hash.Bytes()...)
+		data = crypto.Keccak256(data)
+		sig, _ = crypto.Sign(data, privateKey)
+		return crypto.PubkeyToAddress(privateKey.PublicKey), sig, nil
+	}
+}
+
+func verifyBlockSigForTest(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool {
+	var data []byte
+	data = append(height.Bytes(), hash.Bytes()...)
+	data = crypto.Keccak256(data)
+	pubKey, err := crypto.SigToPub(data, sig)
+	if err != nil {
+		return false
+	}
+	signer := crypto.PubkeyToAddress(*pubKey)
+	if err != nil || !bytes.Equal(coinbase.Bytes(), signer.Bytes()) {
+		return false
+	}
+	return true
+}
+
+func TestRewardValidation(t *testing.T) {
+	// use wemix consensus
+	params.ConsensusMethod = params.ConsensusPoA
+
+	var (
+		db         = rawdb.NewMemoryDatabase()
+		key, _     = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		address    = crypto.PubkeyToAddress(key.PublicKey)
+		funds      = big.NewInt(100000000000000)
+		deleteAddr = common.Address{1}
+		gspec      = &core.Genesis{
+			Config: &params.ChainConfig{
+				ChainID:      big.NewInt(1),
+				LondonBlock:  common.Big0,
+				BriocheBlock: common.Big0,
+				Brioche: &params.BriocheConfig{
+					BlockReward:       big.NewInt(100),
+					FirstHalvingBlock: big.NewInt(0),
+					HalvingPeriod:     big.NewInt(10),
+					NoRewardHereafter: big.NewInt(30),
+					HalvingTimes:      3,
+					HalvingRate:       50,
+				}},
+			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: big.NewInt(0)}},
+		}
+		genesis = gspec.MustCommit(db)
+		signer  = types.LatestSigner(gspec.Config)
+	)
+
 	rp := &rewardParameters{
 		rewardAmount: big.NewInt(1e18),
 		staker:       &common.Address{0x11},
@@ -203,46 +265,37 @@ func calculateRewardsForTest(config *params.ChainConfig, num, fees *big.Int, add
 		distributionMethod: []*big.Int{big.NewInt(4000), big.NewInt(1000), big.NewInt(2500), big.NewInt(2500)},
 	}
 
-	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
-}
-
-func TestRewardValidation(t *testing.T) {
-	// use wemix consensus
-	params.ConsensusMethod = params.ConsensusPoA
-	wemixminer.CalculateRewardsFunc = calculateRewardsForTest
-
-	var (
-		db         = rawdb.NewMemoryDatabase()
-		key, _     = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-		address    = crypto.PubkeyToAddress(key.PublicKey)
-		funds      = big.NewInt(1000000000)
-		deleteAddr = common.Address{1}
-		gspec      = &core.Genesis{
-			Config: &params.ChainConfig{
-				ChainID: big.NewInt(1),
-				Brioche: &params.BriocheConfig{
-					BlockReward:       big.NewInt(100),
-					FirstHalvingBlock: big.NewInt(0),
-					HalvingPeriod:     big.NewInt(10),
-					NoRewardHereafter: big.NewInt(30),
-					HalvingTimes:      3,
-					HalvingRate:       50,
-				}},
-			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: big.NewInt(0)}},
-		}
-		genesis = gspec.MustCommit(db)
-	)
+	wemixminer.CalculateRewardsFunc = makeCalculateRewardFunc(rp)
+	wemixminer.SignBlockFunc = makeSignBlockFunc(key)
+	wemixminer.VerifyBlockSigFunc = verifyBlockSigForTest
 
 	blockchain, _ := core.NewBlockChain(db, nil, gspec.Config, ethash.NewFaker(), vm.Config{}, nil, nil)
 	defer blockchain.Stop()
 
-	gspec.Config.Brioche.BlockReward = big.NewInt(200)
-	// TODO: core.GenerateChain does not make a wemix block including Fees, Rewards etc.
-	// TODO: implement wemix.GenerateChain function
-	blocks, _ := core.GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, 1, nil)
+	byzantineConfig := &params.ChainConfig{
+		ChainID:      gspec.Config.ChainID,
+		LondonBlock:  gspec.Config.LondonBlock,
+		BriocheBlock: gspec.Config.BriocheBlock,
+		Brioche: &params.BriocheConfig{
+			BlockReward:       big.NewInt(200), // different reward!!
+			FirstHalvingBlock: gspec.Config.Brioche.FirstHalvingBlock,
+			HalvingPeriod:     gspec.Config.Brioche.HalvingPeriod,
+			NoRewardHereafter: gspec.Config.Brioche.NoRewardHereafter,
+			HalvingTimes:      gspec.Config.Brioche.HalvingTimes,
+			HalvingRate:       gspec.Config.Brioche.HalvingRate,
+		}}
+	blocks, _ := core.GenerateChain(byzantineConfig, genesis, ethash.NewFaker(), db, 1, func(i int, gen *core.BlockGen) {
+		tx, err := types.SignTx(types.NewTransaction(gen.TxNonce(address), common.Address{0x00}, big.NewInt(1), params.TxGas, gen.BaseFee(), nil), signer, key)
+		if err != nil {
+			panic(err)
+		}
+		gen.AddTx(tx)
+	})
 
 	if _, err := blockchain.InsertChain(blocks); err != nil {
-		t.Fatal(err)
+		if !strings.HasPrefix(err.Error(), "invalid rewards") {
+			t.Fatal(err)
+		}
 	}
 }
 
