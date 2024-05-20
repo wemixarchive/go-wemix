@@ -17,7 +17,6 @@
 package core
 
 import (
-	"bytes"
 	"fmt"
 	"math/big"
 
@@ -92,8 +91,8 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	err := p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
 	header.Fees = fees
 
-	if !bytes.Equal(block.Header().Hash().Bytes(), header.Hash().Bytes()) {
-		return nil, nil, 0, fmt.Errorf("Remote block hash is different from being processed one locally (remote=%v, local=%v)", block.Header().Hash(), header.Hash())
+	if block.Header().Hash() != header.Hash() {
+		return nil, nil, 0, fmt.Errorf("remote block hash is different from being processed one locally (remote=%v, local=%v)", block.Header().Hash(), header.Hash())
 	}
 
 	return receipts, allLogs, *usedGas, err

@@ -324,6 +324,9 @@ func CopyHeader(h *Header) *Header {
 		cpy.Rewards = make([]byte, len(h.Rewards))
 		copy(cpy.Rewards, h.Rewards)
 	}
+	if h.Fees != nil {
+		cpy.Fees = new(big.Int).Set(h.Fees)
+	}
 	return &cpy
 }
 
