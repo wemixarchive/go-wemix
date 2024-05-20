@@ -603,21 +603,21 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
-func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) (interface{}, error) {
+func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) error {
 	// Accumulate any block and uncle rewards and commit the final state root
 	if err := accumulateRewards(chain.Config(), state, header, uncles); err != nil {
-		return nil, err
+		return err
 	}
 
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
-	return &FinalizedOutput{reward: header.Rewards}, nil
+	return nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
 func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Finalize block
-	if _, err := ethash.Finalize(chain, header, state, txs, uncles); err != nil {
+	if err := ethash.Finalize(chain, header, state, txs, uncles); err != nil {
 		return nil, err
 	}
 
@@ -634,24 +634,6 @@ func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 
 	// Header seems complete, assemble into a block and return
 	return types.NewBlock(header, txs, uncles, receipts, trie.NewStackTrie(nil)), nil
-}
-
-func (ethash *Ethash) ValidateEngineSpecific(config *params.ChainConfig, header *types.Header, blockFees *big.Int, output interface{}) error {
-	if !wemixminer.IsPoW() && header.Fees.Cmp(blockFees) != 0 {
-		return fmt.Errorf("invalid fees collected (remote: %v local: %v)", header.Fees, blockFees)
-	}
-
-	if !wemixminer.IsPoW() && config.IsBrioche(header.Number) {
-		if out, ok := output.(*FinalizedOutput); ok {
-			// validate the rewards from the proposed block with calculated value locally
-			if !bytes.Equal(header.Rewards, out.reward) {
-				return fmt.Errorf("invalid rewards (remote: %x local: %x)", header.Rewards, out.reward)
-			}
-		} else {
-			return fmt.Errorf("invalid finalized output (%v)", output)
-		}
-	}
-	return nil
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
@@ -716,16 +698,13 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		}
 		state.AddBalance(header.Coinbase, reward)
 	} else {
-		coinbase, rewards, err := wemixminer.CalculateRewards(
+		_, rewards, err := wemixminer.CalculateRewards(
 			config, header.Number, header.Fees,
 			func(addr common.Address, amt *big.Int) {
 				state.AddBalance(addr, amt)
 			})
 		if err == nil {
 			header.Rewards = rewards
-			if coinbase != nil {
-				header.Coinbase = *coinbase
-			}
 		} else {
 			if err == wemixminer.ErrNotInitialized {
 				reward := new(big.Int)

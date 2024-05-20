@@ -18,7 +18,6 @@ package core
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -80,7 +79,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // transition, such as amount of used gas, the receipt roots and the state root
 // itself. ValidateState returns a database batch if the validation was a success
 // otherwise nil and an error is returned.
-func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64, fees *big.Int, finalizedOutput interface{}) error {
+func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
 	header := block.Header()
 	if block.GasUsed() != usedGas {
 		return fmt.Errorf("invalid gas used (remote: %d local: %d)", block.GasUsed(), usedGas)
@@ -96,12 +95,6 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	receiptSha := types.DeriveSha(receipts, trie.NewStackTrie(nil))
 	if receiptSha != header.ReceiptHash {
 		return fmt.Errorf("invalid receipt root hash (remote: %x local: %x)", header.ReceiptHash, receiptSha)
-	}
-
-	// validate engine specific; ethash.engine validate the fees and rewards
-	err := v.engine.ValidateEngineSpecific(v.bc.chainConfig, header, fees, finalizedOutput)
-	if err != nil {
-		return err
 	}
 
 	// Validate the state root against the received state root and throw

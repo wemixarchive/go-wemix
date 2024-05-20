@@ -17,6 +17,7 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 
@@ -56,7 +57,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, *big.Int, interface{}, error) {
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
 	var (
 		receipts    types.Receipts
 		usedGas     = new(uint64)
@@ -77,20 +78,25 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
-			return nil, nil, 0, big.NewInt(0), nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		statedb.Prepare(tx.Hash(), i)
 		receipt, err := applyTransaction(msg, p.config, p.bc, nil, gp, statedb, blockNumber, blockHash, tx, usedGas, fees, vmenv)
 		if err != nil {
-			return nil, nil, 0, big.NewInt(0), nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	fo, err := p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
+	err := p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
+	header.Fees = fees
 
-	return receipts, allLogs, *usedGas, fees, fo, err
+	if !bytes.Equal(block.Header().Hash().Bytes(), header.Hash().Bytes()) {
+		return nil, nil, 0, fmt.Errorf("Remote block hash is different from being processed one locally (remote=%v, local=%v)", block.Header().Hash(), header.Hash())
+	}
+
+	return receipts, allLogs, *usedGas, err
 }
 
 func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, fees *big.Int, evm *vm.EVM) (*types.Receipt, error) {

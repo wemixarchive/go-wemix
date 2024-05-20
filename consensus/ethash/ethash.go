@@ -431,10 +431,6 @@ type Config struct {
 	Log log.Logger `toml:"-"`
 }
 
-type FinalizedOutput struct {
-	reward []byte
-}
-
 // Ethash is a consensus engine based on proof-of-work implementing the ethash
 // algorithm.
 type Ethash struct {
