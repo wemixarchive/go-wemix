@@ -678,3 +678,39 @@ func (api *PrivateDebugAPI) GetAccessibleState(from, to rpc.BlockNumber) (uint64
 	}
 	return 0, fmt.Errorf("No state found")
 }
+
+type BriocheConfigAPI struct {
+	cfg *params.BriocheConfig
+}
+
+func NewBriocheConfigAPI(cfg *params.BriocheConfig) *BriocheConfigAPI {
+	return &BriocheConfigAPI{cfg}
+}
+
+func (api *BriocheConfigAPI) BlockReward() *big.Int {
+	return api.cfg.BlockReward
+}
+
+func (api *BriocheConfigAPI) FirstHalvingBlock() *big.Int {
+	return api.cfg.FirstHalvingBlock
+}
+
+func (api *BriocheConfigAPI) HalvingPeriod() *big.Int {
+	return api.cfg.HalvingPeriod
+}
+
+func (api *BriocheConfigAPI) NoRewardHereafter() *big.Int {
+	return api.cfg.NoRewardHereafter
+}
+
+func (api *BriocheConfigAPI) HalvingTimes() uint64 {
+	return api.cfg.HalvingTimes
+}
+
+func (api *BriocheConfigAPI) HalvingRate() uint32 {
+	return api.cfg.HalvingRate
+}
+
+func (api *BriocheConfigAPI) GetBriocheBlockReward(height *big.Int) (*big.Int, error) {
+	return api.cfg.GetBriocheBlockReward(api.cfg.BlockReward, height), nil
+}

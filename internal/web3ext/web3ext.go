@@ -30,6 +30,7 @@ var Modules = map[string]string{
 	"txpool":   TxpoolJs,
 	"les":      LESJs,
 	"vflux":    VfluxJs,
+	"brioche":  BriocheJS,
 }
 
 const CliqueJs = `
@@ -1000,6 +1001,46 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'requestStats',
 			getter: 'vflux_requestStats'
+		}),
+	]
+});
+`
+
+const BriocheJS = `
+web3._extend({
+	property: 'brioche',
+	methods: [
+		new web3._extend.Method({
+			name: 'getBriocheBlockReward',
+			call: 'brioche_getBriocheBlockReward',
+			params: 1
+		})
+	],
+	properties:
+	[
+		new web3._extend.Property({
+			name: 'blockReward',
+			getter: 'brioche_blockReward'
+		}),
+		new web3._extend.Property({
+			name: 'firstHalvingBlock',
+			getter: 'brioche_firstHalvingBlock'
+		}),
+		new web3._extend.Property({
+			name: 'halvingPeriod',
+			getter: 'brioche_halvingPeriod'
+		}),
+		new web3._extend.Property({
+			name: 'noRewardHereafter',
+			getter: 'brioche_noRewardHereafter'
+		}),
+		new web3._extend.Property({
+			name: 'halvingTimes',
+			getter: 'brioche_halvingTimes'
+		}),
+		new web3._extend.Property({
+			name: 'halvingRate',
+			getter: 'brioche_halvingRate'
 		}),
 	]
 });
