@@ -167,10 +167,6 @@ func (beacon *Beacon) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 	return nil
 }
 
-func (beacon *Beacon) ValidateEngineSpecific(*params.ChainConfig, *types.Header, *big.Int, interface{}) error {
-	return nil
-}
-
 // verifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum consensus engine. The difference between the beacon and classic is
 // (a) The following fields are expected to be constants:

@@ -309,8 +309,10 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 		}),
 		GasLimit: parent.GasLimit(),
 		Number:   new(big.Int).Add(parent.Number(), common.Big1),
-		Fees:     new(big.Int),
 		Time:     time,
+	}
+	if !wemixminer.IsPoW() {
+		header.Fees = new(big.Int)
 	}
 	if chain.Config().IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(chain.Config(), parent.Header())

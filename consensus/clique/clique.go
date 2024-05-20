@@ -578,10 +578,6 @@ func (c *Clique) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 	return types.NewBlock(header, txs, nil, receipts, trie.NewStackTrie(nil)), nil
 }
 
-func (c *Clique) ValidateEngineSpecific(*params.ChainConfig, *types.Header, *big.Int, interface{}) error {
-	return nil
-}
-
 // Authorize injects a private key into the consensus engine to mint new blocks
 // with.
 func (c *Clique) Authorize(signer common.Address, signFn SignerFn) {
