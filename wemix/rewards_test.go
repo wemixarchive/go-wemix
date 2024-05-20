@@ -146,7 +146,7 @@ func TestDistributeRewards(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Call the distributeRewards function
-			rewards, err := distributeRewards(tt.height, tt.rp, defaultBriocheBlockReward, tt.fees)
+			rewards, err := distributeRewards(tt.height, tt.rp, tt.rp.rewardAmount, tt.fees)
 			rewardsString, _ := json.Marshal(rewards)
 			if string(rewardsString) != tt.want {
 				t.Errorf("distributeRewards() failed: %v, %v <-> %v", err, tt.want, string(rewardsString))
@@ -228,7 +228,7 @@ func TestRewardValidation(t *testing.T) {
 					BlockReward:       big.NewInt(100),
 					FirstHalvingBlock: big.NewInt(0),
 					HalvingPeriod:     big.NewInt(10),
-					NoRewardHereafter: big.NewInt(30),
+					FinishRewardBlock: big.NewInt(30),
 					HalvingTimes:      3,
 					HalvingRate:       50,
 				}},
@@ -280,7 +280,7 @@ func TestRewardValidation(t *testing.T) {
 			BlockReward:       big.NewInt(200), // different reward!!
 			FirstHalvingBlock: gspec.Config.Brioche.FirstHalvingBlock,
 			HalvingPeriod:     gspec.Config.Brioche.HalvingPeriod,
-			NoRewardHereafter: gspec.Config.Brioche.NoRewardHereafter,
+			FinishRewardBlock: gspec.Config.Brioche.FinishRewardBlock,
 			HalvingTimes:      gspec.Config.Brioche.HalvingTimes,
 			HalvingRate:       gspec.Config.Brioche.HalvingRate,
 		}}
@@ -293,11 +293,11 @@ func TestRewardValidation(t *testing.T) {
 	})
 
 	if _, err := blockchain.InsertChain(blocks); err != nil {
-		if !strings.HasPrefix(err.Error(), "Remote block hash is different") {
+		if !strings.HasPrefix(err.Error(), "remote block hash is different") {
 			t.Fatal(err)
 		}
 	} else {
-		t.Fatal("Reward validation failed")
+		t.Fatal("reward validation failed")
 	}
 }
 
@@ -327,7 +327,7 @@ func TestBriocheHardFork(t *testing.T) {
 					BlockReward:       big.NewInt(4e17),
 					FirstHalvingBlock: big.NewInt(4),
 					HalvingPeriod:     big.NewInt(2),
-					NoRewardHereafter: big.NewInt(7),
+					FinishRewardBlock: big.NewInt(7),
 					HalvingTimes:      2,
 					HalvingRate:       50,
 				}},

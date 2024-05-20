@@ -165,7 +165,7 @@ var (
 			BlockReward:       big.NewInt(1e18),
 			FirstHalvingBlock: big.NewInt(53_557_371),
 			HalvingPeriod:     big.NewInt(63_115_200),
-			NoRewardHereafter: big.NewInt(1_000_000_000), // TODO fix last reward block
+			FinishRewardBlock: big.NewInt(1_000_000_000), // TODO fix last reward block
 			HalvingTimes:      16,
 			HalvingRate:       50,
 		},
@@ -195,7 +195,7 @@ var (
 			BlockReward:       big.NewInt(1e18),
 			FirstHalvingBlock: big.NewInt(60_537_845),
 			HalvingPeriod:     big.NewInt(63_115_200),
-			NoRewardHereafter: big.NewInt(1_000_000_000), // TODO fix last reward block
+			FinishRewardBlock: big.NewInt(1_000_000_000), // TODO fix last reward block
 			HalvingTimes:      16,
 			HalvingRate:       50,
 		},
@@ -434,7 +434,7 @@ type BriocheConfig struct {
 	BlockReward       *big.Int `json:"blockReward,omitempty"`       // nil - use default block reward(1e18)
 	FirstHalvingBlock *big.Int `json:"firstHalvingBlock,omitempty"` // nil - halving is not work. including this block
 	HalvingPeriod     *big.Int `json:"halvingPeriod,omitempty"`     // nil - halving is not work
-	NoRewardHereafter *big.Int `json:"noRewardHereafter,omitempty"` // nil - block reward goes on endlessly
+	FinishRewardBlock *big.Int `json:"finishRewardBlock,omitempty"` // nil - block reward goes on endlessly
 	HalvingTimes      uint64   `json:"halvingTimes,omitempty"`      // 0 - no halving
 	HalvingRate       uint32   `json:"halvingRate,omitempty"`       // 0 - no reward on halving; 100 - no halving; >100 - increasing reward
 }
@@ -445,20 +445,20 @@ func (bc *BriocheConfig) GetBriocheBlockReward(defaultReward *big.Int, num *big.
 		if bc.BlockReward != nil {
 			blockReward = big.NewInt(0).Set(bc.BlockReward)
 		}
-		if bc.NoRewardHereafter != nil &&
-			bc.NoRewardHereafter.Cmp(num) <= 0 {
+		if bc.FinishRewardBlock != nil &&
+			bc.FinishRewardBlock.Cmp(num) <= 0 {
 			blockReward = big.NewInt(0)
 		} else if bc.FirstHalvingBlock != nil &&
 			bc.HalvingPeriod != nil &&
 			bc.HalvingTimes > 0 &&
 			num.Cmp(bc.FirstHalvingBlock) >= 0 {
-			blockReward = bc.halveRewards(blockReward, num)
+			blockReward = bc.calcHalvedReward(blockReward, num)
 		}
 	}
 	return blockReward
 }
 
-func (bc *BriocheConfig) halveRewards(baseReward *big.Int, num *big.Int) *big.Int {
+func (bc *BriocheConfig) calcHalvedReward(baseReward *big.Int, num *big.Int) *big.Int {
 	elapsed := new(big.Int).Sub(num, bc.FirstHalvingBlock)
 	times := new(big.Int).Add(common.Big1, new(big.Int).Div(elapsed, bc.HalvingPeriod))
 	if times.Uint64() > bc.HalvingTimes {
