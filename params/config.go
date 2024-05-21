@@ -528,7 +528,7 @@ func (c *ChainConfig) String() string {
 	default:
 		engine = "unknown"
 	}
-	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, Terminal TD: %v, Engine: %v}",
+	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, Terminal TD: %v, Engine: %v, BriocheConfig: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -550,6 +550,7 @@ func (c *ChainConfig) String() string {
 		c.BriocheBlock,
 		c.TerminalTotalDifficulty,
 		engine,
+		c.Brioche,
 	)
 }
 
@@ -690,6 +691,9 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "londonBlock", block: c.LondonBlock},
 		{name: "arrowGlacierBlock", block: c.ArrowGlacierBlock, optional: true},
 		{name: "mergeStartBlock", block: c.MergeForkBlock, optional: true},
+		{name: "pangyoBlock", block: c.PangyoBlock, optional: true},
+		{name: "applepieBlock", block: c.ApplepieBlock, optional: true},
+		{name: "briocheBlock", block: c.BriocheBlock, optional: true},
 	} {
 		if lastFork.name != "" {
 			// Next one must be higher number
@@ -764,6 +768,15 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 	}
 	if isForkIncompatible(c.MergeForkBlock, newcfg.MergeForkBlock, head) {
 		return newCompatError("Merge Start fork block", c.MergeForkBlock, newcfg.MergeForkBlock)
+	}
+	if isForkIncompatible(c.PangyoBlock, newcfg.PangyoBlock, head) {
+		return newCompatError("Pangyo fork block", c.PangyoBlock, newcfg.PangyoBlock)
+	}
+	if isForkIncompatible(c.ApplepieBlock, newcfg.ApplepieBlock, head) {
+		return newCompatError("Applepie fork block", c.ApplepieBlock, newcfg.ApplepieBlock)
+	}
+	if isForkIncompatible(c.BriocheBlock, newcfg.BriocheBlock, head) {
+		return newCompatError("Brioche fork block", c.BriocheBlock, newcfg.BriocheBlock)
 	}
 	return nil
 }
