@@ -35,6 +35,7 @@ var (
 	RinkebyGenesisHash      = common.HexToHash("0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177")
 	GoerliGenesisHash       = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
 	KilnGenesisHash         = common.HexToHash("0x51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8")
+	LocalPrivateHash        = common.HexToHash("0x288ae65911434238a06c2630ebcee93977c4e209fb7566542f2124ad6cf86536") // modify it for your local chain
 )
 
 // TrustedCheckpoints associates each known checkpoint with the genesis hash of
@@ -197,6 +198,35 @@ var (
 			HalvingPeriod:     big.NewInt(63_115_200),
 			FinishRewardBlock: big.NewInt(1_000_000_000), // TODO fix last reward block
 			HalvingTimes:      16,
+			HalvingRate:       50,
+		},
+	}
+
+	WemixPrivateChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(1111),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		PangyoBlock:         big.NewInt(0),
+		ApplepieBlock:       big.NewInt(4600),
+		BriocheBlock:        big.NewInt(4600),
+		Ethash:              new(EthashConfig),
+		Brioche: &BriocheConfig{
+			BlockReward:       big.NewInt(1e17),
+			FirstHalvingBlock: big.NewInt(4700),
+			HalvingPeriod:     big.NewInt(10),
+			FinishRewardBlock: big.NewInt(4900), // TODO fix last reward block
+			HalvingTimes:      10,
 			HalvingRate:       50,
 		},
 	}
