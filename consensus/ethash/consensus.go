@@ -698,7 +698,7 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		}
 		state.AddBalance(header.Coinbase, reward)
 	} else {
-		_, rewards, err := wemixminer.CalculateRewards(
+		rewards, err := wemixminer.CalculateRewards(
 			config, header.Number, header.Fees,
 			func(addr common.Address, amt *big.Int) {
 				state.AddBalance(addr, amt)

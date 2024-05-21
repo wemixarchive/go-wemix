@@ -179,8 +179,8 @@ func TestDistributeRewards(t *testing.T) {
 	}
 }
 
-func makeCalculateRewardFunc(rp *rewardParameters) func(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
-	return func(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
+func makeCalculateRewardFunc(rp *rewardParameters) func(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+	return func(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
 		return calculateRewardsWithParams(config, rp, num, fees, addBalance)
 	}
 }

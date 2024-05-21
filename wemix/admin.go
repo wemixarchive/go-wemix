@@ -1147,7 +1147,7 @@ func distributeRewards(height *big.Int, rp *rewardParameters, blockReward *big.I
 	return rewards, nil
 }
 
-func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (coinbase *common.Address, rewards []byte, err error) {
+func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (rewards []byte, err error) {
 	if (rp.staker == nil && rp.ecoSystem == nil && rp.maintenance == nil) || len(rp.members) == 0 {
 		// handle testnet block 94 rewards
 		if rewards94 := handleBlock94Rewards(num, rp, fees); rewards94 != nil {
@@ -1161,13 +1161,6 @@ func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters
 		}
 		err = wemixminer.ErrNotInitialized
 		return
-	}
-
-	// determine coinbase
-	if len(rp.members) > 0 {
-		mix := int(num.Int64()/rp.blocksPer) % len(rp.members)
-		coinbase = &common.Address{}
-		coinbase.SetBytes(rp.members[mix].Reward.Bytes())
 	}
 
 	var blockReward *big.Int
@@ -1200,7 +1193,7 @@ func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters
 	return
 }
 
-func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
+func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1208,7 +1201,7 @@ func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance
 	if err != nil {
 		// all goes to the coinbase
 		err = wemixminer.ErrNotInitialized
-		return nil, nil, err
+		return nil, err
 	}
 
 	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
