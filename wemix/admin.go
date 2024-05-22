@@ -1168,7 +1168,7 @@ func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters
 		blockReward = config.Brioche.GetBriocheBlockReward(defaultBriocheBlockReward, num)
 	} else {
 		// if the wemix chain is not on brioche hard fork, use the `rewardAmount` from gov contract
-		blockReward = big.NewInt(0).Set(rp.rewardAmount)
+		blockReward = new(big.Int).Set(rp.rewardAmount)
 	}
 
 	// block reward
