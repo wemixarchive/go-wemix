@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
 )
 
@@ -56,14 +57,6 @@ func DeployGovContracts(opts *bind.TransactOpts, backend interface {
 	gov := new(GovContracts)
 	contractAddresses := make(map[common.Hash]common.Address)
 	txs := make([]*types.Transaction, 0)
-	// deploy registry
-	if address, tx, contract, err := DeployRegistry(opts, backend); err != nil {
-		return nil, err
-	} else {
-		txs = append(txs, tx)
-		contractAddresses[tx.Hash()] = address
-		gov.Registry = &Contract[Registry]{contract, address}
-	}
 	// deploy imps
 	if address, tx, contract, err := DeployGovImp(opts, backend); err != nil {
 		return nil, err
@@ -99,7 +92,17 @@ func DeployGovContracts(opts *bind.TransactOpts, backend interface {
 		contractAddresses[tx.Hash()] = address
 		gov.EnvStorageImp = &Contract[EnvStorageImp]{contract, address}
 	}
+	for _, tx := range txs {
+		address, err := bind.WaitDeployed(context.TODO(), backend, tx)
+		if err != nil {
+			return nil, err
+		}
+		if contractAddresses[tx.Hash()] != address {
+			return nil, errors.New("deployed error")
+		}
+	}
 	// deploy proxys
+	txs = make([]*types.Transaction, 0)
 	if address, tx, contract, err := DeployGov(opts, backend, gov.GovImp.Address()); err != nil {
 		return nil, err
 	} else {
@@ -131,14 +134,23 @@ func DeployGovContracts(opts *bind.TransactOpts, backend interface {
 		contractAddresses[tx.Hash()] = address
 		gov.EnvStorage = &Contract[EnvStorage]{contract, address}
 	}
+	// deploy registry
+	if address, tx, contract, err := DeployRegistry(opts, backend); err != nil {
+		return nil, err
+	} else {
+		txs = append(txs, tx)
+		contractAddresses[tx.Hash()] = address
+		gov.Registry = &Contract[Registry]{contract, address}
+	}
+
 	// check deployed contracts
 	for _, tx := range txs {
-		actural, err := bind.WaitDeployed(opts.Context, backend, tx)
+		address, err := bind.WaitDeployed(opts.Context, backend, tx)
 		if err != nil {
 			return nil, err
 		}
-		if contractAddresses[tx.Hash()] != actural {
-
+		if !bytes.Equal(contractAddresses[tx.Hash()].Bytes(), address.Bytes()) {
+			return nil, errors.New("deployed error")
 		}
 	}
 
@@ -170,19 +182,92 @@ func DeployGovContracts(opts *bind.TransactOpts, backend interface {
 			return nil, err
 		}
 		if receipt.Status != types.ReceiptStatusSuccessful {
-			return nil, errors.New("")
+			return nil, errors.New("reverted SetContractDomain")
 		}
 	}
 	return gov, nil
 }
 
-func GetGovContractsByOwner(opts *bind.CallOpts, backend bind.ContractBackend, owner common.Address) (*GovContracts, error) {
-	gov := new(GovContracts)
-	registry, err := GetRegistryByOwner(opts, backend, owner)
-	if err != nil {
+func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts,
+	backend interface {
+		bind.ContractBackend
+		bind.DeployBackend
+	},
+	envConfig *EnvInitializeConfig,
+	govInit func(Gov IGovInitFuncs) (*types.Transaction, error),
+) (*GovContracts, error) {
+	contracts := new(GovContracts)
+	if err := gov.Copy(contracts, backend); err != nil {
 		return nil, err
 	}
-	return gov, gov.Init(opts, backend, registry)
+
+	if !bytes.Equal(contracts.Gov.address[:], contracts.GovImp.address[:]) ||
+		!bytes.Equal(contracts.Staking.address[:], contracts.StakingImp.address[:]) ||
+		!bytes.Equal(contracts.BallotStorage.address[:], contracts.BallotStorageImp.address[:]) ||
+		!bytes.Equal(contracts.EnvStorage.address[:], contracts.EnvStorageImp.address[:]) {
+		if err := contracts.Init(new(bind.CallOpts), backend, contracts.Registry); err != nil {
+			return nil, err
+		}
+	}
+
+	waitMined := func(txs ...*types.Transaction) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 5e9)
+		defer cancel()
+		for _, tx := range txs {
+			receipt, err := bind.WaitMined(ctx, backend, tx)
+			if err != nil {
+				return err
+			}
+			if receipt.Status != types.ReceiptStatusSuccessful {
+				return errors.New("execute reverted")
+			}
+		}
+		return nil
+	}
+
+	txs := make([]*types.Transaction, 0)
+	if tx, err := contracts.StakingImp.Funcs.Init(opts, contracts.Registry.Address(), []byte{}); err != nil {
+		return nil, err
+	} else {
+		txs = append(txs, tx)
+	}
+	if tx, err := contracts.BallotStorageImp.Funcs.Initialize(opts, contracts.Registry.Address()); err != nil {
+		return nil, err
+	} else {
+		txs = append(txs, tx)
+	}
+	envNames, envValues := envConfig.Args()
+	if tx, err := contracts.EnvStorageImp.Funcs.Initialize(opts, contracts.Registry.Address(), envNames, envValues); err != nil {
+		return nil, err
+	} else {
+		txs = append(txs, tx)
+	}
+	if err := waitMined(txs...); err != nil {
+		return nil, err
+	}
+
+	opts.Value = envConfig.STAKING_MIN
+	if tx, err := contracts.StakingImp.Funcs.Deposit(opts); err != nil {
+		return nil, err
+	} else if err := waitMined(tx); err != nil {
+		return nil, err
+	}
+	opts.Value = nil
+
+	if tx, err := govInit(contracts.GovImp.Funcs); err != nil {
+		return nil, err
+	} else if tx != nil {
+		if err := waitMined(tx); err != nil {
+			return nil, err
+		}
+	}
+	return contracts, nil
+}
+
+type IGovInitFuncs interface {
+	Init(opts *bind.TransactOpts, registry common.Address, lockAmount *big.Int, name []byte, enode []byte, ip []byte, port *big.Int) (*types.Transaction, error)
+	InitOnce(opts *bind.TransactOpts, registry common.Address, lockAmount *big.Int, data []byte) (*types.Transaction, error)
+	InitMigration(opts *bind.TransactOpts, registry common.Address, oldModifiedBlock *big.Int, oldOwner common.Address) (*types.Transaction, error)
 }
 
 func (gov *GovContracts) Init(opts *bind.CallOpts, backend bind.ContractBackend, registry *Contract[Registry]) error {
@@ -314,7 +399,16 @@ func GetRegistryByOwner(opts *bind.CallOpts, backend bind.ContractBackend, owner
 	return nil, ethereum.NotFound
 }
 
-// TODO 이게 필요하지 않을까...?
+func GetGovContractsByOwner(opts *bind.CallOpts, backend bind.ContractBackend, owner common.Address) (*GovContracts, error) {
+	gov := new(GovContracts)
+	registry, err := GetRegistryByOwner(opts, backend, owner)
+	if err != nil {
+		return nil, err
+	}
+	return gov, gov.Init(opts, backend, registry)
+}
+
+// XXX 이게 필요하지 않을까...?
 func GetRegistryByAddress(opts *bind.CallOpts, backend bind.ContractBackend, address common.Address) (*Contract[Registry], error) {
 	if registry, err := NewRegistry(address, backend); err != nil {
 		return nil, err
@@ -325,4 +419,131 @@ func GetRegistryByAddress(opts *bind.CallOpts, backend bind.ContractBackend, add
 	} else {
 		return nil, ethereum.NotFound
 	}
+}
+
+// //////////////////////
+// EnvInitializeConfig //
+// //////////////////////
+
+type EnvInitializeConfig struct {
+	BLOCKS_PER                               *big.Int
+	BALLOT_DURATION_MIN                      *big.Int
+	BALLOT_DURATION_MAX                      *big.Int
+	STAKING_MIN                              *big.Int
+	STAKING_MAX                              *big.Int
+	MAX_IDLE_BLOCK_INTERVAL                  *big.Int
+	BLOCK_CREATION_TIME                      *big.Int
+	BLOCK_REWARD_AMOUNT                      *big.Int
+	MAX_PRIORITY_FEE_PER_GAS                 *big.Int
+	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER *big.Int
+	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD *big.Int
+	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM      *big.Int
+	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE    *big.Int
+	MAX_BASE_FEE                             *big.Int
+	BLOCK_GASLIMIT                           *big.Int
+	BASE_FEE_MAX_CHANGE_RATE                 *big.Int
+	GAS_TARGET_PERCENTAGE                    *big.Int
+	Options                                  map[string]*big.Int
+}
+
+func (cfg *EnvInitializeConfig) Args() (names [][32]byte, values []*big.Int) {
+	names = make([][32]byte, 0)
+	values = make([]*big.Int, 0)
+	if value := cfg.BLOCKS_PER; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("blocksPer")))
+		values = append(values, value)
+	}
+	if value := cfg.BALLOT_DURATION_MIN; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("ballotDurationMin")))
+		values = append(values, value)
+	}
+	if value := cfg.BALLOT_DURATION_MAX; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("ballotDurationMax")))
+		values = append(values, value)
+	}
+	if value := cfg.STAKING_MIN; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("stakingMin")))
+		values = append(values, value)
+	}
+	if value := cfg.STAKING_MAX; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("stakingMax")))
+		values = append(values, value)
+	}
+	if value := cfg.MAX_IDLE_BLOCK_INTERVAL; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("MaxIdleBlockInterval")))
+		values = append(values, value)
+	}
+	if value := cfg.BLOCK_CREATION_TIME; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("blockCreationTime")))
+		values = append(values, value)
+	}
+	if value := cfg.BLOCK_REWARD_AMOUNT; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("blockRewardAmount")))
+		values = append(values, value)
+	}
+	if value := cfg.MAX_PRIORITY_FEE_PER_GAS; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("maxPriorityFeePerGas")))
+		values = append(values, value)
+	}
+	if value := cfg.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("blockRewardDistributionBlockProducer")))
+		values = append(values, value)
+	}
+	if value := cfg.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("blockRewardDistributionStakingReward")))
+		values = append(values, value)
+	}
+	if value := cfg.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("blockRewardDistributionEcosystem")))
+		values = append(values, value)
+	}
+	if value := cfg.BLOCK_REWARD_DISTRIBUTION_MAINTANANCE; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("blockRewardDistributionMaintenance")))
+		values = append(values, value)
+	}
+	if value := cfg.MAX_BASE_FEE; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("maxBaseFee")))
+		values = append(values, value)
+	}
+	if value := cfg.BLOCK_GASLIMIT; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("blockGasLimit")))
+		values = append(values, value)
+	}
+	if value := cfg.BASE_FEE_MAX_CHANGE_RATE; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("baseFeeMaxChangeRate")))
+		values = append(values, value)
+	}
+	if value := cfg.GAS_TARGET_PERCENTAGE; value != nil && value.Sign() > 0 {
+		names = append(names, crypto.Keccak256Hash([]byte("gasTargetPercentage")))
+		values = append(values, value)
+	}
+	for key, value := range cfg.Options {
+		if value != nil && value.Sign() > 0 {
+			names = append(names, crypto.Keccak256Hash([]byte(key)))
+			values = append(values, value)
+		}
+	}
+
+	return
+}
+
+var DefaultEnvInitializeConfig EnvInitializeConfig = EnvInitializeConfig{
+	BLOCKS_PER:                               big.NewInt(1),
+	BALLOT_DURATION_MIN:                      big.NewInt(86400),
+	BALLOT_DURATION_MAX:                      big.NewInt(604800),
+	STAKING_MIN:                              new(big.Int).Mul(big.NewInt(1500000), big.NewInt(params.Ether)),
+	STAKING_MAX:                              new(big.Int).Mul(big.NewInt(1500000), big.NewInt(params.Ether)),
+	MAX_IDLE_BLOCK_INTERVAL:                  big.NewInt(5),
+	BLOCK_CREATION_TIME:                      big.NewInt(1000),
+	BLOCK_REWARD_AMOUNT:                      new(big.Int).Mul(big.NewInt(1), big.NewInt(params.Ether)),
+	MAX_PRIORITY_FEE_PER_GAS:                 new(big.Int).Mul(big.NewInt(100), big.NewInt(params.GWei)),
+	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: big.NewInt(4000),
+	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: big.NewInt(1000),
+	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      big.NewInt(2500),
+	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    big.NewInt(2500),
+	MAX_BASE_FEE:                             new(big.Int).Mul(big.NewInt(5000), big.NewInt(params.GWei)),
+	BLOCK_GASLIMIT:                           big.NewInt(1050000000),
+	BASE_FEE_MAX_CHANGE_RATE:                 big.NewInt(46),
+	GAS_TARGET_PERCENTAGE:                    big.NewInt(30),
+	Options:                                  make(map[string]*big.Int),
 }

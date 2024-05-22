@@ -19,6 +19,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -187,7 +188,6 @@ func (ma *wemixAdmin) getGenesisInfo() (string, common.Address, error) {
 	if err != nil {
 		return "", common.Address{}, err
 	}
-
 	var nodeId string
 	if len(block.Extra) < 64 {
 		return "", common.Address{}, fmt.Errorf("Invalid bootnode id in the genesis block")
@@ -551,7 +551,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 	}
 	admin.contracts, err = admin.getRegGovEnvContracts(nil, nil)
 	if err != nil {
-		return
+		// return
 	}
 
 	go admin.run()
@@ -586,7 +586,7 @@ func (ma *wemixAdmin) addPeer(node *wemixNode) error {
 }
 
 func (ma *wemixAdmin) update() {
-	if ma.contracts.Registry == nil {
+	if ma.contracts == nil || ma.contracts.Registry == nil {
 		return
 	}
 
@@ -1039,11 +1039,10 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 	num := new(big.Int).Sub(height, common.Big1)
 	contracts, err := admin.getRegGovEnvContracts(ctx, num)
 	if err != nil {
-		return err == wemixminer.ErrNotInitialized
+		return err == wemixminer.ErrNotInitialized || err == ethereum.NotFound
 	} else if count, err := contracts.GovImp.Funcs.GetMemberLength(&bind.CallOpts{Context: ctx, BlockNumber: num}); err != nil || count.Sign() == 0 {
 		return err == wemixminer.ErrNotInitialized || count.Sign() == 0
 	}
-
 	gov := contracts.GovImp.Funcs
 	// if minerNodeId is given, i.e. present in block header, use it,
 	// otherwise, derive it from the codebase
@@ -1174,7 +1173,7 @@ func (ma *wemixAdmin) pendingEmpty() bool {
 
 func suggestGasPrice() *big.Int {
 	defaultFee := big.NewInt(100 * params.GWei)
-	if admin == nil || admin.contracts.EnvStorageImp == nil {
+	if admin == nil || admin.contracts == nil || admin.contracts.EnvStorageImp == nil {
 		return defaultFee
 	}
 	fee, err := admin.contracts.EnvStorageImp.Funcs.GetMaxPriorityFeePerGas(nil)
