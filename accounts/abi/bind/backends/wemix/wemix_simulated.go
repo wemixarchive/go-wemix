@@ -75,6 +75,7 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 	ethConfig.SyncMode = downloader.FullSync
 	ethConfig.TxPool.NoLocals = true
 	ethConfig.Ethash = ethash.Config{PowMode: ethash.ModeFake, Log: log.Root()}
+	ethConfig.NoPruning = true
 	envConfig := gov.DefaultEnvInitializeConfig
 
 	for _, option := range options {
