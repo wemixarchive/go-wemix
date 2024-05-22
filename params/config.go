@@ -471,6 +471,17 @@ func (bc *BriocheConfig) calcHalvedReward(baseReward *big.Int, num *big.Int) *bi
 	return reward.Div(reward.Mul(reward, numerator), denominator)
 }
 
+func (bc *BriocheConfig) String() string {
+	return fmt.Sprintf("{BlockReward: %v FirstHalvingBlock: %v HalvingPeriod: %v FinishRewardBlock: %v HalvingTimes: %v HalvingRate: %v}",
+		bc.BlockReward,
+		bc.FirstHalvingBlock,
+		bc.HalvingPeriod,
+		bc.FinishRewardBlock,
+		bc.HalvingTimes,
+		bc.HalvingRate,
+	)
+}
+
 // String implements the stringer interface, returning the consensus engine details.
 func (c *EthashConfig) String() string {
 	return "ethash"
