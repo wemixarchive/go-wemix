@@ -700,7 +700,7 @@ type HalvingInfo struct {
 
 func (api *BriocheConfigAPI) HalvingSchedule() []*HalvingInfo {
 	bc := api.BriocheConfig()
-	if bc.FirstHalvingBlock == nil || bc.HalvingPeriod == nil {
+	if bc.FirstHalvingBlock == nil || bc.HalvingPeriod == nil || bc.HalvingTimes == 0 {
 		return nil
 	}
 
