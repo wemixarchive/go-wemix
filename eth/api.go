@@ -705,7 +705,7 @@ func (api *BriocheConfigAPI) HalvingSchedule() []*HalvingInfo {
 	}
 
 	result := make([]*HalvingInfo, 0)
-	for i := uint64(1); i <= bc.HalvingTimes; i++ {
+	for i := uint64(0); i < bc.HalvingTimes; i++ {
 		startBlock := new(big.Int).Add(bc.FirstHalvingBlock, new(big.Int).Mul(bc.HalvingPeriod, new(big.Int).SetUint64(i)))
 		result = append(result, &HalvingInfo{
 			HalvingTimes: i + 1,
@@ -727,7 +727,7 @@ func (api *BriocheConfigAPI) GetBriocheBlockReward(height *big.Int) *big.Int {
 	wemixInfo := *(wemixapi.Info().(*map[string]interface{}))
 
 	if height == nil {
-		height = api.e.blockchain.CurrentHeader().Number
+		height = api.e.BlockChain().CurrentHeader().Number
 	}
 
 	if config.IsBrioche(height) {
