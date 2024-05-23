@@ -64,6 +64,9 @@ RUN apt-get install -y --no-install-recommends \
 # Create directories for wemix
 RUN mkdir -p /usr/local/wemix /usr/local/wemix/keystore
 
+# Set environment variables
+ENV PATH=/usr/local/wemix/bin:$PATH
+
 # Copy the built binaries and configuration files from the builder stage
 COPY --from=builder /go-wemix/build /usr/local/wemix/
 
@@ -85,8 +88,7 @@ RUN apt-get remove -y \
     apt-get clean
 
 # Expose necessary ports
-EXPOSE 10009
-EXPOSE 10010
+EXPOSE 8588 8589 8598
 
 # Set the entrypoint
 ENTRYPOINT ["/usr/local/wemix/bin/gwemix"]
