@@ -680,37 +680,59 @@ func (api *PrivateDebugAPI) GetAccessibleState(from, to rpc.BlockNumber) (uint64
 }
 
 type BriocheConfigAPI struct {
-	cfg *params.BriocheConfig
+	e *Ethereum
 }
 
-func NewBriocheConfigAPI(cfg *params.BriocheConfig) *BriocheConfigAPI {
-	return &BriocheConfigAPI{cfg}
+func NewBriocheConfigAPI(e *Ethereum) *BriocheConfigAPI {
+	return &BriocheConfigAPI{e}
 }
 
-func (api *BriocheConfigAPI) BlockReward() *big.Int {
-	return api.cfg.BlockReward
+func (api *BriocheConfigAPI) BriocheConfig() *params.BriocheConfig {
+	return api.e.BlockChain().Config().Brioche
 }
 
-func (api *BriocheConfigAPI) FirstHalvingBlock() *big.Int {
-	return api.cfg.FirstHalvingBlock
+type HalvingInfo struct {
+	HalvingTimes uint64   `json:"halvingTimes"`
+	StartBlock   *big.Int `json:"startBlock"`
+	EndBlock     *big.Int `json:"endBlock"`
+	BlockReward  *big.Int `json:"blockReward"`
 }
 
-func (api *BriocheConfigAPI) HalvingPeriod() *big.Int {
-	return api.cfg.HalvingPeriod
+func (api *BriocheConfigAPI) HalvingSchedule() []*HalvingInfo {
+	bc := api.BriocheConfig()
+	if bc.FirstHalvingBlock == nil || bc.HalvingPeriod == nil {
+		return nil
+	}
+
+	result := make([]*HalvingInfo, 0)
+	for i := uint64(1); i <= bc.HalvingTimes; i++ {
+		startBlock := new(big.Int).Add(bc.FirstHalvingBlock, new(big.Int).Mul(bc.HalvingPeriod, new(big.Int).SetUint64(i)))
+		result = append(result, &HalvingInfo{
+			HalvingTimes: i + 1,
+			StartBlock:   startBlock,
+			EndBlock:     new(big.Int).Sub(new(big.Int).Add(startBlock, bc.HalvingPeriod), common.Big1),
+			BlockReward:  api.GetBriocheBlockReward(startBlock),
+		})
+	}
+	result[len(result)-1].EndBlock = bc.FinishRewardBlock
+
+	return result
 }
 
-func (api *BriocheConfigAPI) NoRewardHereafter() *big.Int {
-	return api.cfg.NoRewardHereafter
-}
+func (api *BriocheConfigAPI) GetBriocheBlockReward(height *big.Int) *big.Int {
+	if wemixapi.Info == nil {
+		return nil
+	}
+	config := api.e.BlockChain().Config()
+	wemixInfo := *(wemixapi.Info().(*map[string]interface{}))
 
-func (api *BriocheConfigAPI) HalvingTimes() uint64 {
-	return api.cfg.HalvingTimes
-}
+	if height == nil {
+		height = api.e.blockchain.CurrentHeader().Number
+	}
 
-func (api *BriocheConfigAPI) HalvingRate() uint32 {
-	return api.cfg.HalvingRate
-}
-
-func (api *BriocheConfigAPI) GetBriocheBlockReward(height *big.Int) (*big.Int, error) {
-	return api.cfg.GetBriocheBlockReward(api.cfg.BlockReward, height), nil
+	if config.IsBrioche(height) {
+		return config.Brioche.GetBriocheBlockReward(wemixInfo["defaultBriocheBlockReward"].(*big.Int), height)
+	} else {
+		return wemixInfo["blockReward"].(*big.Int)
+	}
 }

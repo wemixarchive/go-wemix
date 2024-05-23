@@ -296,7 +296,7 @@ func (s *Ethereum) APIs() []rpc.API {
 		apis = append(apis, rpc.API{
 			Namespace: "brioche",
 			Version:   "1.0",
-			Service:   NewBriocheConfigAPI(brioche),
+			Service:   NewBriocheConfigAPI(s),
 			Public:    true,
 		})
 	}
