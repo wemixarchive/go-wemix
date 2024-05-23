@@ -17,7 +17,6 @@ var (
 	IsPartnerFunc               func(string) bool
 	AmHubFunc                   func(string) int
 	CalculateRewardsFunc        func(*params.ChainConfig, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
-	VerifyRewardsFunc           func(*big.Int, string) error
 	GetCoinbaseFunc             func(height *big.Int) (coinbase common.Address, err error)
 	SignBlockFunc               func(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error)
 	VerifyBlockSigFunc          func(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool
@@ -84,14 +83,6 @@ func CalculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance
 		return nil, ErrNotInitialized
 	} else {
 		return CalculateRewardsFunc(config, num, fees, addBalance)
-	}
-}
-
-func VerifyRewards(num *big.Int, rewards string) error {
-	if VerifyRewardsFunc == nil {
-		return ErrNotInitialized
-	} else {
-		return VerifyRewardsFunc(num, rewards)
 	}
 }
 
