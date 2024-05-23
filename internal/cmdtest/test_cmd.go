@@ -27,12 +27,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"text/template"
 	"time"
 
 	"github.com/docker/docker/pkg/reexec"
+	"golang.org/x/sys/unix"
 )
 
 func NewTestCmd(t *testing.T, data interface{}) *TestCmd {
@@ -208,7 +208,7 @@ func (tt *TestCmd) ExitStatus() int {
 	if tt.Err != nil {
 		exitErr := tt.Err.(*exec.ExitError)
 		if exitErr != nil {
-			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+			if status, ok := exitErr.Sys().(unix.WaitStatus); ok {
 				return status.ExitStatus()
 			}
 		}

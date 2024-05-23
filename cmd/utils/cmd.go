@@ -27,7 +27,6 @@ import (
 	"os/signal"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -41,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rlp"
+	"golang.org/x/sys/unix"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -74,7 +74,7 @@ func StartNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
 	}
 	go func() {
 		sigc := make(chan os.Signal, 1)
-		signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+		signal.Notify(sigc, unix.SIGINT, unix.SIGTERM)
 		defer signal.Stop(sigc)
 
 		minFreeDiskSpace := 2 * ethconfig.Defaults.TrieDirtyCache // Default 2 * 256Mb
@@ -105,7 +105,7 @@ func StartNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
 			// However, SIGTERM still shuts down the node.
 			for {
 				sig := <-sigc
-				if sig == syscall.SIGTERM {
+				if sig == unix.SIGTERM {
 					shutdown()
 					return
 				}
@@ -126,7 +126,7 @@ func monitorFreeDiskSpace(sigc chan os.Signal, path string, freeDiskSpaceCritica
 		}
 		if freeSpace < freeDiskSpaceCritical {
 			log.Error("Low disk space. Gracefully shutting down Geth to prevent database corruption.", "available", common.StorageSize(freeSpace))
-			sigc <- syscall.SIGTERM
+			sigc <- unix.SIGTERM
 			break
 		} else if freeSpace < 2*freeDiskSpaceCritical {
 			log.Warn("Disk space is running low. Geth will shutdown if disk space runs below critical level.", "available", common.StorageSize(freeSpace), "critical_level", common.StorageSize(freeDiskSpaceCritical))
@@ -140,7 +140,7 @@ func ImportChain(chain *core.BlockChain, fn string) error {
 	// If a signal is received, the import will stop at the next batch.
 	interrupt := make(chan os.Signal, 1)
 	stop := make(chan struct{})
-	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(interrupt, unix.SIGINT, unix.SIGTERM)
 	defer signal.Stop(interrupt)
 	defer close(interrupt)
 	go func() {
