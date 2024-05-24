@@ -22,10 +22,11 @@ package netutil
 import (
 	"net"
 	"os"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
-const _WSAEMSGSIZE = syscall.Errno(10040)
+const _WSAEMSGSIZE = unix.Errno(10040)
 
 // isPacketTooBig reports whether err indicates that a UDP packet didn't
 // fit the receive buffer. On Windows, WSARecvFrom returns

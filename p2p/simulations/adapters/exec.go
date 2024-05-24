@@ -31,7 +31,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/docker/docker/pkg/reexec"
@@ -41,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/gorilla/websocket"
+	"golang.org/x/sys/unix"
 )
 
 func init() {
@@ -295,7 +295,7 @@ func (n *ExecNode) Stop() error {
 		n.Info = nil
 	}
 
-	if err := n.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := n.Cmd.Process.Signal(unix.SIGTERM); err != nil {
 		return n.Cmd.Process.Kill()
 	}
 	waitErr := make(chan error, 1)
@@ -438,7 +438,7 @@ func execP2PNode() {
 	// Stop the stack if we get a SIGTERM signal.
 	go func() {
 		sigc := make(chan os.Signal, 1)
-		signal.Notify(sigc, syscall.SIGTERM)
+		signal.Notify(sigc, unix.SIGTERM)
 		defer signal.Stop(sigc)
 		<-sigc
 		log.Info("Received SIGTERM, shutting down...")
