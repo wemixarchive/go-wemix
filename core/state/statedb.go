@@ -850,8 +850,10 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// Now we're about to start to write changes to the trie. The trie is so far
 	// _untouched_. We can check with the prefetcher, if it can give us a trie
 	// which has the same root, but also has some content loaded into it.
+	check := false // XXX FELIX
 	if prefetcher != nil {
 		if trie := prefetcher.trie(s.originalRoot); trie != nil {
+			check = true // XXX FELIX
 			s.trie = trie
 		}
 	}
@@ -869,6 +871,10 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	if prefetcher != nil {
 		prefetcher.used(s.originalRoot, usedAddrs)
 	}
+	//* XXX FELIX
+	result := s.trie.Hash()
+	fmt.Println("\n\n", "@@@", 3, "IntermediateRoot", s.stateObjectsPending, "\n", check, result.Hex())
+	//*/
 	if len(s.stateObjectsPending) > 0 {
 		s.stateObjectsPending = make(map[common.Address]struct{})
 	}
@@ -876,7 +882,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	if metrics.EnabledExpensive {
 		defer func(start time.Time) { s.AccountHashes += time.Since(start) }(time.Now())
 	}
-	return s.trie.Hash()
+	return result // s.trie.Hash() XXX FELIX
 }
 
 // Prepare sets the current transaction hash and index which are

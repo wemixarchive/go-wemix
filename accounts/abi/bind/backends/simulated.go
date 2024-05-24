@@ -77,19 +77,12 @@ func NewSimulatedBackendWithEthereum(e *eth.Ethereum) *SimulatedBackend {
 	database := e.ChainDb()
 	blockchain := e.BlockChain()
 
-	// statedb, err := state.New(blockchain.CurrentHeader().Hash(), state.NewDatabase(database), nil)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
 	backend := &SimulatedBackend{
 		database:   database,
 		blockchain: blockchain,
 		config:     blockchain.Config(),
-		// pendingState: statedb,
-		events: filters.NewEventSystem(&filterBackend{database, blockchain}, false),
+		events:     filters.NewEventSystem(&filterBackend{database, blockchain}, false),
 	}
-	// XXX TODO
 	backend.rollback(blockchain.CurrentBlock())
 	return backend
 }
@@ -130,10 +123,11 @@ func (b *SimulatedBackend) Close() error {
 func (b *SimulatedBackend) Commit() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
+	fmt.Println("@@@", "InsertChain")
 	if _, err := b.blockchain.InsertChain([]*types.Block{b.pendingBlock}); err != nil {
 		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
 	}
+	fmt.Println("@@@", "rollback")
 	// Using the last inserted block here makes it possible to build on a side
 	// chain after a fork.
 	b.rollback(b.pendingBlock)
@@ -149,7 +143,6 @@ func (b *SimulatedBackend) Rollback() {
 
 func (b *SimulatedBackend) rollback(parent *types.Block) {
 	blocks, _ := core.GenerateChain(b.config, parent, ethash.NewFaker(), b.database, 1, func(int, *core.BlockGen) {})
-
 	b.pendingBlock = blocks[0]
 	b.pendingState, _ = state.New(b.pendingBlock.Root(), b.blockchain.StateCache(), nil)
 }
@@ -683,6 +676,7 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 	if tx.Nonce() != nonce {
 		return fmt.Errorf("invalid transaction nonce: got %d, want %d", tx.Nonce(), nonce)
 	}
+	fmt.Println("@@@", "GenerateChain")
 	// Include tx in chain
 	blocks, _ := core.GenerateChain(b.config, block, ethash.NewFaker(), b.database, 1, func(number int, block *core.BlockGen) {
 		for _, tx := range b.pendingBlock.Transactions() {

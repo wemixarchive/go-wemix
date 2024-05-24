@@ -176,6 +176,16 @@ func DeployGovContracts(opts *bind.TransactOpts, backend interface {
 	} else {
 		txs = append(txs, tx)
 	}
+	if tx, err := gov.Registry.Funcs.SetContractDomain(opts, metclient.ToBytes32("StakingReward"), opts.From); err != nil {
+		return nil, err
+	} else {
+		txs = append(txs, tx)
+	}
+	if tx, err := gov.Registry.Funcs.SetContractDomain(opts, metclient.ToBytes32("Ecosystem"), opts.From); err != nil {
+		return nil, err
+	} else {
+		txs = append(txs, tx)
+	}
 	for _, tx := range txs {
 		receipt, err := bind.WaitMined(opts.Context, backend, tx)
 		if err != nil {

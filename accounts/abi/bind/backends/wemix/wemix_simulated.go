@@ -3,6 +3,7 @@ package wemix_backends
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/hex"
 	"errors"
 	"math/big"
 	"path/filepath"
@@ -43,6 +44,7 @@ type SimClient interface {
 	ethereum.TransactionSender
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
 	GovContracts() *gov.GovContracts
+	Commit()
 }
 
 var ChainID = params.AllEthashProtocolChanges.ChainID
@@ -87,8 +89,8 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 		return nil, err
 	}
 
-	extraData := "0x" + strings.Split(strings.TrimLeft(stack.Server().NodeInfo().Enode, "enode://"), "@")[0]
-	ethConfig.Genesis.ExtraData = append(ethConfig.Genesis.ExtraData, []byte(extraData)...)
+	extraData := strings.Split(strings.TrimLeft(stack.Server().NodeInfo().Enode, "enode://"), "@")[0]
+	ethConfig.Genesis.ExtraData = append(ethConfig.Genesis.ExtraData, []byte("0x"+extraData)...)
 	ethConfig.NetworkId = ethConfig.Genesis.Config.ChainID.Uint64()
 
 	backend, err := eth.New(stack, &ethConfig)
@@ -117,9 +119,13 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 	if err := backend.StartMining(1); err != nil {
 		return nil, err
 	}
-
+	sleepCount := 0
 	for backend.APIBackend.CurrentBlock().NumberU64() == 0 {
-		time.Sleep(0.1e9)
+		sleepCount++
+		if sleepCount > 10 {
+			return nil, errors.New("mining error")
+		}
+		time.Sleep(0.2e9)
 	}
 
 	rpcClient, err := stack.Attach()
@@ -140,7 +146,11 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 
 	contracts, err = gov.ExecuteInitialize(contracts, opts, ethClient, &envConfig, func(Gov gov.IGovInitFuncs) (*types.Transaction, error) {
 		nodeInfo := stack.Server().NodeInfo()
-		return Gov.Init(opts, contracts.Registry.Address(), envConfig.STAKING_MIN, []byte(nodeInfo.Name), []byte(nodeInfo.Enode), []byte(nodeInfo.IP), big.NewInt(8589))
+		if enode, err := hex.DecodeString(extraData); err != nil {
+			return nil, err
+		} else {
+			return Gov.Init(opts, contracts.Registry.Address(), envConfig.STAKING_MIN, []byte(nodeInfo.Name), enode, []byte(nodeInfo.IP), big.NewInt(8589))
+		}
 	})
 	if err != nil {
 		return nil, err
@@ -227,6 +237,9 @@ func (w *wemixSimulatedBackend) TransactionReceipt(ctx context.Context, txHash c
 }
 func (w *wemixSimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transaction) error {
 	return w.backend.SendTransaction(ctx, tx)
+}
+func (w *wemixSimulatedBackend) Commit() {
+	w.backend.Commit()
 }
 func (w *wemixSimulatedBackend) GovContracts() *gov.GovContracts {
 	return w.governance
