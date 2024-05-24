@@ -294,9 +294,9 @@ func (s *Ethereum) APIs() []rpc.API {
 
 	if brioche := s.blockchain.Config().Brioche; brioche != nil {
 		apis = append(apis, rpc.API{
-			Namespace: "brioche",
+			Namespace: "wemix",
 			Version:   "1.0",
-			Service:   NewBriocheConfigAPI(s),
+			Service:   NewPublicWemixAPI(s),
 			Public:    true,
 		})
 	}

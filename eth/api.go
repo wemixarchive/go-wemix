@@ -679,15 +679,15 @@ func (api *PrivateDebugAPI) GetAccessibleState(from, to rpc.BlockNumber) (uint64
 	return 0, fmt.Errorf("No state found")
 }
 
-type BriocheConfigAPI struct {
+type PublicWemixAPI struct {
 	e *Ethereum
 }
 
-func NewBriocheConfigAPI(e *Ethereum) *BriocheConfigAPI {
-	return &BriocheConfigAPI{e}
+func NewPublicWemixAPI(e *Ethereum) *PublicWemixAPI {
+	return &PublicWemixAPI{e}
 }
 
-func (api *BriocheConfigAPI) BriocheConfig() *params.BriocheConfig {
+func (api *PublicWemixAPI) BriocheConfig() *params.BriocheConfig {
 	return api.e.BlockChain().Config().Brioche
 }
 
@@ -698,15 +698,23 @@ type HalvingInfo struct {
 	BlockReward  *big.Int `json:"blockReward"`
 }
 
-func (api *BriocheConfigAPI) HalvingSchedule() []*HalvingInfo {
+func (api *PublicWemixAPI) HalvingSchedule() []*HalvingInfo {
 	bc := api.BriocheConfig()
 	if bc.FirstHalvingBlock == nil || bc.HalvingPeriod == nil || bc.HalvingTimes == 0 {
 		return nil
 	}
 
+	var lastRewardBlock *big.Int
+	if bc.FinishRewardBlock != nil {
+		lastRewardBlock = new(big.Int).Sub(bc.FinishRewardBlock, common.Big1)
+	}
+
 	result := make([]*HalvingInfo, 0)
 	for i := uint64(0); i < bc.HalvingTimes; i++ {
 		startBlock := new(big.Int).Add(bc.FirstHalvingBlock, new(big.Int).Mul(bc.HalvingPeriod, new(big.Int).SetUint64(i)))
+		if lastRewardBlock != nil && startBlock.Cmp(lastRewardBlock) == 1 {
+			break
+		}
 		result = append(result, &HalvingInfo{
 			HalvingTimes: i + 1,
 			StartBlock:   startBlock,
@@ -714,12 +722,13 @@ func (api *BriocheConfigAPI) HalvingSchedule() []*HalvingInfo {
 			BlockReward:  api.GetBriocheBlockReward(startBlock),
 		})
 	}
-	result[len(result)-1].EndBlock = bc.FinishRewardBlock
+
+	result[len(result)-1].EndBlock = lastRewardBlock
 
 	return result
 }
 
-func (api *BriocheConfigAPI) GetBriocheBlockReward(height *big.Int) *big.Int {
+func (api *PublicWemixAPI) GetBriocheBlockReward(height *big.Int) *big.Int {
 	if wemixapi.Info == nil {
 		return nil
 	}
