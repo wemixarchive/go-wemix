@@ -165,7 +165,7 @@ var (
 			BlockReward:       big.NewInt(1e18),
 			FirstHalvingBlock: big.NewInt(53_557_371),
 			HalvingPeriod:     big.NewInt(63_115_200),
-			FinishRewardBlock: big.NewInt(1_000_000_000), // TODO fix last reward block
+			FinishRewardBlock: big.NewInt(2_000_000_000), // TODO fix last reward block
 			HalvingTimes:      16,
 			HalvingRate:       50,
 		},
@@ -195,7 +195,7 @@ var (
 			BlockReward:       big.NewInt(1e18),
 			FirstHalvingBlock: big.NewInt(60_537_845),
 			HalvingPeriod:     big.NewInt(63_115_200),
-			FinishRewardBlock: big.NewInt(1_000_000_000), // TODO fix last reward block
+			FinishRewardBlock: big.NewInt(2_000_000_000), // TODO fix last reward block
 			HalvingTimes:      16,
 			HalvingRate:       50,
 		},
