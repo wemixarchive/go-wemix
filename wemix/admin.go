@@ -1014,31 +1014,6 @@ type reward struct {
 	Reward *big.Int       `json:"reward"`
 }
 
-func (ma *wemixAdmin) verifyRewards(r1, r2 []byte) error {
-	var err error
-	var a, b []reward
-
-	if err = json.Unmarshal(r1, &a); err != nil {
-		return err
-	}
-	if err = json.Unmarshal(r2, &b); err != nil {
-		return err
-	}
-
-	err = fmt.Errorf("Incorrect Rewards")
-	if len(a) != len(b) {
-		return err
-	}
-	for i := 0; i < len(a); i++ {
-		if !bytes.Equal(a[i].Addr.Bytes(), b[i].Addr.Bytes()) ||
-			a[i].Reward != b[i].Reward {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // handles rewards in testnet block 94
 func handleBlock94Rewards(height *big.Int, rp *rewardParameters, fees *big.Int) []reward {
 	if height.Int64() != 94 || len(rp.members) != 0 ||
@@ -1205,11 +1180,6 @@ func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance
 	}
 
 	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
-}
-
-func verifyRewards(num *big.Int, rewards string) error {
-	return nil
-	//return admin.verifyRewards(num, rewards)
 }
 
 func getCoinbase(height *big.Int) (coinbase common.Address, err error) {
@@ -1825,7 +1795,6 @@ func init() {
 	wemixminer.AmHubFunc = AmHub
 	wemixminer.SuggestGasPriceFunc = suggestGasPrice
 	wemixminer.CalculateRewardsFunc = calculateRewards
-	wemixminer.VerifyRewardsFunc = verifyRewards
 	wemixminer.GetCoinbaseFunc = getCoinbase
 	wemixminer.SignBlockFunc = signBlock
 	wemixminer.VerifyBlockSigFunc = verifyBlockSig
