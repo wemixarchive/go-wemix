@@ -152,21 +152,21 @@ func TestDistributeRewards(t *testing.T) {
 				t.Errorf("distributeRewards() failed: %v, %v <-> %v", err, tt.want, string(rewardsString))
 			}
 
-			distTotal := big.NewInt(0)
+			distTotal := new(big.Int)
 			for _, dist := range tt.rp.distributionMethod {
 				distTotal.Add(distTotal, dist)
 			}
-			totalRewards := big.NewInt(0)
-			memberRewards := big.NewInt(0)
+			totalRewards := new(big.Int)
+			memberRewards := new(big.Int)
 			for i, reward := range rewards {
 				totalRewards.Add(totalRewards, reward.Reward)
 				if i < len(tt.rp.members) {
 					memberRewards.Add(memberRewards, reward.Reward)
 				}
 			}
-			totalAmount := big.NewInt(0).Set(tt.rp.rewardAmount)
+			totalAmount := new(big.Int).Set(tt.rp.rewardAmount)
 			totalAmount.Add(totalAmount, tt.fees)
-			memberAmount := big.NewInt(0).Set(tt.rp.rewardAmount)
+			memberAmount := new(big.Int).Set(tt.rp.rewardAmount)
 			memberAmount = memberAmount.Mul(memberAmount, tt.rp.distributionMethod[0])
 			memberAmount = memberAmount.Div(memberAmount, distTotal)
 			if memberRewards.Cmp(memberAmount) != 0 {
@@ -226,13 +226,13 @@ func TestRewardValidation(t *testing.T) {
 				BriocheBlock: common.Big0,
 				Brioche: &params.BriocheConfig{
 					BlockReward:       big.NewInt(100),
-					FirstHalvingBlock: big.NewInt(0),
+					FirstHalvingBlock: new(big.Int),
 					HalvingPeriod:     big.NewInt(10),
 					FinishRewardBlock: big.NewInt(30),
 					HalvingTimes:      3,
 					HalvingRate:       50,
 				}},
-			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: big.NewInt(0)}},
+			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: new(big.Int)}},
 		}
 		genesis = gspec.MustCommit(db)
 		signer  = types.LatestSigner(gspec.Config)
@@ -331,21 +331,21 @@ func TestBriocheHardFork(t *testing.T) {
 					HalvingTimes:      2,
 					HalvingRate:       50,
 				}},
-			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: big.NewInt(0)}},
+			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: new(big.Int)}},
 		}
 		genesis = gspec.MustCommit(db)
 		signer  = types.LatestSigner(gspec.Config)
 	)
 
 	expectedBlockReward := []*big.Int{
-		big.NewInt(0), // zero block reward; not used
+		new(big.Int), // zero block reward; not used
 		big.NewInt(1e18),
 		big.NewInt(4e17),
 		big.NewInt(4e17),
 		big.NewInt(2e17),
 		big.NewInt(2e17),
 		big.NewInt(1e17),
-		big.NewInt(0),
+		new(big.Int),
 	}
 
 	miners := []common.Address{
@@ -371,7 +371,7 @@ func TestBriocheHardFork(t *testing.T) {
 			},
 		},
 		blocksPer:          1,
-		distributionMethod: []*big.Int{big.NewInt(5000), big.NewInt(0), big.NewInt(2500), big.NewInt(2500)}, // miner, staker, eco, maintenance
+		distributionMethod: []*big.Int{big.NewInt(5000), new(big.Int), big.NewInt(2500), big.NewInt(2500)}, // miner, staker, eco, maintenance
 	}
 
 	wemixminer.CalculateRewardsFunc = makeCalculateRewardFunc(rp)
