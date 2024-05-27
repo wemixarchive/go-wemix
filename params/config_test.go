@@ -246,7 +246,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 				HalvingRate:       50,
 			},
 			blockNum: big.NewInt(100),
-			expected: new(big.Int),
+			expected: big.NewInt(0),
 		},
 		{
 			id: 7,
@@ -341,7 +341,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 				HalvingRate:       0, // no reward
 			},
 			blockNum: big.NewInt(100),
-			expected: new(big.Int),
+			expected: big.NewInt(0),
 		},
 		{
 			id: 14,
@@ -367,7 +367,7 @@ func TestGetBriocheBlockReward(t *testing.T) {
 				HalvingRate:       50,
 			},
 			blockNum: big.NewInt(200),
-			expected: new(big.Int),
+			expected: big.NewInt(0),
 		},
 
 		// halving rate variations

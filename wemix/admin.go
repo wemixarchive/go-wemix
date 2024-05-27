@@ -125,7 +125,7 @@ var (
 	// "Wemix Registry"
 	magic, _                  = new(big.Int).SetString("0x57656d6978205265676973747279", 0)
 	etcdClusterName           = "Wemix"
-	big0                      = new(big.Int)
+	big0                      = big.NewInt(0)
 	nilAddress                = common.Address{}
 	defaultBriocheBlockReward = big.NewInt(1e18)
 	admin                     *wemixAdmin
@@ -1056,7 +1056,7 @@ func distributeRewards(height *big.Int, rp *rewardParameters, blockReward *big.I
 
 	var rewards []reward
 	if n := len(rp.members); n > 0 {
-		stakeTotal, equalStakes := new(big.Int), true
+		stakeTotal, equalStakes := big.NewInt(0), true
 		for i := 0; i < n; i++ {
 			if equalStakes && i < n-1 && rp.members[i].Stake.Cmp(rp.members[i+1].Stake) != 0 {
 				equalStakes = false
@@ -1065,7 +1065,7 @@ func distributeRewards(height *big.Int, rp *rewardParameters, blockReward *big.I
 		}
 
 		if equalStakes {
-			v0, v1 := new(big.Int), big.NewInt(1)
+			v0, v1 := big.NewInt(0), big.NewInt(1)
 			vn := big.NewInt(int64(n))
 			b := new(big.Int).Set(minerAmount)
 			d := new(big.Int)
@@ -1084,7 +1084,7 @@ func distributeRewards(height *big.Int, rp *rewardParameters, blockReward *big.I
 			}
 		} else {
 			// rewards distributed according to stakes
-			v0, v1 := new(big.Int), big.NewInt(1)
+			v0, v1 := big.NewInt(0), big.NewInt(1)
 			remainder := new(big.Int).Set(minerAmount)
 			for i := 0; i < n; i++ {
 				memberReward := new(big.Int).Mul(minerAmount, rp.members[i].Stake)
@@ -1427,8 +1427,8 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 
 	// default values
 	blockInterval = 15
-	maxBaseFee = new(big.Int)
-	gasLimit = new(big.Int)
+	maxBaseFee = big.NewInt(0)
+	gasLimit = big.NewInt(0)
 	baseFeeMaxChangeRate = 0
 	gasTargetPercentage = 100
 

@@ -226,13 +226,13 @@ func TestRewardValidation(t *testing.T) {
 				BriocheBlock: common.Big0,
 				Brioche: &params.BriocheConfig{
 					BlockReward:       big.NewInt(100),
-					FirstHalvingBlock: new(big.Int),
+					FirstHalvingBlock: big.NewInt(0),
 					HalvingPeriod:     big.NewInt(10),
 					FinishRewardBlock: big.NewInt(30),
 					HalvingTimes:      3,
 					HalvingRate:       50,
 				}},
-			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: new(big.Int)}},
+			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: big.NewInt(0)}},
 		}
 		genesis = gspec.MustCommit(db)
 		signer  = types.LatestSigner(gspec.Config)
@@ -331,21 +331,21 @@ func TestBriocheHardFork(t *testing.T) {
 					HalvingTimes:      2,
 					HalvingRate:       50,
 				}},
-			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: new(big.Int)}},
+			Alloc: core.GenesisAlloc{address: {Balance: funds}, deleteAddr: {Balance: big.NewInt(0)}},
 		}
 		genesis = gspec.MustCommit(db)
 		signer  = types.LatestSigner(gspec.Config)
 	)
 
 	expectedBlockReward := []*big.Int{
-		new(big.Int), // zero block reward; not used
+		big.NewInt(0), // zero block reward; not used
 		big.NewInt(1e18),
 		big.NewInt(4e17),
 		big.NewInt(4e17),
 		big.NewInt(2e17),
 		big.NewInt(2e17),
 		big.NewInt(1e17),
-		new(big.Int),
+		big.NewInt(0),
 	}
 
 	miners := []common.Address{
@@ -371,7 +371,7 @@ func TestBriocheHardFork(t *testing.T) {
 			},
 		},
 		blocksPer:          1,
-		distributionMethod: []*big.Int{big.NewInt(5000), new(big.Int), big.NewInt(2500), big.NewInt(2500)}, // miner, staker, eco, maintenance
+		distributionMethod: []*big.Int{big.NewInt(5000), big.NewInt(0), big.NewInt(2500), big.NewInt(2500)}, // miner, staker, eco, maintenance
 	}
 
 	wemixminer.CalculateRewardsFunc = makeCalculateRewardFunc(rp)

@@ -447,7 +447,7 @@ func (bc *BriocheConfig) GetBriocheBlockReward(defaultReward *big.Int, num *big.
 		}
 		if bc.FinishRewardBlock != nil &&
 			bc.FinishRewardBlock.Cmp(num) <= 0 {
-			blockReward = new(big.Int)
+			blockReward = big.NewInt(0)
 		} else if bc.FirstHalvingBlock != nil &&
 			bc.HalvingPeriod != nil &&
 			bc.HalvingTimes > 0 &&
