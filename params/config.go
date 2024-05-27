@@ -440,14 +440,14 @@ type BriocheConfig struct {
 }
 
 func (bc *BriocheConfig) GetBriocheBlockReward(defaultReward *big.Int, num *big.Int) *big.Int {
-	blockReward := big.NewInt(0).Set(defaultReward) // default brioche block reward
+	blockReward := new(big.Int).Set(defaultReward) // default brioche block reward
 	if bc != nil {
 		if bc.BlockReward != nil {
-			blockReward = big.NewInt(0).Set(bc.BlockReward)
+			blockReward = new(big.Int).Set(bc.BlockReward)
 		}
 		if bc.FinishRewardBlock != nil &&
 			bc.FinishRewardBlock.Cmp(num) <= 0 {
-			blockReward = big.NewInt(0)
+			blockReward = new(big.Int)
 		} else if bc.FirstHalvingBlock != nil &&
 			bc.HalvingPeriod != nil &&
 			bc.HalvingTimes > 0 &&
