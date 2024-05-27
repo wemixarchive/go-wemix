@@ -692,10 +692,10 @@ func (api *PublicWemixAPI) BriocheConfig() *params.BriocheConfig {
 }
 
 type HalvingInfo struct {
-	HalvingTimes uint64   `json:"halvingTimes"`
-	StartBlock   *big.Int `json:"startBlock"`
-	EndBlock     *big.Int `json:"endBlock"`
-	BlockReward  *big.Int `json:"blockReward"`
+	HalvingTimes hexutil.Uint64 `json:"halvingTimes"`
+	StartBlock   *hexutil.Big   `json:"startBlock"`
+	EndBlock     *hexutil.Big   `json:"endBlock"`
+	BlockReward  *hexutil.Big   `json:"blockReward"`
 }
 
 func (api *PublicWemixAPI) HalvingSchedule() []*HalvingInfo {
@@ -716,31 +716,39 @@ func (api *PublicWemixAPI) HalvingSchedule() []*HalvingInfo {
 			break
 		}
 		result = append(result, &HalvingInfo{
-			HalvingTimes: i + 1,
-			StartBlock:   startBlock,
-			EndBlock:     new(big.Int).Sub(new(big.Int).Add(startBlock, bc.HalvingPeriod), common.Big1),
-			BlockReward:  api.GetBriocheBlockReward(startBlock),
+			HalvingTimes: hexutil.Uint64(i + 1),
+			StartBlock:   (*hexutil.Big)(startBlock),
+			EndBlock:     (*hexutil.Big)(new(big.Int).Sub(new(big.Int).Add(startBlock, bc.HalvingPeriod), common.Big1)),
+			BlockReward:  (*hexutil.Big)(api.getBriocheBlockReward(startBlock)),
 		})
 	}
 
-	result[len(result)-1].EndBlock = lastRewardBlock
+	result[len(result)-1].EndBlock = (*hexutil.Big)(lastRewardBlock)
 
 	return result
 }
 
-func (api *PublicWemixAPI) GetBriocheBlockReward(height *big.Int) *big.Int {
+func (api *PublicWemixAPI) GetBriocheBlockReward(blockNumber *hexutil.Big) *hexutil.Big {
+	return (*hexutil.Big)(api.getBriocheBlockReward((*big.Int)(blockNumber)))
+}
+
+func (api *PublicWemixAPI) getBriocheBlockReward(blockNumber *big.Int) *big.Int {
 	if wemixapi.Info == nil {
 		return nil
 	}
+	wemixInfoPtr, ok := wemixapi.Info().(*map[string]interface{})
+	if !ok {
+		return nil
+	}
+	wemixInfo := *wemixInfoPtr
 	config := api.e.BlockChain().Config()
-	wemixInfo := *(wemixapi.Info().(*map[string]interface{}))
 
-	if height == nil {
-		height = api.e.BlockChain().CurrentHeader().Number
+	if blockNumber == nil {
+		blockNumber = api.e.BlockChain().CurrentHeader().Number
 	}
 
-	if config.IsBrioche(height) {
-		return config.Brioche.GetBriocheBlockReward(wemixInfo["defaultBriocheBlockReward"].(*big.Int), height)
+	if config.IsBrioche(blockNumber) {
+		return config.Brioche.GetBriocheBlockReward(wemixInfo["defaultBriocheBlockReward"].(*big.Int), blockNumber)
 	} else {
 		return wemixInfo["blockReward"].(*big.Int)
 	}
