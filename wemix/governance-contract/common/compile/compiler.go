@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common/compiler"
@@ -14,18 +15,21 @@ var (
 	solidityVersion = "0.8.14"
 )
 
-func Compile(sourceFiles ...string) (map[string]*compiler.Contract, error) {
+func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract, error) {
+	if root == "" {
+		root = "../contracts"
+	}
 	// solc의 path를 찾아서 args에 넣고 cmd객체를 생성
 	args := []string{
 		"--combined-json", "bin,bin-runtime,srcmap,srcmap-runtime,abi,userdoc,devdoc,metadata,hashes",
 		"--optimize",                // code optimizer switched on
 		"--allow-paths", ".,./,../", //default to support relative path： ./  ../  .
-		"@openzeppelin/contracts/=../contracts/openzeppelin/openzeppelin-contracts/contracts/",
-		"@openzeppelin/contracts-upgradeable/=../contracts/openzeppelin/openzeppelin-contracts-upgradeable/contracts/",
+		fmt.Sprintf("@openzeppelin/contracts/=%s/openzeppelin/openzeppelin-contracts/contracts/", root),
+		fmt.Sprintf("@openzeppelin/contracts-upgradeable/=%s/openzeppelin/openzeppelin-contracts-upgradeable/contracts/", root),
 		"--",
 	}
-
-	cmd := exec.Command(fmt.Sprintf("../solc-%s", solidityVersion), append(args, sourceFiles...)...)
+	name := filepath.Join(root, "..", fmt.Sprintf("solc-%s", solidityVersion))
+	cmd := exec.Command(name, append(args, sourceFiles...)...)
 
 	// cmd를 실행하고 결과를 Contract로 변환
 	var stderr, stdout bytes.Buffer

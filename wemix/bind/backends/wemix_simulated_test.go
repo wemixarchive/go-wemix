@@ -1,19 +1,20 @@
-package wemix_backends_test
+package backends_test
 
 import (
 	"context"
 	"encoding/hex"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	wemix_backends "github.com/ethereum/go-ethereum/accounts/abi/bind/backends/wemix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	gov "github.com/ethereum/go-ethereum/wemix/governance-contract/bind"
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
+	"github.com/ethereum/go-ethereum/wemix/bind/backends"
 	wemix_miner "github.com/ethereum/go-ethereum/wemix/miner"
 	"github.com/stretchr/testify/require"
 )
@@ -21,15 +22,15 @@ import (
 func TestWemixBackends(t *testing.T) {
 	key, err := crypto.GenerateKey()
 	require.NoError(t, err)
-	opts, err := bind.NewKeyedTransactorWithChainID(key, wemix_backends.ChainID)
+	opts, err := bind.NewKeyedTransactorWithChainID(key, backends.ChainID)
 	require.NoError(t, err)
-	b, err := wemix_backends.NewWemixSimulatedBackend(
+	b, err := backends.NewWemixSimulatedBackend(
 		key,
 		t.TempDir(),
 		core.GenesisAlloc{
 			opts.From: {Balance: new(big.Int).Mul(big.NewInt(256_000_000_000_000), big.NewInt(params.Ether))},
 		},
-		wemix_backends.SetLogLevel(2),
+		backends.SetLogLevel(2),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, b)
@@ -67,17 +68,17 @@ func TestWemixBackends(t *testing.T) {
 		"\n Port:", getNode.Port,
 	)
 	// /*
-	newRewarderKey, err := crypto.GenerateKey()
+	newVoterKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
-	newRewarder := crypto.PubkeyToAddress(newRewarderKey.PublicKey)
+	newVoter := crypto.PubkeyToAddress(newVoterKey.PublicKey)
 
 	LOCK_AMOUNT, err := contracts.EnvStorageImp.Funcs.GetStakingMax(callOpts)
 	require.NoError(t, err)
 
 	tx, err := contracts.GovImp.Funcs.AddProposalToChangeMember(opts, gov.GovImpMemberInfo{
 		Staker:     opts.From,
-		Voter:      opts.From,
-		Reward:     newRewarder,
+		Voter:      newVoter,
+		Reward:     opts.From,
 		Name:       getNode.Name,
 		Enode:      getNode.Enode,
 		Ip:         getNode.Ip,
@@ -102,31 +103,29 @@ func TestWemixBackends(t *testing.T) {
 
 	voter, err := contracts.GovImp.Funcs.GetVoter(callOpts, common.Big1)
 	require.NoError(t, err)
-	require.Equal(t, opts.From, voter)
+	require.Equal(t, newVoter, voter)
 
 	newReward, err := contracts.GovImp.Funcs.GetReward(callOpts, common.Big1)
 	require.NoError(t, err)
-	require.Equal(t, newRewarder, newReward)
-	// */
-	/*
-			newHead := make(chan *types.Header)
-			sub, err := b.SubscribeNewHead(context.Background(), newHead)
-			require.NoError(t, err)
+	require.Equal(t, opts.From, newReward)
 
-			ticker := time.NewTicker(10e9)
-		loop:
-			for {
-				b.Commit()
-				select {
-				case head := <-newHead:
-					t.Log("head.Number", head.Number)
-					time.Sleep(0.2e9)
-				case err := <-sub.Err():
-					require.NoError(t, err)
-				case <-ticker.C:
-					break loop
-				}
-			}
-			t.Log("end")
-			// */
+	newHead := make(chan *types.Header)
+	sub, err := b.SubscribeNewHead(context.Background(), newHead)
+	require.NoError(t, err)
+
+	ticker := time.NewTicker(10e9)
+loop:
+	for {
+		b.Commit()
+		select {
+		case head := <-newHead:
+			t.Log("head.Number", head.Number)
+			time.Sleep(0.2e9)
+		case err := <-sub.Err():
+			require.NoError(t, err)
+		case <-ticker.C:
+			break loop
+		}
+	}
+	t.Log("end")
 }

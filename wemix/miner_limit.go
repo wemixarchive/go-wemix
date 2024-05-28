@@ -16,7 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
-	gov "github.com/ethereum/go-ethereum/wemix/governance-contract/bind"
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 

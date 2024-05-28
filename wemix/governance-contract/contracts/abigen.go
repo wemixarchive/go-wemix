@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,13 +14,15 @@ import (
 )
 
 var (
-	root   string = "../contracts"
-	outDir string = "../bind"
-	pkg    string = "gov"
+	rootFlag        = flag.String("root", "../contracts", "")
+	outDir   string = "../../bind"
+	pkg      string = "gov"
 )
 
 func main() {
-	if contracts, err := compile.Compile(
+	flag.Parse()
+	root := *rootFlag
+	if contracts, err := compile.Compile(root,
 		filepath.Join(root, "Registry.sol"),
 		filepath.Join(root, "Gov.sol"),
 		filepath.Join(root, "GovImp.sol"),

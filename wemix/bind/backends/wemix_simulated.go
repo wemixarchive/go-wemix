@@ -1,4 +1,4 @@
-package wemix_backends
+package backends
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/wemix"
-	gov "github.com/ethereum/go-ethereum/wemix/governance-contract/bind"
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
 )
 
 type SimClient interface {

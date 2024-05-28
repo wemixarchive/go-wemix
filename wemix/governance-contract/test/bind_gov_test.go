@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	gov "github.com/ethereum/go-ethereum/wemix/governance-contract/bind"
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/bn"
 	sim "github.com/ethereum/go-ethereum/wemix/governance-contract/common/simulated-backend"
 	"github.com/stretchr/testify/require"

@@ -1,4 +1,4 @@
-package wemix_backends
+package backends
 
 import (
 	"math/big"
@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
-	gov "github.com/ethereum/go-ethereum/wemix/governance-contract/bind"
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
 )
 
 func SetLogLevel(level int) func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.EnvInitializeConfig) {

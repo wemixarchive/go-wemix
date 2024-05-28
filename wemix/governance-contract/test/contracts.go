@@ -105,7 +105,7 @@ type Compiled struct {
 }
 
 func (c *Compiled) Compile(root string) {
-	if contracts, err := compile.Compile(
+	if contracts, err := compile.Compile("",
 		filepath.Join(root, "Registry.sol"),
 		filepath.Join(root, "Gov.sol"),
 		filepath.Join(root, "GovImp.sol"),
