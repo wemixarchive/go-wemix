@@ -728,8 +728,19 @@ func (api *PublicWemixAPI) HalvingSchedule() []*HalvingInfo {
 	return result
 }
 
-func (api *PublicWemixAPI) GetBriocheBlockReward(blockNumber *hexutil.Big) *hexutil.Big {
-	return (*hexutil.Big)(api.getBriocheBlockReward((*big.Int)(blockNumber)))
+func (api *PublicWemixAPI) GetBriocheBlockReward(blockNumber rpc.BlockNumber) *hexutil.Big {
+	height := new(big.Int)
+	if blockNumber == rpc.LatestBlockNumber {
+		height.Set(api.e.BlockChain().CurrentHeader().Number)
+	} else if blockNumber == rpc.FinalizedBlockNumber {
+		height.Set(api.e.BlockChain().CurrentHeader().Number)
+	} else if blockNumber == rpc.PendingBlockNumber {
+		height.Set(api.e.miner.PendingBlock().Header().Number)
+	} else {
+		height.SetInt64(blockNumber.Int64())
+	}
+
+	return (*hexutil.Big)(api.getBriocheBlockReward(height))
 }
 
 func (api *PublicWemixAPI) getBriocheBlockReward(blockNumber *big.Int) *big.Int {
@@ -742,13 +753,7 @@ func (api *PublicWemixAPI) getBriocheBlockReward(blockNumber *big.Int) *big.Int 
 	}
 	wemixInfo := *wemixInfoPtr
 	config := api.e.BlockChain().Config()
-
-	height := new(big.Int)
-	if blockNumber == nil {
-		height.Set(api.e.BlockChain().CurrentHeader().Number)
-	} else {
-		height.Set(blockNumber)
-	}
+	height := new(big.Int).Set(blockNumber)
 
 	if config.IsBrioche(height) {
 		return config.Brioche.GetBriocheBlockReward(wemixInfo["defaultBriocheBlockReward"].(*big.Int), height)
