@@ -302,10 +302,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	// chain config as that would be AllProtocolChanges (applying any new fork
 	// on top of an existing private network genesis block). In that case, only
 	// apply the overrides.
-	if genesis == nil &&
-		!(stored == params.MainnetGenesisHash ||
-			stored == params.WemixMainnetGenesisHash ||
-			stored == params.WemixTestnetGenesisHash) {
+	if genesis == nil && !(stored == params.MainnetGenesisHash || stored == params.WemixMainnetGenesisHash) {
 		newcfg = storedcfg
 		if overrideArrowGlacier != nil {
 			newcfg.ArrowGlacierBlock = overrideArrowGlacier
