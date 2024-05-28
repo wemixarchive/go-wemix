@@ -305,7 +305,6 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	if genesis == nil &&
 		!(stored == params.MainnetGenesisHash ||
 			stored == params.WemixMainnetGenesisHash ||
-			stored == params.WemixTestnetGenesisHash ||
 			stored == params.DevnetGenesisHash) {
 		newcfg = storedcfg
 		if overrideArrowGlacier != nil {
