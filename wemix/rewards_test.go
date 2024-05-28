@@ -152,21 +152,21 @@ func TestDistributeRewards(t *testing.T) {
 				t.Errorf("distributeRewards() failed: %v, %v <-> %v", err, tt.want, string(rewardsString))
 			}
 
-			distTotal := big.NewInt(0)
+			distTotal := new(big.Int)
 			for _, dist := range tt.rp.distributionMethod {
 				distTotal.Add(distTotal, dist)
 			}
-			totalRewards := big.NewInt(0)
-			memberRewards := big.NewInt(0)
+			totalRewards := new(big.Int)
+			memberRewards := new(big.Int)
 			for i, reward := range rewards {
 				totalRewards.Add(totalRewards, reward.Reward)
 				if i < len(tt.rp.members) {
 					memberRewards.Add(memberRewards, reward.Reward)
 				}
 			}
-			totalAmount := big.NewInt(0).Set(tt.rp.rewardAmount)
+			totalAmount := new(big.Int).Set(tt.rp.rewardAmount)
 			totalAmount.Add(totalAmount, tt.fees)
-			memberAmount := big.NewInt(0).Set(tt.rp.rewardAmount)
+			memberAmount := new(big.Int).Set(tt.rp.rewardAmount)
 			memberAmount = memberAmount.Mul(memberAmount, tt.rp.distributionMethod[0])
 			memberAmount = memberAmount.Div(memberAmount, distTotal)
 			if memberRewards.Cmp(memberAmount) != 0 {

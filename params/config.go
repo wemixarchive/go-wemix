@@ -160,13 +160,13 @@ var (
 		LondonBlock:         big.NewInt(0),
 		PangyoBlock:         big.NewInt(0),
 		ApplepieBlock:       big.NewInt(20_476_911),
-		BriocheBlock:        big.NewInt(53_557_371), // 24-07-01 00:00:00 (UTC) expected
+		BriocheBlock:        big.NewInt(53_525_500), // target date: 24-07-01 00:00:00 (GMT+09)
 		Ethash:              new(EthashConfig),
 		Brioche: &BriocheConfig{
 			BlockReward:       big.NewInt(1e18),
-			FirstHalvingBlock: big.NewInt(53_557_371),
+			FirstHalvingBlock: big.NewInt(53_525_500),
 			HalvingPeriod:     big.NewInt(63_115_200),
-			FinishRewardBlock: big.NewInt(1_000_000_000), // TODO fix last reward block
+			FinishRewardBlock: big.NewInt(2_467_714_000), // target date: 2101-01-01 00:00:00 (GMT+09)
 			HalvingTimes:      16,
 			HalvingRate:       50,
 		},
@@ -190,13 +190,13 @@ var (
 		LondonBlock:         big.NewInt(0),
 		PangyoBlock:         big.NewInt(10_000_000),
 		ApplepieBlock:       big.NewInt(26_240_268),
-		BriocheBlock:        big.NewInt(60_537_845), // TODO fix hardfork date
+		BriocheBlock:        big.NewInt(59_414_700), // target date: 24-06-04 11:00:41 (GMT+09)
 		Ethash:              new(EthashConfig),
 		Brioche: &BriocheConfig{
 			BlockReward:       big.NewInt(1e18),
-			FirstHalvingBlock: big.NewInt(60_537_845),
+			FirstHalvingBlock: big.NewInt(59_414_700),
 			HalvingPeriod:     big.NewInt(63_115_200),
-			FinishRewardBlock: big.NewInt(1_000_000_000), // TODO fix last reward block
+			FinishRewardBlock: big.NewInt(2_473_258_000), // target date: 2100-12-01 11:02:21 (GMT+09)
 			HalvingTimes:      16,
 			HalvingRate:       50,
 		},
@@ -470,10 +470,10 @@ type BriocheConfig struct {
 }
 
 func (bc *BriocheConfig) GetBriocheBlockReward(defaultReward *big.Int, num *big.Int) *big.Int {
-	blockReward := big.NewInt(0).Set(defaultReward) // default brioche block reward
+	blockReward := new(big.Int).Set(defaultReward) // default brioche block reward
 	if bc != nil {
 		if bc.BlockReward != nil {
-			blockReward = big.NewInt(0).Set(bc.BlockReward)
+			blockReward = new(big.Int).Set(bc.BlockReward)
 		}
 		if bc.FinishRewardBlock != nil &&
 			bc.FinishRewardBlock.Cmp(num) <= 0 {
@@ -499,6 +499,17 @@ func (bc *BriocheConfig) calcHalvedReward(baseReward *big.Int, num *big.Int) *bi
 	numerator := new(big.Int).Exp(big.NewInt(int64(bc.HalvingRate)), times, nil)
 	denominator := new(big.Int).Exp(big.NewInt(100), times, nil)
 	return reward.Div(reward.Mul(reward, numerator), denominator)
+}
+
+func (bc *BriocheConfig) String() string {
+	return fmt.Sprintf("{BlockReward: %v FirstHalvingBlock: %v HalvingPeriod: %v FinishRewardBlock: %v HalvingTimes: %v HalvingRate: %v}",
+		bc.BlockReward,
+		bc.FirstHalvingBlock,
+		bc.HalvingPeriod,
+		bc.FinishRewardBlock,
+		bc.HalvingTimes,
+		bc.HalvingRate,
+	)
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -528,7 +539,7 @@ func (c *ChainConfig) String() string {
 	default:
 		engine = "unknown"
 	}
-	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, Terminal TD: %v, Engine: %v, BriocheConfig: %v}",
+	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, Terminal TD: %v, BriocheConfig: %v, Engine: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -549,8 +560,8 @@ func (c *ChainConfig) String() string {
 		c.ApplepieBlock,
 		c.BriocheBlock,
 		c.TerminalTotalDifficulty,
-		engine,
 		c.Brioche,
+		engine,
 	)
 }
 
