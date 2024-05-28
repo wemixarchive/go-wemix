@@ -89,13 +89,16 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	err := p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
-	header.Fees = fees
+	if err != nil {
+		return nil, nil, 0, err
+	}
 
-	if block.Header().Hash() != header.Hash() {
+	header.Fees = fees
+	if block.Hash() != header.Hash() {
 		return nil, nil, 0, fmt.Errorf("remote block hash is different from being processed one locally (remote=%v, local=%v)", block.Header().Hash(), header.Hash())
 	}
 
-	return receipts, allLogs, *usedGas, err
+	return receipts, allLogs, *usedGas, nil
 }
 
 func applyTransaction(msg types.Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, fees *big.Int, evm *vm.EVM) (*types.Receipt, error) {

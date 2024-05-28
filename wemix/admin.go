@@ -1175,8 +1175,7 @@ func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance
 	rp, err := admin.getRewardParams(ctx, big.NewInt(num.Int64()-1))
 	if err != nil {
 		// all goes to the coinbase
-		err = wemixminer.ErrNotInitialized
-		return nil, err
+		return nil, wemixminer.ErrNotInitialized
 	}
 
 	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
