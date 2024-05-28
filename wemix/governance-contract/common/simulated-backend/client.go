@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/bn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,9 +33,11 @@ type Client struct {
 func NewClient(t *testing.T) *Client {
 	owner := GetOrNewEOA("owner")
 
+	MaxUint128 := new(big.Int).Sub(new(big.Int).Lsh(common.Big1, 128), common.Big1)
+
 	backend := backends.NewSimulatedBackend(
 		core.GenesisAlloc{
-			owner: {Balance: bn.MaxInt256},
+			owner: {Balance: MaxUint128},
 		},
 		params.MaxGasLimit,
 	)
@@ -107,11 +108,13 @@ func (p *Client) SendTransactionWithoutCommit(t *testing.T, sender common.Addres
 	tip, err := p.Backend.SuggestGasTipCap(ctx)
 	require.NoError(t, err)
 
+	cap := new(big.Int).Add(tip, new(big.Int).Mul(head.BaseFee, big.NewInt(2))) // tip + (head.baseFee*2)
+
 	if (to != common.Address{}) {
 		tx = types.NewTx(&types.DynamicFeeTx{
 			To:        &to,
 			Nonce:     nonce,
-			GasFeeCap: bn.Add(tip, bn.Mul(head.BaseFee, 2)),
+			GasFeeCap: cap, // tip + (head.baseFee*2)
 			GasTipCap: tip,
 			Gas:       defaultGasLimit,
 			Value:     value,
@@ -120,7 +123,7 @@ func (p *Client) SendTransactionWithoutCommit(t *testing.T, sender common.Addres
 	} else {
 		tx = types.NewTx(&types.DynamicFeeTx{
 			Nonce:     nonce,
-			GasFeeCap: bn.Add(tip, bn.Mul(head.BaseFee, 2)),
+			GasFeeCap: cap, // tip + (head.baseFee*2)
 			GasTipCap: tip,
 			Gas:       defaultGasLimit,
 			Value:     value,

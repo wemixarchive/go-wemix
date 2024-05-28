@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/bn"
 	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/compile"
 	sim "github.com/ethereum/go-ethereum/wemix/governance-contract/common/simulated-backend"
 )
@@ -71,6 +70,7 @@ func DeployGovernance(t *testing.T) *Governance {
 		EnvConstants.BASE_FEE_MAX_CHANGE_RATE,
 		EnvConstants.GAS_TARGET_PERCENTAGE,
 	)
+
 	gov.EnvStorage.ExecuteOk(t, gov.client.Owner, "initialize", gov.Registry.Address, envNames, envValues)
 
 	// [Gov] owner 를 gov 에 등록하기 위해 미리 staking 을 한다.
@@ -79,7 +79,7 @@ func DeployGovernance(t *testing.T) *Governance {
 		[]byte("name"),
 		hexutil.MustDecode("0x6f8a80d14311c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
 		[]byte("127.0.0.1"),
-		bn.New(8542),
+		big.NewInt(8542),
 	}
 	gov.Gov.ExecuteOk(t, gov.client.Owner, "init", gov.Registry.Address, LOCK_AMOUNT, node.name, node.enode, node.ip, node.port)
 	gov.nodeInfos = append(gov.nodeInfos, node)
@@ -164,7 +164,7 @@ var EnvTypes = struct {
 	Bytes32 *big.Int
 	Bytes   *big.Int
 	String  *big.Int
-}{bn.New(0), bn.New(1), bn.New(2), bn.New(3), bn.New(4), bn.New(5), bn.New(6)}
+}{big.NewInt(0), big.NewInt(1), big.NewInt(2), big.NewInt(3), big.NewInt(4), big.NewInt(5), big.NewInt(6)}
 
 var BallotStates = struct {
 	Invalid    *big.Int
@@ -172,4 +172,4 @@ var BallotStates = struct {
 	InProgress *big.Int
 	Accepted   *big.Int
 	Rejected   *big.Int
-}{bn.New(0), bn.New(1), bn.New(2), bn.New(3), bn.New(4)}
+}{big.NewInt(0), big.NewInt(1), big.NewInt(2), big.NewInt(3), big.NewInt(4)}

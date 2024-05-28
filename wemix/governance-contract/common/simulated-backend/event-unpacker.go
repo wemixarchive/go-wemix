@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 	"strings"
 	"sync"
@@ -13,8 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-
-	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/bn"
 )
 
 /*
@@ -56,6 +55,8 @@ func (a allEventsType) String() string {
 }
 
 var (
+	MaxUint256 = new(big.Int).Sub(new(big.Int).Lsh(common.Big1, 256), common.Big1)
+
 	allEventsLock = sync.RWMutex{}
 	allEvents     = allEventsType{}    // eventID => abi.Event
 	allContracts  = allContractsType{} // CA => contract.Alias
@@ -64,8 +65,8 @@ var (
 	// string으로 변환시 zero address는 0x0변경은 디폴트로 설정
 	replacer = []string{
 		common.Address{}.Hex(), "0x00",
-		bn.MaxUint256.String(), "uint256_max",
-		bn.Sub(bn.MaxUint256, 1).String(), "uint256_max-1",
+		MaxUint256.String(), "uint256_max",
+		new(big.Int).Sub(MaxUint256, common.Big1).String(), "uint256_max-1",
 	}
 )
 

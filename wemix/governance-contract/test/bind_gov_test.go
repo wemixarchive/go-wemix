@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"math/big"
 	"testing"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	gov "github.com/ethereum/go-ethereum/wemix/bind"
-	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/bn"
 	sim "github.com/ethereum/go-ethereum/wemix/governance-contract/common/simulated-backend"
 	"github.com/stretchr/testify/require"
 )
@@ -140,7 +140,7 @@ func TestDeploy(t *testing.T) {
 			[]byte("name"),
 			hexutil.MustDecode("0x6f8a80d14311c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
 			[]byte("127.0.0.1"),
-			bn.New(8542),
+			big.NewInt(8542),
 		)
 		sim.ExpectedRevert(t, err, "Initializable: contract is already initialized")
 	})
@@ -188,7 +188,7 @@ func TestDeploy(t *testing.T) {
 			[]byte("name"),
 			hexutil.MustDecode("0x6f8a80d14311c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
 			[]byte("127.0.0.1"),
-			bn.New(8542),
+			big.NewInt(8542),
 		)
 		require.NoError(t, err)
 		txs = append(txs, tx)

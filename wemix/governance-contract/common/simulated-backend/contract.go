@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/bn"
 )
 
 var (
@@ -72,7 +71,7 @@ func (p *Contract) Deploy(t *testing.T, client *Client, args ...interface{}) (re
 	input, err := p.Abi.Pack("", args...) //constructor's inputs
 	require.NoError(t, err, len(args))
 
-	_, receipt = p.Client.SendTransaction(t, common.Address{}, common.Address{}, bn.New(0), append(p.Code, input...))
+	_, receipt = p.Client.SendTransaction(t, common.Address{}, common.Address{}, common.Big0, append(p.Code, input...))
 	require.Truef(t, receipt.Status == types.ReceiptStatusSuccessful, "deploy error. name: %s, alias: %s", p.Name, p.Alias)
 	p.Address = receipt.ContractAddress
 

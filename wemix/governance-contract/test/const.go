@@ -6,11 +6,18 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/bn"
 )
 
+func towei(x int64) *big.Int {
+	return new(big.Int).Mul(big.NewInt(x), big.NewInt(params.Ether))
+}
+
+func toGwei(x int64) *big.Int {
+	return new(big.Int).Mul(big.NewInt(x), big.NewInt(params.GWei))
+}
+
 var (
-	LOCK_AMOUNT *big.Int = bn.ToWei18(1500000)
+	LOCK_AMOUNT *big.Int = towei(1500000)
 )
 
 var EnvConstants = struct {
@@ -36,27 +43,27 @@ var EnvConstants = struct {
 	GAS_TARGET_PERCENTAGE                    env
 	MAX_BASE_FEE                             env
 }{
-	BLOCKS_PER:                               newEnv("blocksPer", 1),
-	BALLOT_DURATION_MIN:                      newEnv("ballotDurationMin", 86400),
-	BALLOT_DURATION_MAX:                      newEnv("ballotDurationMax", 604800),
-	STAKING_MIN:                              newEnv("stakingMin", bn.ToWei18(1500000)),
-	STAKING_MAX:                              newEnv("stakingMax", bn.ToWei18(1500000)),
-	MAX_IDLE_BLOCK_INTERVAL:                  newEnv("MaxIdleBlockInterval", 5),
-	BALLOT_DURATION_MIN_MAX:                  newEnv("ballotDurationMinMax", nil),
-	STAKING_MIN_MAX:                          newEnv("stakingMinMax", nil),
-	BLOCK_CREATION_TIME:                      newEnv("blockCreationTime", 1000),
-	BLOCK_REWARD_AMOUNT:                      newEnv("blockRewardAmount", bn.ToWei18(1)),
-	MAX_PRIORITY_FEE_PER_GAS:                 newEnv("maxPriorityFeePerGas", bn.Mul(100, params.GWei)),
-	BLOCK_REWARD_DISTRIBUTION_METHOD:         newEnv("blockRewardDistribution", nil),
-	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: newEnv("blockRewardDistributionBlockProducer", 4000),
-	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: newEnv("blockRewardDistributionStakingReward", 1000),
-	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      newEnv("blockRewardDistributionEcosystem", 2500),
-	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    newEnv("blockRewardDistributionMaintenance", 2500),
-	GASLIMIT_AND_BASE_FEE:                    newEnv("gasLimitAndBaseFee", nil),
-	BLOCK_GASLIMIT:                           newEnv("blockGasLimit", 1050000000),
-	BASE_FEE_MAX_CHANGE_RATE:                 newEnv("baseFeeMaxChangeRate", 46),
-	GAS_TARGET_PERCENTAGE:                    newEnv("gasTargetPercentage", 30),
-	MAX_BASE_FEE:                             newEnv("maxBaseFee", bn.Mul(5000, params.GWei)),
+	BLOCKS_PER:                               newEnvInt64("blocksPer", 1),
+	BALLOT_DURATION_MIN:                      newEnvInt64("ballotDurationMin", 86400),
+	BALLOT_DURATION_MAX:                      newEnvInt64("ballotDurationMax", 604800),
+	STAKING_MIN:                              newEnvBig("stakingMin", towei(1500000)),
+	STAKING_MAX:                              newEnvBig("stakingMax", towei(1500000)),
+	MAX_IDLE_BLOCK_INTERVAL:                  newEnvInt64("MaxIdleBlockInterval", 5),
+	BALLOT_DURATION_MIN_MAX:                  newEnvInt64("ballotDurationMinMax", 0),
+	STAKING_MIN_MAX:                          newEnvInt64("stakingMinMax", 0),
+	BLOCK_CREATION_TIME:                      newEnvInt64("blockCreationTime", 1000),
+	BLOCK_REWARD_AMOUNT:                      newEnvBig("blockRewardAmount", towei(1)),
+	MAX_PRIORITY_FEE_PER_GAS:                 newEnvBig("maxPriorityFeePerGas", toGwei(100)),
+	BLOCK_REWARD_DISTRIBUTION_METHOD:         newEnvInt64("blockRewardDistribution", 0),
+	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: newEnvInt64("blockRewardDistributionBlockProducer", 4000),
+	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: newEnvInt64("blockRewardDistributionStakingReward", 1000),
+	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      newEnvInt64("blockRewardDistributionEcosystem", 2500),
+	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    newEnvInt64("blockRewardDistributionMaintenance", 2500),
+	GASLIMIT_AND_BASE_FEE:                    newEnvInt64("gasLimitAndBaseFee", 0),
+	BLOCK_GASLIMIT:                           newEnvInt64("blockGasLimit", 1050000000),
+	BASE_FEE_MAX_CHANGE_RATE:                 newEnvInt64("baseFeeMaxChangeRate", 46),
+	GAS_TARGET_PERCENTAGE:                    newEnvInt64("gasTargetPercentage", 30),
+	MAX_BASE_FEE:                             newEnvBig("maxBaseFee", toGwei(5000)),
 }
 
 type env struct {
@@ -64,13 +71,20 @@ type env struct {
 	Value *big.Int
 }
 
-func newEnv(name string, value interface{}) env {
+func newEnvInt64(name string, value int64) env {
+	return env{
+		Name:  crypto.Keccak256Hash([]byte(name)),
+		Value: big.NewInt(value),
+	}
+}
+
+func newEnvBig(name string, value *big.Int) env {
 	if value == nil {
-		value = bn.New(0)
+		value = common.Big0
 	}
 	return env{
 		Name:  crypto.Keccak256Hash([]byte(name)),
-		Value: bn.New(value),
+		Value: value,
 	}
 }
 
