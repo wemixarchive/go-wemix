@@ -66,7 +66,7 @@ func TestWemixBackends(t *testing.T) {
 		"\n Ip:", string(getNode.Ip),
 		"\n Port:", getNode.Port,
 	)
-
+	// /*
 	newRewarderKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	newRewarder := crypto.PubkeyToAddress(newRewarderKey.PublicKey)
@@ -107,9 +107,8 @@ func TestWemixBackends(t *testing.T) {
 	newReward, err := contracts.GovImp.Funcs.GetReward(callOpts, common.Big1)
 	require.NoError(t, err)
 	require.Equal(t, newRewarder, newReward)
-
+	// */
 	/*
-
 			newHead := make(chan *types.Header)
 			sub, err := b.SubscribeNewHead(context.Background(), newHead)
 			require.NoError(t, err)
@@ -129,6 +128,5 @@ func TestWemixBackends(t *testing.T) {
 				}
 			}
 			t.Log("end")
-	*/
-
+			// */
 }

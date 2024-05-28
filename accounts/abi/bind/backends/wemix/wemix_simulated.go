@@ -42,7 +42,7 @@ type SimClient interface {
 	ethereum.PendingContractCaller
 	ethereum.TransactionReader
 	ethereum.TransactionSender
-	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
+	SuggestGasTipCap(ctx context.Context) (*big.Int, error) // GasPricer1559
 	GovContracts() *gov.GovContracts
 	Commit()
 }
