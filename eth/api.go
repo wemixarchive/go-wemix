@@ -743,12 +743,15 @@ func (api *PublicWemixAPI) getBriocheBlockReward(blockNumber *big.Int) *big.Int 
 	wemixInfo := *wemixInfoPtr
 	config := api.e.BlockChain().Config()
 
+	height := new(big.Int)
 	if blockNumber == nil {
-		blockNumber = api.e.BlockChain().CurrentHeader().Number
+		height.Set(api.e.BlockChain().CurrentHeader().Number)
+	} else {
+		height.Set(blockNumber)
 	}
 
-	if config.IsBrioche(blockNumber) {
-		return config.Brioche.GetBriocheBlockReward(wemixInfo["defaultBriocheBlockReward"].(*big.Int), blockNumber)
+	if config.IsBrioche(height) {
+		return config.Brioche.GetBriocheBlockReward(wemixInfo["defaultBriocheBlockReward"].(*big.Int), height)
 	} else {
 		return wemixInfo["blockReward"].(*big.Int)
 	}
