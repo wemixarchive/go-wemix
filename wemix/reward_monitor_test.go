@@ -78,7 +78,7 @@ func GetBlock() (*BlockRes, error) {
 	}
 	body := bytes.NewReader(payloadBytes)
 
-	req, err := http.NewRequest("POST", "http://127.0.0.1:8588", body)
+	req, err := http.NewRequest("POST", "http://172.207.48.146:8588", body)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func GetBlock() (*BlockRes, error) {
 
 	bytes, _ := ioutil.ReadAll(res.Body)
 	var result BlockRes
-	err = json.Unmarshal(bytes, &result)
+	_ = json.Unmarshal(bytes, &result)
 
 	return &result, nil
 }
@@ -108,7 +108,7 @@ func TestBlockStatistics(t *testing.T) {
 		num := new(big.Int)
 		num.SetString(strings.TrimPrefix(block.Result.Number, "0x"), 16)
 
-		data, err := hex.DecodeString(strings.TrimPrefix(block.Result.Rewards, "0x"))
+		data, _ := hex.DecodeString(strings.TrimPrefix(block.Result.Rewards, "0x"))
 		var reward []reward
 		if err = json.Unmarshal(data, &reward); err != nil {
 			t.Errorf(err.Error())

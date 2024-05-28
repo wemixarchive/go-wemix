@@ -306,7 +306,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 		!(stored == params.MainnetGenesisHash ||
 			stored == params.WemixMainnetGenesisHash ||
 			stored == params.WemixTestnetGenesisHash ||
-			stored == params.LocalPrivateHash) {
+			stored == params.DevnetGenesisHash) {
 		newcfg = storedcfg
 		if overrideArrowGlacier != nil {
 			newcfg.ArrowGlacierBlock = overrideArrowGlacier
@@ -331,8 +331,8 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 
 func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	switch {
-	case ghash == params.LocalPrivateHash:
-		return params.WemixPrivateChainConfig
+	case ghash == params.DevnetGenesisHash:
+		return params.WemixDevnetChainConfig
 	case ghash == params.WemixMainnetGenesisHash:
 		return params.WemixMainnetChainConfig
 	case ghash == params.WemixTestnetGenesisHash:
