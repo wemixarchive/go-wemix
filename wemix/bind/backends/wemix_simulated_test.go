@@ -42,24 +42,24 @@ func TestWemixBackends(t *testing.T) {
 	callOpts := new(bind.CallOpts)
 	contracts, err := gov.GetGovContractsByOwner(callOpts, b, opts.From)
 	require.NoError(t, err)
-	t.Log(contracts.Registry.Address())
-	t.Log(contracts.EnvStorageImp.Funcs.GetBallotDurationMax(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetBallotDurationMin(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetBallotDurationMinMax(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetBlockCreationTime(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetBlockRewardAmount(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetBlockRewardDistributionMethod(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetBlocksPer(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetGasLimitAndBaseFee(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetMaxBaseFee(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetMaxIdleBlockInterval(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetMaxPriorityFeePerGas(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetStakingMax(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetStakingMin(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GetStakingMinMax(callOpts))
-	t.Log(contracts.EnvStorageImp.Funcs.GASTARGETPERCENTAGENAME(callOpts))
+	t.Log(contracts.Address().Registry)
+	t.Log(contracts.EnvStorageImp.GetBallotDurationMax(callOpts))
+	t.Log(contracts.EnvStorageImp.GetBallotDurationMin(callOpts))
+	t.Log(contracts.EnvStorageImp.GetBallotDurationMinMax(callOpts))
+	t.Log(contracts.EnvStorageImp.GetBlockCreationTime(callOpts))
+	t.Log(contracts.EnvStorageImp.GetBlockRewardAmount(callOpts))
+	t.Log(contracts.EnvStorageImp.GetBlockRewardDistributionMethod(callOpts))
+	t.Log(contracts.EnvStorageImp.GetBlocksPer(callOpts))
+	t.Log(contracts.EnvStorageImp.GetGasLimitAndBaseFee(callOpts))
+	t.Log(contracts.EnvStorageImp.GetMaxBaseFee(callOpts))
+	t.Log(contracts.EnvStorageImp.GetMaxIdleBlockInterval(callOpts))
+	t.Log(contracts.EnvStorageImp.GetMaxPriorityFeePerGas(callOpts))
+	t.Log(contracts.EnvStorageImp.GetStakingMax(callOpts))
+	t.Log(contracts.EnvStorageImp.GetStakingMin(callOpts))
+	t.Log(contracts.EnvStorageImp.GetStakingMinMax(callOpts))
+	t.Log(contracts.EnvStorageImp.GASTARGETPERCENTAGENAME(callOpts))
 
-	getNode, err := contracts.GovImp.Funcs.GetNode(callOpts, common.Big1)
+	getNode, err := contracts.GovImp.GetNode(callOpts, common.Big1)
 	require.NoError(t, err)
 	t.Log(
 		"\n Name:", string(getNode.Name),
@@ -72,10 +72,10 @@ func TestWemixBackends(t *testing.T) {
 	require.NoError(t, err)
 	newVoter := crypto.PubkeyToAddress(newVoterKey.PublicKey)
 
-	LOCK_AMOUNT, err := contracts.EnvStorageImp.Funcs.GetStakingMax(callOpts)
+	LOCK_AMOUNT, err := contracts.EnvStorageImp.GetStakingMax(callOpts)
 	require.NoError(t, err)
 
-	tx, err := contracts.GovImp.Funcs.AddProposalToChangeMember(opts, gov.GovImpMemberInfo{
+	tx, err := contracts.GovImp.AddProposalToChangeMember(opts, gov.GovImpMemberInfo{
 		Staker:     opts.From,
 		Voter:      newVoter,
 		Reward:     opts.From,
@@ -93,19 +93,19 @@ func TestWemixBackends(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
 
-	inVoting, err := contracts.GovImp.Funcs.GetBallotInVoting(callOpts)
+	inVoting, err := contracts.GovImp.GetBallotInVoting(callOpts)
 	require.NoError(t, err)
 	require.True(t, inVoting.Sign() == 0)
 
-	member, err := contracts.GovImp.Funcs.GetMember(callOpts, common.Big1)
+	member, err := contracts.GovImp.GetMember(callOpts, common.Big1)
 	require.NoError(t, err)
 	require.Equal(t, opts.From, member)
 
-	voter, err := contracts.GovImp.Funcs.GetVoter(callOpts, common.Big1)
+	voter, err := contracts.GovImp.GetVoter(callOpts, common.Big1)
 	require.NoError(t, err)
 	require.Equal(t, newVoter, voter)
 
-	newReward, err := contracts.GovImp.Funcs.GetReward(callOpts, common.Big1)
+	newReward, err := contracts.GovImp.GetReward(callOpts, common.Big1)
 	require.NoError(t, err)
 	require.Equal(t, opts.From, newReward)
 

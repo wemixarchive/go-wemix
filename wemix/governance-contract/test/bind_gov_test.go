@@ -28,65 +28,35 @@ func TestBindFuncs(t *testing.T) {
 	}()
 	var deployed = new(gov.GovContracts)
 	t.Run("deploy", func(t *testing.T) {
-		deployed, err = gov.DeployGovContracts(opts, client.Backend)
+		deployed, _, err = gov.DeployGovContracts(opts, client.Backend, nil)
 		require.NoError(t, err)
-		nilAddress := common.Address{}
-		require.NotEqual(t, nilAddress, deployed.Registry.Address())
-		require.NotEqual(t, nilAddress, deployed.Gov.Address())
-		require.NotEqual(t, nilAddress, deployed.GovImp.Address())
-		require.NotEqual(t, nilAddress, deployed.Staking.Address())
-		require.NotEqual(t, nilAddress, deployed.StakingImp.Address())
-		require.NotEqual(t, nilAddress, deployed.BallotStorage.Address())
-		require.NotEqual(t, nilAddress, deployed.BallotStorageImp.Address())
-		require.NotEqual(t, nilAddress, deployed.EnvStorage.Address())
-		require.NotEqual(t, nilAddress, deployed.EnvStorageImp.Address())
+		zeroAddress := common.Address{}
+		require.NotEqual(t, zeroAddress, deployed.Address().Registry)
+		require.NotEqual(t, zeroAddress, deployed.Address().Gov)
+		require.NotEqual(t, zeroAddress, deployed.Address().Staking)
+		require.NotEqual(t, zeroAddress, deployed.Address().BallotStorage)
+		require.NotEqual(t, zeroAddress, deployed.Address().EnvStorage)
 	})
 	var copyed = new(gov.GovContracts)
 	t.Run("copy", func(t *testing.T) {
 		require.NoError(t, deployed.Copy(copyed, client.Backend))
-		require.Equal(t, deployed.Registry.Address(), copyed.Registry.Address())
-		require.Equal(t, deployed.Gov.Address(), copyed.Gov.Address())
-		require.Equal(t, deployed.GovImp.Address(), copyed.GovImp.Address())
-		require.Equal(t, deployed.Staking.Address(), copyed.Staking.Address())
-		require.Equal(t, deployed.StakingImp.Address(), copyed.StakingImp.Address())
-		require.Equal(t, deployed.BallotStorage.Address(), copyed.BallotStorage.Address())
-		require.Equal(t, deployed.BallotStorageImp.Address(), copyed.BallotStorageImp.Address())
-		require.Equal(t, deployed.EnvStorage.Address(), copyed.EnvStorage.Address())
-		require.Equal(t, deployed.EnvStorageImp.Address(), copyed.EnvStorageImp.Address())
+		require.Equal(t, deployed.Address().Registry, copyed.Address().Registry)
+		require.Equal(t, deployed.Address().Gov, copyed.Address().Gov)
+		require.Equal(t, deployed.Address().Staking, copyed.Address().Staking)
+		require.Equal(t, deployed.Address().BallotStorage, copyed.Address().BallotStorage)
+		require.Equal(t, deployed.Address().EnvStorage, copyed.Address().EnvStorage)
 		require.True(t, deployed.Equal(copyed))
-	})
-	t.Run("init", func(t *testing.T) {
-		require.NoError(t, copyed.Init(callOpts, client.Backend, deployed.Registry))
-		require.Equal(t, deployed.Registry.Address(), copyed.Registry.Address())
-		require.Equal(t, deployed.Gov.Address(), copyed.Gov.Address())
-		require.NotEqual(t, deployed.GovImp.Address(), copyed.GovImp.Address())
-		require.Equal(t, copyed.Gov.Address(), copyed.GovImp.Address())
-		require.Equal(t, deployed.Staking.Address(), copyed.Staking.Address())
-		require.NotEqual(t, deployed.StakingImp.Address(), copyed.StakingImp.Address())
-		require.Equal(t, copyed.Staking.Address(), copyed.StakingImp.Address())
-		require.Equal(t, deployed.BallotStorage.Address(), copyed.BallotStorage.Address())
-		require.NotEqual(t, deployed.BallotStorageImp.Address(), copyed.BallotStorageImp.Address())
-		require.Equal(t, copyed.BallotStorage.Address(), copyed.BallotStorageImp.Address())
-		require.Equal(t, deployed.EnvStorage.Address(), copyed.EnvStorage.Address())
-		require.NotEqual(t, deployed.EnvStorageImp.Address(), copyed.EnvStorageImp.Address())
-		require.Equal(t, copyed.EnvStorage.Address(), copyed.EnvStorageImp.Address())
-		require.False(t, deployed.Equal(copyed))
 	})
 	var byOwenr = new(gov.GovContracts)
 	t.Run("GetGovContractsByOwner", func(t *testing.T) {
 		byOwenr, err = gov.GetGovContractsByOwner(callOpts, client.Backend, client.Owner)
 		require.NoError(t, err)
-		require.Equal(t, copyed.Registry.Address(), byOwenr.Registry.Address())
-		require.Equal(t, copyed.Gov.Address(), byOwenr.Gov.Address())
-		require.Equal(t, copyed.GovImp.Address(), byOwenr.GovImp.Address())
-		require.Equal(t, copyed.Staking.Address(), byOwenr.Staking.Address())
-		require.Equal(t, copyed.StakingImp.Address(), byOwenr.StakingImp.Address())
-		require.Equal(t, copyed.BallotStorage.Address(), byOwenr.BallotStorage.Address())
-		require.Equal(t, copyed.BallotStorageImp.Address(), byOwenr.BallotStorageImp.Address())
-		require.Equal(t, copyed.EnvStorage.Address(), byOwenr.EnvStorage.Address())
-		require.Equal(t, copyed.EnvStorageImp.Address(), byOwenr.EnvStorageImp.Address())
-		require.False(t, deployed.Equal(byOwenr))
-		require.True(t, copyed.Equal(byOwenr))
+		require.Equal(t, copyed.Address().Registry, byOwenr.Address().Registry)
+		require.Equal(t, copyed.Address().Gov, byOwenr.Address().Gov)
+		require.Equal(t, copyed.Address().Staking, byOwenr.Address().Staking)
+		require.Equal(t, copyed.Address().BallotStorage, byOwenr.Address().BallotStorage)
+		require.Equal(t, copyed.Address().EnvStorage, byOwenr.Address().EnvStorage)
+		require.True(t, deployed.Equal(byOwenr))
 	})
 }
 
@@ -100,58 +70,15 @@ func TestDeploy(t *testing.T) {
 			client.Commit()
 		}
 	}()
-	contracts, err := gov.DeployGovContracts(opts, client.Backend)
+	contracts, _, err := gov.DeployGovContracts(opts, client.Backend, nil)
 	require.NoError(t, err)
-	t.Run("not exec init", func(t *testing.T) {
-		_, err := contracts.StakingImp.Funcs.Init(opts, contracts.Registry.Address(), []byte{})
-		sim.ExpectedRevert(t, err, "Initializable: contract is already initialized")
-
-		_, err = contracts.BallotStorageImp.Funcs.Initialize(opts, contracts.Registry.Address())
-		sim.ExpectedRevert(t, err, "Initializable: contract is already initialized")
-
-		envNames, envValues := makeEnvParams(
-			EnvConstants.BLOCKS_PER,
-			EnvConstants.BALLOT_DURATION_MIN,
-			EnvConstants.BALLOT_DURATION_MAX,
-			EnvConstants.STAKING_MIN,
-			EnvConstants.STAKING_MAX,
-			EnvConstants.MAX_IDLE_BLOCK_INTERVAL,
-			EnvConstants.BLOCK_CREATION_TIME,
-			EnvConstants.BLOCK_REWARD_AMOUNT,
-			EnvConstants.MAX_PRIORITY_FEE_PER_GAS,
-			EnvConstants.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER,
-			EnvConstants.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD,
-			EnvConstants.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM,
-			EnvConstants.BLOCK_REWARD_DISTRIBUTION_MAINTANANCE,
-			EnvConstants.MAX_BASE_FEE,
-			EnvConstants.BLOCK_GASLIMIT,
-			EnvConstants.BASE_FEE_MAX_CHANGE_RATE,
-			EnvConstants.GAS_TARGET_PERCENTAGE,
-		)
-		_, err = contracts.EnvStorageImp.Funcs.Initialize(opts, contracts.Registry.Address(), envNames, envValues)
-		sim.ExpectedRevert(t, err, "Initializable: contract is already initialized")
-
-		opts.Value = LOCK_AMOUNT
-		_, err = contracts.StakingImp.Funcs.Deposit(opts)
-		sim.ExpectedRevert(t, err, "") // init 이 되지 않았기 때문에 Registry 에 call 을 시도하면서 실패
-		opts.Value = nil
-
-		_, err = contracts.GovImp.Funcs.Init(opts, contracts.Registry.Address(), LOCK_AMOUNT,
-			[]byte("name"),
-			hexutil.MustDecode("0x6f8a80d14311c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-			[]byte("127.0.0.1"),
-			big.NewInt(8542),
-		)
-		sim.ExpectedRevert(t, err, "Initializable: contract is already initialized")
-	})
 	t.Run("exec init", func(t *testing.T) {
-		require.NoError(t, contracts.Init(&bind.CallOpts{}, client.Backend, contracts.Registry))
 		txs := make([]*types.Transaction, 0)
-		tx, err := contracts.StakingImp.Funcs.Init(opts, contracts.Registry.Address(), []byte{})
+		tx, err := contracts.StakingImp.Init(opts, contracts.Address().Registry, []byte{})
 		require.NoError(t, err)
 		txs = append(txs, tx)
 
-		tx, err = contracts.BallotStorageImp.Funcs.Initialize(opts, contracts.Registry.Address())
+		tx, err = contracts.BallotStorageImp.Initialize(opts, contracts.Address().Registry)
 		require.NoError(t, err)
 		txs = append(txs, tx)
 
@@ -174,17 +101,17 @@ func TestDeploy(t *testing.T) {
 			EnvConstants.BASE_FEE_MAX_CHANGE_RATE,
 			EnvConstants.GAS_TARGET_PERCENTAGE,
 		)
-		tx, err = contracts.EnvStorageImp.Funcs.Initialize(opts, contracts.Registry.Address(), envNames, envValues)
+		tx, err = contracts.EnvStorageImp.Initialize(opts, contracts.Address().Registry, envNames, envValues)
 		require.NoError(t, err)
 		txs = append(txs, tx)
 
 		opts.Value = LOCK_AMOUNT
-		tx, err = contracts.StakingImp.Funcs.Deposit(opts)
+		tx, err = contracts.StakingImp.Deposit(opts)
 		require.NoError(t, err)
 		txs = append(txs, tx)
 		opts.Value = nil
 
-		tx, err = contracts.GovImp.Funcs.Init(opts, contracts.Registry.Address(), LOCK_AMOUNT,
+		tx, err = contracts.GovImp.Init(opts, contracts.Address().Registry, LOCK_AMOUNT,
 			[]byte("name"),
 			hexutil.MustDecode("0x6f8a80d14311c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
 			[]byte("127.0.0.1"),

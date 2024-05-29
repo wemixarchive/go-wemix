@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"path"
@@ -36,6 +35,7 @@ import (
 	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
+	"github.com/pkg/errors"
 )
 
 type wemixNode struct {
@@ -288,13 +288,13 @@ func (ma *wemixAdmin) getMinerNodes(height int64, locked bool) (*wemixNode, *wem
 func (ma *wemixAdmin) getWemixNodes(ctx context.Context, block *big.Int) ([]*wemixNode, error) {
 	callOpts := &bind.CallOpts{Context: ctx, BlockNumber: block}
 	nodes := make([]*wemixNode, 0)
-	count, err := ma.contracts.GovImp.Funcs.GetNodeLength(callOpts)
+	count, err := ma.contracts.GovImp.GetNodeLength(callOpts)
 	for i := int64(1); i <= count.Int64(); i++ {
-		getNode, err := ma.contracts.GovImp.Funcs.GetNode(callOpts, big.NewInt(i))
+		getNode, err := ma.contracts.GovImp.GetNode(callOpts, big.NewInt(i))
 		if err != nil {
 			return nil, err
 		}
-		getMember, err := ma.contracts.GovImp.Funcs.GetMember(callOpts, big.NewInt(i))
+		getMember, err := ma.contracts.GovImp.GetMember(callOpts, big.NewInt(i))
 		if err != nil {
 			return nil, err
 		}
@@ -327,59 +327,59 @@ func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*re
 	}
 	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
 
-	rp.rewardAmount, err = contracts.EnvStorageImp.Funcs.GetBlockRewardAmount(opts)
+	rp.rewardAmount, err = contracts.EnvStorageImp.GetBlockRewardAmount(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	distributionMethod1, distributionMethod2, distributionMethod3, distributionMethod4, err := contracts.EnvStorageImp.Funcs.GetBlockRewardDistributionMethod(opts)
+	distributionMethod1, distributionMethod2, distributionMethod3, distributionMethod4, err := contracts.EnvStorageImp.GetBlockRewardDistributionMethod(opts)
 	if err != nil {
 		return nil, err
 	}
 	rp.distributionMethod = []*big.Int{distributionMethod1, distributionMethod2, distributionMethod3, distributionMethod4}
 
-	staker, err := contracts.Registry.Funcs.GetContractAddress(opts, metclient.ToBytes32("StakingReward"))
+	staker, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32("StakingReward"))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "StakingReward")
 	}
 	rp.staker = &staker
 
-	ecoSystem, err := contracts.Registry.Funcs.GetContractAddress(opts, metclient.ToBytes32("Ecosystem"))
+	ecoSystem, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32("Ecosystem"))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Ecosystem")
 	}
 	rp.ecoSystem = &ecoSystem
 
-	maintenance, err := contracts.Registry.Funcs.GetContractAddress(opts, metclient.ToBytes32("Maintenance"))
+	maintenance, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32("Maintenance"))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Maintenance")
 	}
-	rp.ecoSystem = &maintenance
+	rp.maintenance = &maintenance
 
-	feeCollector, err := contracts.Registry.Funcs.GetContractAddress(opts, metclient.ToBytes32("FeeCollector"))
+	feeCollector, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32("FeeCollector"))
 	if err != nil {
 		rp.feeCollector = nil
 	} else {
 		rp.feeCollector = &feeCollector
 	}
 
-	blocksPer, err := contracts.EnvStorageImp.Funcs.GetBlocksPer(opts)
+	blocksPer, err := contracts.EnvStorageImp.GetBlocksPer(opts)
 	if err != nil {
 		return nil, err
 	}
 	rp.blocksPer = blocksPer.Int64()
 
-	if countBig, err := contracts.GovImp.Funcs.GetMemberLength(opts); err != nil {
+	if countBig, err := contracts.GovImp.GetMemberLength(opts); err != nil {
 		return nil, err
 	} else {
 		count := countBig.Int64()
 		for i := int64(1); i <= count; i++ {
 			index := big.NewInt(i)
-			if member, err := contracts.GovImp.Funcs.GetMember(opts, index); err != nil {
+			if member, err := contracts.GovImp.GetMember(opts, index); err != nil {
 				return nil, err
-			} else if reward, err := contracts.GovImp.Funcs.GetReward(opts, index); err != nil {
+			} else if reward, err := contracts.GovImp.GetReward(opts, index); err != nil {
 				return nil, err
-			} else if stake, err := contracts.StakingImp.Funcs.LockedBalanceOf(opts, member); err != nil {
+			} else if stake, err := contracts.StakingImp.LockedBalanceOf(opts, member); err != nil {
 				return nil, err
 			} else {
 				rp.members = append(rp.members, &wemixMember{
@@ -419,7 +419,7 @@ func (ma *wemixAdmin) getGovData(refresh bool) (*govdata, error) {
 	}
 
 	opts := &bind.CallOpts{Context: ctx, BlockNumber: block.Number}
-	if modifiedBlock, err := ma.contracts.GovImp.Funcs.ModifiedBlock(opts); err != nil {
+	if modifiedBlock, err := ma.contracts.GovImp.ModifiedBlock(opts); err != nil {
 		return data, err
 	} else {
 		data.modifiedBlock = modifiedBlock.Int64()
@@ -429,37 +429,37 @@ func (ma *wemixAdmin) getGovData(refresh bool) (*govdata, error) {
 		return data, nil
 	}
 
-	if blockInterval, err := ma.contracts.EnvStorageImp.Funcs.GetBlockCreationTime(opts); err != nil {
+	if blockInterval, err := ma.contracts.EnvStorageImp.GetBlockCreationTime(opts); err != nil {
 		data.blockInterval = ma.blockInterval
 	} else {
 		data.blockInterval = blockInterval.Int64()
 	}
 
-	if blocksPer, err := ma.contracts.EnvStorageImp.Funcs.GetBlocksPer(opts); err != nil {
+	if blocksPer, err := ma.contracts.EnvStorageImp.GetBlocksPer(opts); err != nil {
 		data.blocksPer = ma.blocksPer
 	} else {
 		data.blocksPer = blocksPer.Int64()
 	}
 
-	if maxIdleBlockInterval, err := ma.contracts.EnvStorageImp.Funcs.GetMaxIdleBlockInterval(opts); err != nil {
+	if maxIdleBlockInterval, err := ma.contracts.EnvStorageImp.GetMaxIdleBlockInterval(opts); err != nil {
 		data.maxIdleBlockInterval = int64(params.MaxIdleBlockInterval)
 	} else {
 		data.maxIdleBlockInterval = maxIdleBlockInterval.Int64()
 	}
 
-	if blockReward, err := ma.contracts.EnvStorageImp.Funcs.GetBlockRewardAmount(opts); err != nil {
+	if blockReward, err := ma.contracts.EnvStorageImp.GetBlockRewardAmount(opts); err != nil {
 		return data, err
 	} else {
 		data.blockReward = blockReward
 	}
 
-	if maxPriorityFeePerGas, err := ma.contracts.EnvStorageImp.Funcs.GetMaxPriorityFeePerGas(opts); err != nil {
+	if maxPriorityFeePerGas, err := ma.contracts.EnvStorageImp.GetMaxPriorityFeePerGas(opts); err != nil {
 		return data, err
 	} else {
 		data.maxPriorityFeePerGas = maxPriorityFeePerGas
 	}
 
-	if gasLimit, baseFeeMaxChangeRate, gasTargetPercentage, err := ma.contracts.EnvStorageImp.Funcs.GetGasLimitAndBaseFee(opts); err != nil {
+	if gasLimit, baseFeeMaxChangeRate, gasTargetPercentage, err := ma.contracts.EnvStorageImp.GetGasLimitAndBaseFee(opts); err != nil {
 		return data, err
 	} else {
 		data.gasLimit = gasLimit
@@ -467,7 +467,7 @@ func (ma *wemixAdmin) getGovData(refresh bool) (*govdata, error) {
 		data.gasTargetPercentage = gasTargetPercentage.Int64()
 	}
 
-	if maxBaseFee, err := ma.contracts.EnvStorageImp.Funcs.GetMaxBaseFee(opts); err != nil {
+	if maxBaseFee, err := ma.contracts.EnvStorageImp.GetMaxBaseFee(opts); err != nil {
 		return data, err
 	} else {
 		data.maxBaseFee = maxBaseFee
@@ -988,7 +988,7 @@ func getCoinbase(height *big.Int) (common.Address, error) {
 			return common.Address{}, err
 		}
 		nodeId := crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
-		return enodeExists(ctx, height, contracts.GovImp.Funcs, nodeId)
+		return enodeExists(ctx, height, contracts.GovImp, nodeId)
 	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
 		return admin.bootAccount, nil
 	} else {
@@ -1020,7 +1020,7 @@ func signBlock(height *big.Int, hash common.Hash) (common.Address, []byte, error
 		}
 
 		nodeId := crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
-		if addr, err := enodeExists(ctx, height, contracts.GovImp.Funcs, nodeId); err != nil {
+		if addr, err := enodeExists(ctx, height, contracts.GovImp, nodeId); err != nil {
 			return common.Address{}, nil, err
 		} else {
 			return addr, sig, nil
@@ -1040,10 +1040,10 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 	contracts, err := admin.getRegGovEnvContracts(ctx, num)
 	if err != nil {
 		return err == wemixminer.ErrNotInitialized || err == ethereum.NotFound
-	} else if count, err := contracts.GovImp.Funcs.GetMemberLength(&bind.CallOpts{Context: ctx, BlockNumber: num}); err != nil || count.Sign() == 0 {
+	} else if count, err := contracts.GovImp.GetMemberLength(&bind.CallOpts{Context: ctx, BlockNumber: num}); err != nil || count.Sign() == 0 {
 		return err == wemixminer.ErrNotInitialized || count.Sign() == 0
 	}
-	gov := contracts.GovImp.Funcs
+	gov := contracts.GovImp
 	// if minerNodeId is given, i.e. present in block header, use it,
 	// otherwise, derive it from the codebase
 	var data []byte
@@ -1176,7 +1176,7 @@ func suggestGasPrice() *big.Int {
 	if admin == nil || admin.contracts == nil || admin.contracts.EnvStorageImp == nil {
 		return defaultFee
 	}
-	fee, err := admin.contracts.EnvStorageImp.Funcs.GetMaxPriorityFeePerGas(nil)
+	fee, err := admin.contracts.EnvStorageImp.GetMaxPriorityFeePerGas(nil)
 	if err != nil {
 		return defaultFee
 	} else {
@@ -1222,7 +1222,7 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 		err = wemixminer.ErrNotInitialized
 		return
 	} else {
-		env, gov = contracts.EnvStorageImp.Funcs, contracts.GovImp.Funcs
+		env, gov = contracts.EnvStorageImp, contracts.GovImp
 	}
 
 	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
@@ -1307,11 +1307,12 @@ func Info() interface{} {
 			return nodes[i].Name < nodes[j].Name
 		})
 
+		ca := admin.contracts.Address()
 		info := &map[string]interface{}{
 			"consensus":            params.ConsensusMethod,
-			"registry":             admin.contracts.Registry.Address(),
-			"governance":           admin.contracts.Gov.Address(),
-			"staking":              admin.contracts.Staking.Address(),
+			"registry":             ca.Registry,
+			"governance":           ca.Gov,
+			"staking":              ca.Staking,
 			"modifiedblock":        admin.modifiedBlock,
 			"blocksPer":            admin.blocksPer,
 			"blockInterval":        admin.blockInterval,

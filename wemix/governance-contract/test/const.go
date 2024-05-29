@@ -27,21 +27,17 @@ var EnvConstants = struct {
 	STAKING_MIN                              env
 	STAKING_MAX                              env
 	MAX_IDLE_BLOCK_INTERVAL                  env
-	BALLOT_DURATION_MIN_MAX                  env
-	STAKING_MIN_MAX                          env
 	BLOCK_CREATION_TIME                      env
 	BLOCK_REWARD_AMOUNT                      env
 	MAX_PRIORITY_FEE_PER_GAS                 env
-	BLOCK_REWARD_DISTRIBUTION_METHOD         env
 	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER env
 	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD env
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM      env
 	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE    env
-	GASLIMIT_AND_BASE_FEE                    env
+	MAX_BASE_FEE                             env
 	BLOCK_GASLIMIT                           env
 	BASE_FEE_MAX_CHANGE_RATE                 env
 	GAS_TARGET_PERCENTAGE                    env
-	MAX_BASE_FEE                             env
 }{
 	BLOCKS_PER:                               newEnvInt64("blocksPer", 1),
 	BALLOT_DURATION_MIN:                      newEnvInt64("ballotDurationMin", 86400),
@@ -49,21 +45,17 @@ var EnvConstants = struct {
 	STAKING_MIN:                              newEnvBig("stakingMin", towei(1500000)),
 	STAKING_MAX:                              newEnvBig("stakingMax", towei(1500000)),
 	MAX_IDLE_BLOCK_INTERVAL:                  newEnvInt64("MaxIdleBlockInterval", 5),
-	BALLOT_DURATION_MIN_MAX:                  newEnvInt64("ballotDurationMinMax", 0),
-	STAKING_MIN_MAX:                          newEnvInt64("stakingMinMax", 0),
 	BLOCK_CREATION_TIME:                      newEnvInt64("blockCreationTime", 1000),
 	BLOCK_REWARD_AMOUNT:                      newEnvBig("blockRewardAmount", towei(1)),
 	MAX_PRIORITY_FEE_PER_GAS:                 newEnvBig("maxPriorityFeePerGas", toGwei(100)),
-	BLOCK_REWARD_DISTRIBUTION_METHOD:         newEnvInt64("blockRewardDistribution", 0),
 	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: newEnvInt64("blockRewardDistributionBlockProducer", 4000),
 	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: newEnvInt64("blockRewardDistributionStakingReward", 1000),
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      newEnvInt64("blockRewardDistributionEcosystem", 2500),
 	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    newEnvInt64("blockRewardDistributionMaintenance", 2500),
-	GASLIMIT_AND_BASE_FEE:                    newEnvInt64("gasLimitAndBaseFee", 0),
+	MAX_BASE_FEE:                             newEnvBig("maxBaseFee", toGwei(5000)),
 	BLOCK_GASLIMIT:                           newEnvInt64("blockGasLimit", 1050000000),
 	BASE_FEE_MAX_CHANGE_RATE:                 newEnvInt64("baseFeeMaxChangeRate", 46),
 	GAS_TARGET_PERCENTAGE:                    newEnvInt64("gasTargetPercentage", 30),
-	MAX_BASE_FEE:                             newEnvBig("maxBaseFee", toGwei(5000)),
 }
 
 type env struct {

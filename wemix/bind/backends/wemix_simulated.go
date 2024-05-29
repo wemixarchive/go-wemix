@@ -3,7 +3,6 @@ package backends
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/hex"
 	"errors"
 	"math/big"
 	"path/filepath"
@@ -56,7 +55,7 @@ type wemixSimulatedBackend struct {
 	governance *gov.GovContracts
 }
 
-func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.GenesisAlloc, options ...func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.EnvInitializeConfig)) (SimClient, error) {
+func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.GenesisAlloc, options ...func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage)) (SimClient, error) {
 	params.ConsensusMethod = params.ConsensusPoA
 
 	nodeConfig := node.DefaultConfig
@@ -78,7 +77,7 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 	ethConfig.TxPool.NoLocals = true
 	ethConfig.Ethash = ethash.Config{PowMode: ethash.ModeFake, Log: log.Root()}
 	ethConfig.NoPruning = true
-	envConfig := gov.DefaultEnvInitializeConfig
+	envConfig := gov.DefaultInitEnvStorage
 
 	for _, option := range options {
 		option(&nodeConfig, &ethConfig, &envConfig)
@@ -89,8 +88,8 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 		return nil, err
 	}
 
-	extraData := strings.Split(strings.TrimLeft(stack.Server().NodeInfo().Enode, "enode://"), "@")[0]
-	ethConfig.Genesis.ExtraData = append(ethConfig.Genesis.ExtraData, []byte("0x"+extraData)...)
+	enode := strings.Split(strings.TrimLeft(stack.Server().NodeInfo().Enode, "enode://"), "@")[0]
+	ethConfig.Genesis.ExtraData = append(ethConfig.Genesis.ExtraData, []byte("0x"+enode)...)
 	ethConfig.NetworkId = ethConfig.Genesis.Config.ChainID.Uint64()
 
 	backend, err := eth.New(stack, &ethConfig)
@@ -119,14 +118,14 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 	if err := backend.StartMining(1); err != nil {
 		return nil, err
 	}
-	sleepCount := 0
+	now := time.Now()
 	for backend.APIBackend.CurrentBlock().NumberU64() == 0 {
-		sleepCount++
-		if sleepCount > 10 {
+		if time.Since(now).Seconds() > 10 {
 			return nil, errors.New("mining error")
 		}
 		time.Sleep(0.2e9)
 	}
+	log.Root().Warn("Wait Genesis Block Mined", "elapsed", time.Since(now).Seconds())
 
 	rpcClient, err := stack.Attach()
 	if err != nil {
@@ -139,20 +138,31 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 		return nil, err
 	}
 
-	contracts, err := gov.DeployGovContracts(opts, ethClient)
+	contracts, _, err := gov.DeployGovContracts(opts, ethClient, map[string]common.Address{
+		"StakingReward": opts.From,
+		"Ecosystem":     opts.From,
+		"Maintenance":   opts.From,
+		"FeeCollector":  opts.From,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	contracts, err = gov.ExecuteInitialize(contracts, opts, ethClient, &envConfig, func(Gov gov.IGovInitFuncs) (*types.Transaction, error) {
-		nodeInfo := stack.Server().NodeInfo()
-		if enode, err := hex.DecodeString(extraData); err != nil {
-			return nil, err
-		} else {
-			return Gov.Init(opts, contracts.Registry.Address(), envConfig.STAKING_MIN, []byte(nodeInfo.Name), enode, []byte(nodeInfo.IP), big.NewInt(8589))
-		}
-	})
-	if err != nil {
+	nodeInfo := stack.Server().NodeInfo()
+	var members gov.InitMembers = []gov.InitMember{
+		{
+			Staker:  opts.From,
+			Voter:   opts.From,
+			Reward:  opts.From,
+			Name:    nodeInfo.Name,
+			Enode:   enode,
+			Ip:      nodeInfo.IP,
+			Port:    8589,
+			Deposit: envConfig.STAKING_MIN,
+		},
+	}
+
+	if err := gov.ExecuteInitialize(contracts, opts, ethClient, envConfig, members); err != nil {
 		return nil, err
 	}
 
