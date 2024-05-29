@@ -970,8 +970,7 @@ func getCoinbase(height *big.Int) (common.Address, error) {
 	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
 		return admin.bootAccount, nil
 	} else {
-		// TODO ???
-		return common.Address{}, nil
+		return common.Address{}, ethereum.NotFound
 	}
 }
 
