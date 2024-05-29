@@ -172,7 +172,7 @@ func toIdv4(id string) (string, error) {
 			return idv4.ID().String(), nil
 		}
 	} else {
-		return "", fmt.Errorf("Invalid V5 Identifier")
+		return "", fmt.Errorf("invalid V5 Identifier")
 	}
 }
 
@@ -191,11 +191,11 @@ func (ma *wemixAdmin) getGenesisInfo() (string, common.Address, error) {
 	}
 	var nodeId string
 	if len(block.Extra) < 64 {
-		return "", common.Address{}, fmt.Errorf("Invalid bootnode id in the genesis block")
+		return "", common.Address{}, fmt.Errorf("invalid bootnode id in the genesis block")
 	} else if len(block.Extra) == 64 {
 		nodeId = hex.EncodeToString(block.Extra)
 	} else if len(block.Extra) <= 128 {
-		return "", common.Address{}, fmt.Errorf("Invalid bootnode id in the genesis block")
+		return "", common.Address{}, fmt.Errorf("invalid bootnode id in the genesis block")
 	} else {
 		nodeId = string(block.Extra[len(block.Extra)-128:])
 	}
@@ -289,29 +289,33 @@ func (ma *wemixAdmin) getMinerNodes(height int64, locked bool) (*wemixNode, *wem
 func (ma *wemixAdmin) getWemixNodes(ctx context.Context, block *big.Int) ([]*wemixNode, error) {
 	callOpts := &bind.CallOpts{Context: ctx, BlockNumber: block}
 	nodes := make([]*wemixNode, 0)
-	count, err := ma.contracts.GovImp.GetNodeLength(callOpts)
-	for i := int64(1); i <= count.Int64(); i++ {
-		getNode, err := ma.contracts.GovImp.GetNode(callOpts, big.NewInt(i))
+	nodeLength, err := ma.contracts.GovImp.GetNodeLength(callOpts)
+	if err != nil {
+		return nil, err
+	}
+	count := nodeLength.Int64()
+	for i := int64(1); i <= count; i++ {
+		node, err := ma.contracts.GovImp.GetNode(callOpts, big.NewInt(i))
 		if err != nil {
 			return nil, err
 		}
-		getMember, err := ma.contracts.GovImp.GetMember(callOpts, big.NewInt(i))
+		member, err := ma.contracts.GovImp.GetMember(callOpts, big.NewInt(i))
 		if err != nil {
 			return nil, err
 		}
 
-		sid := hex.EncodeToString(getNode.Enode)
+		sid := hex.EncodeToString(node.Enode)
 		if len(sid) != 128 {
 			return nil, ErrInvalidEnode
 		}
 		idv4, _ := toIdv4(sid)
 		nodes = append(nodes, &wemixNode{
-			Name:  string(getNode.Name),
+			Name:  string(node.Name),
 			Enode: sid,
-			Ip:    string(getNode.Ip),
+			Ip:    string(node.Ip),
 			Id:    idv4,
-			Port:  int(getNode.Port.Int64()),
-			Addr:  getMember,
+			Port:  int(node.Port.Int64()),
+			Addr:  member,
 		})
 	}
 	sort.Slice(nodes, func(i, j int) bool {
@@ -550,10 +554,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 	if err != nil {
 		return
 	}
-	admin.contracts, err = admin.getRegGovEnvContracts(nil, nil)
-	if err != nil {
-		// return
-	}
+	admin.contracts, _ = admin.getRegGovEnvContracts(nil, nil)
 
 	go admin.run()
 	go admin.handleNewBlocks()
@@ -783,7 +784,7 @@ type reward struct {
 }
 
 // handles rewards in testnet block 94
-func handleBlock94Rewards(height *big.Int, rp *rewardParameters, fees *big.Int) []reward {
+func handleBlock94Rewards(height *big.Int, rp *rewardParameters, _ /*fees*/ *big.Int) []reward {
 	if height.Int64() != 94 || len(rp.members) != 0 ||
 		!bytes.Equal(rp.staker[:], testnetBlock94Rewards[0].Addr[:]) ||
 		!bytes.Equal(rp.ecoSystem[:], testnetBlock94Rewards[1].Addr[:]) ||
@@ -1494,7 +1495,7 @@ func (ma *wemixAdmin) getTxPoolStatus() (pending, queued uint, err error) {
 	p, b1 := data["pending"]
 	q, b2 := data["queued"]
 	if !b1 || !b2 {
-		err = fmt.Errorf("Invalid Data")
+		err = fmt.Errorf("invalid Data")
 	} else {
 		pending = uint(p)
 		queued = uint(q)
