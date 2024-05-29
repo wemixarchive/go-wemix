@@ -1013,8 +1013,7 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'getBriocheBlockReward',
 			call: 'wemix_getBriocheBlockReward',
-			params: 1,
-			inputFormatter: [null]
+			params: 1
 		})
 	],
 	properties:
