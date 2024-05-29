@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"math/big"
+	"os"
 	"testing"
 	"time"
 
@@ -10,11 +11,15 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	sim "github.com/ethereum/go-ethereum/wemix/governance-contract/common/simulated-backend"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGov(t *testing.T) {
+	// for mute chain log
+	log.Root().SetHandler(log.LvlFilterHandler(log.Lvl(0), log.StreamHandler(os.Stdout, log.TerminalFormat(true))))
+
 	t.Run("Staker is voter", func(t *testing.T) {
 		t.Run("has enode and locked staking", func(t *testing.T) {
 			gov := DeployGovernance(t)

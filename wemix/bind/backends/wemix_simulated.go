@@ -88,6 +88,7 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 		return nil, err
 	}
 
+	// XXX enode://{{enode}}@0.0.0.0:0
 	enode := strings.Split(strings.TrimLeft(stack.Server().NodeInfo().Enode, "enode://"), "@")[0]
 	ethConfig.Genesis.ExtraData = append(ethConfig.Genesis.ExtraData, []byte("0x"+enode)...)
 	ethConfig.NetworkId = ethConfig.Genesis.Config.ChainID.Uint64()

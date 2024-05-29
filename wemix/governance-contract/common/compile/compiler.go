@@ -5,14 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common/compiler"
-)
-
-var (
-	solidityVersion = "0.8.14"
 )
 
 func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract, error) {
@@ -28,8 +23,7 @@ func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract,
 		fmt.Sprintf("@openzeppelin/contracts-upgradeable/=%s/openzeppelin/openzeppelin-contracts-upgradeable/contracts/", root),
 		"--",
 	}
-	name := filepath.Join(root, "..", fmt.Sprintf("solc-%s", solidityVersion))
-	cmd := exec.Command(name, append(args, sourceFiles...)...)
+	cmd := exec.Command("solc", append(args, sourceFiles...)...)
 
 	// cmd를 실행하고 결과를 Contract로 변환
 	var stderr, stdout bytes.Buffer
@@ -45,7 +39,7 @@ func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract,
 
 	if err := json.Unmarshal(stdout.Bytes(), &compilerVersion); err != nil {
 		return nil, err
-	} else if contracts, err := compiler.ParseCombinedJSON(stdout.Bytes(), "", solidityVersion, compilerVersion.Version, strings.Join(args, " ")); err != nil {
+	} else if contracts, err := compiler.ParseCombinedJSON(stdout.Bytes(), "", "", compilerVersion.Version, strings.Join(args, " ")); err != nil {
 		return nil, err
 	} else {
 		out := make(map[string]*compiler.Contract)

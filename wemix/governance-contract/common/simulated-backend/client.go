@@ -23,10 +23,9 @@ const IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a92
 type Client struct {
 	Backend            *backends.SimulatedBackend
 	ChainID            *big.Int
-	Owner              common.Address // sim 환경이 아닐때에는 Owner 주소 세팅 필요
+	Owner              common.Address
 	ContractsByAlias   map[string]*Contract
 	ContractsByAddress map[common.Address]*Contract
-	Block              *big.Int
 	Signer             bind.SignerFn
 }
 
@@ -70,7 +69,6 @@ func (c *Client) EnrollContract(t *testing.T, contract *Contract) (logic *Contra
 	c.ContractsByAlias[contract.Alias] = contract
 	c.ContractsByAddress[contract.Address] = contract
 
-	// logic이 있는 proxy인지 확인하고 logic을 반환.
 	res, err := c.Backend.StorageAt(ctx, contract.Address, common.HexToHash(IMPLEMENTATION_SLOT), nil)
 	require.NoError(t, err)
 	logic = c.ContractsByAddress[common.BytesToAddress(res)]
@@ -93,7 +91,6 @@ func (p *Client) SendTransaction(t *testing.T, sender common.Address, to common.
 	return tx, receipt
 }
 
-// @DEV: 대상 backend에 따라서 gasprice, txtype 수정 필요
 func (p *Client) SendTransactionWithoutCommit(t *testing.T, sender common.Address, to common.Address, value *big.Int, payload []byte) (tx *types.Transaction) {
 	if sender == (common.Address{}) {
 		sender = p.Owner
@@ -114,7 +111,7 @@ func (p *Client) SendTransactionWithoutCommit(t *testing.T, sender common.Addres
 		tx = types.NewTx(&types.DynamicFeeTx{
 			To:        &to,
 			Nonce:     nonce,
-			GasFeeCap: cap, // tip + (head.baseFee*2)
+			GasFeeCap: cap,
 			GasTipCap: tip,
 			Gas:       defaultGasLimit,
 			Value:     value,
@@ -123,7 +120,7 @@ func (p *Client) SendTransactionWithoutCommit(t *testing.T, sender common.Addres
 	} else {
 		tx = types.NewTx(&types.DynamicFeeTx{
 			Nonce:     nonce,
-			GasFeeCap: cap, // tip + (head.baseFee*2)
+			GasFeeCap: cap,
 			GasTipCap: tip,
 			Gas:       defaultGasLimit,
 			Value:     value,

@@ -73,7 +73,6 @@ func DeployGovernance(t *testing.T) *Governance {
 
 	gov.EnvStorage.ExecuteOk(t, gov.client.Owner, "initialize", gov.Registry.Address, envNames, envValues)
 
-	// [Gov] owner 를 gov 에 등록하기 위해 미리 staking 을 한다.
 	gov.Staking.ExecuteWithETHOk(t, gov.client.Owner, LOCK_AMOUNT, "deposit")
 	node := nodeInfo{
 		[]byte("name"),

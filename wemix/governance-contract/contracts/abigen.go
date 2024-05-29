@@ -14,14 +14,16 @@ import (
 )
 
 var (
-	rootFlag        = flag.String("root", "../contracts", "")
-	outDir   string = "../../bind"
-	pkg      string = "gov"
+	rootFlag = flag.String("root", "../contracts", "")
+	outDir   string
 )
+
+const pkg string = "gov"
 
 func main() {
 	flag.Parse()
 	root := *rootFlag
+	outDir = filepath.Join(root, "../../bind")
 	if contracts, err := compile.Compile(root,
 		filepath.Join(root, "Registry.sol"),
 		filepath.Join(root, "Gov.sol"),

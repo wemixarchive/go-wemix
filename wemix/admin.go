@@ -1026,8 +1026,7 @@ func signBlock(height *big.Int, hash common.Hash) (common.Address, []byte, error
 			return addr, sig, nil
 		}
 	} else {
-		// XXX TODO
-		return common.Address{}, sig, errors.New("")
+		return common.Address{}, sig, wemixminer.ErrNotInitialized
 	}
 }
 

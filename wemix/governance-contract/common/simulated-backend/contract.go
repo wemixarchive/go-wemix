@@ -159,8 +159,6 @@ func (p *Contract) Call1(t *testing.T, method string, args ...interface{}) inter
 }
 
 // FormatCall return output according to the abi specification
-// struct 타입으로 받을경우 사용하면 편리
-// 호춣할때 out 변수를 위에 선언하지않고 한줄로 사용할수있도록 output의 type을 인자로 받게 했음.
 func (p *Contract) FormatCall(t *testing.T, outType reflect.Type, method string, args ...interface{}) (output interface{}) {
 	input := p.PackInput(t, method, args...)
 
@@ -218,7 +216,6 @@ func (p *Contract) execute(t *testing.T, sender common.Address, value *big.Int, 
 	if receipt.Status != types.ReceiptStatusSuccessful {
 		err = CallRevertReason(t, p.Client.Backend, sender, receipt.BlockNumber, tx)
 	} else {
-		// proxy의 logic 업데이트경우 처리.
 		if p.Logic != nil {
 			if e, err := p.Abi.EventByID(crypto.Keccak256Hash([]byte("Upgraded(address)"))); err == nil {
 			search:

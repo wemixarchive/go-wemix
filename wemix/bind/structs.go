@@ -19,7 +19,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-//go:generate go run ../governance-contract/contracts/abigen.go --root="../governance-contract/contracts"
+//go:generate go run ../governance-contract/contracts/abigen.go --root='../governance-contract/contracts'
 
 var (
 	magic = new(big.Int).SetBytes(hexutil.MustDecode("0x57656d6978205265676973747279"))
