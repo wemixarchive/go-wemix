@@ -384,6 +384,7 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td, ttd *big.Int, 
 	// Post a user notification of the sync (only once per session)
 	if atomic.CompareAndSwapInt32(&d.notified, 0, 1) {
 		log.Info("Block synchronisation started")
+		defer log.Info("Block synchronisation finished")
 	}
 	if mode == SnapSync {
 		// Snap sync uses the snapshot namespace to store potentially flakey data until

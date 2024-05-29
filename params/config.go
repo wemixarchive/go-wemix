@@ -159,7 +159,16 @@ var (
 		LondonBlock:         big.NewInt(0),
 		PangyoBlock:         big.NewInt(0),
 		ApplepieBlock:       big.NewInt(20_476_911),
+		BriocheBlock:        big.NewInt(53_525_500), // target date: 24-07-01 00:00:00 (GMT+09)
 		Ethash:              new(EthashConfig),
+		Brioche: &BriocheConfig{
+			BlockReward:       big.NewInt(1e18),
+			FirstHalvingBlock: big.NewInt(53_525_500),
+			HalvingPeriod:     big.NewInt(63_115_200),
+			FinishRewardBlock: big.NewInt(2_467_714_000), // target date: 2101-01-01 00:00:00 (GMT+09)
+			HalvingTimes:      16,
+			HalvingRate:       50,
+		},
 	}
 
 	// WemixTestnetChainConfig contains the chain parameters to run a node on the Wemix test network.
@@ -180,7 +189,16 @@ var (
 		LondonBlock:         big.NewInt(0),
 		PangyoBlock:         big.NewInt(10_000_000),
 		ApplepieBlock:       big.NewInt(26_240_268),
+		BriocheBlock:        big.NewInt(59_414_700), // target date: 24-06-04 11:00:41 (GMT+09)
 		Ethash:              new(EthashConfig),
+		Brioche: &BriocheConfig{
+			BlockReward:       big.NewInt(1e18),
+			FirstHalvingBlock: big.NewInt(59_414_700),
+			HalvingPeriod:     big.NewInt(63_115_200),
+			FinishRewardBlock: big.NewInt(2_473_258_000), // target date: 2100-12-01 11:02:21 (GMT+09)
+			HalvingTimes:      16,
+			HalvingRate:       50,
+		},
 	}
 
 	// SepoliaChainConfig contains the chain parameters to run a node on the Sepolia test network.
@@ -303,16 +321,16 @@ var (
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, new(EthashConfig), nil}
+	AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, new(EthashConfig), nil, nil}
 
 	// AllCliqueProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Clique consensus.
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}}
+	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, new(EthashConfig), nil}
+	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, new(EthashConfig), nil, nil}
 	TestRules       = TestChainConfig.Rules(new(big.Int), false)
 )
 
@@ -395,18 +413,74 @@ type ChainConfig struct {
 	MergeForkBlock      *big.Int `json:"mergeForkBlock,omitempty"`      // EIP-3675 (TheMerge) switch block (nil = no fork, 0 = already in merge proceedings)
 	PangyoBlock         *big.Int `json:"pangyoBlock,omitempty"`         // Pangyo switch block (nil = no fork, 0 = already on pangyo)
 	ApplepieBlock       *big.Int `json:"applepieBlock,omitempty"`       // Applepie switch block (nil = no fork, 0 = already on applepie)
+	BriocheBlock        *big.Int `json:"briocheBlock,omitempty"`        // Brioche switch block (nil = no fork, 0 = already on brioche)
 
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
 	TerminalTotalDifficulty *big.Int `json:"terminalTotalDifficulty,omitempty"`
 
 	// Various consensus engines
-	Ethash *EthashConfig `json:"ethash,omitempty"`
-	Clique *CliqueConfig `json:"clique,omitempty"`
+	Ethash  *EthashConfig  `json:"ethash,omitempty"`
+	Clique  *CliqueConfig  `json:"clique,omitempty"`
+	Brioche *BriocheConfig `json:"brioche,omitempty"` // if this config is nil, brioche halving is not applied
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
 type EthashConfig struct{}
+
+// Brioche halving configuration
+type BriocheConfig struct {
+	// if the chain is on brioche hard fork, `RewardAmount` of gov contract is not used rather this BlockReward is used
+	BlockReward       *big.Int `json:"blockReward,omitempty"`       // nil - use default block reward(1e18)
+	FirstHalvingBlock *big.Int `json:"firstHalvingBlock,omitempty"` // nil - halving is not work. including this block
+	HalvingPeriod     *big.Int `json:"halvingPeriod,omitempty"`     // nil - halving is not work
+	FinishRewardBlock *big.Int `json:"finishRewardBlock,omitempty"` // nil - block reward goes on endlessly
+	HalvingTimes      uint64   `json:"halvingTimes,omitempty"`      // 0 - no halving
+	HalvingRate       uint32   `json:"halvingRate,omitempty"`       // 0 - no reward on halving; 100 - no halving; >100 - increasing reward
+}
+
+func (bc *BriocheConfig) GetBriocheBlockReward(defaultReward *big.Int, num *big.Int) *big.Int {
+	blockReward := new(big.Int).Set(defaultReward) // default brioche block reward
+	if bc != nil {
+		if bc.BlockReward != nil {
+			blockReward = new(big.Int).Set(bc.BlockReward)
+		}
+		if bc.FinishRewardBlock != nil &&
+			bc.FinishRewardBlock.Cmp(num) <= 0 {
+			blockReward = big.NewInt(0)
+		} else if bc.FirstHalvingBlock != nil &&
+			bc.HalvingPeriod != nil &&
+			bc.HalvingTimes > 0 &&
+			num.Cmp(bc.FirstHalvingBlock) >= 0 {
+			blockReward = bc.calcHalvedReward(blockReward, num)
+		}
+	}
+	return blockReward
+}
+
+func (bc *BriocheConfig) calcHalvedReward(baseReward *big.Int, num *big.Int) *big.Int {
+	elapsed := new(big.Int).Sub(num, bc.FirstHalvingBlock)
+	times := new(big.Int).Add(common.Big1, new(big.Int).Div(elapsed, bc.HalvingPeriod))
+	if times.Uint64() > bc.HalvingTimes {
+		times = big.NewInt(int64(bc.HalvingTimes))
+	}
+
+	reward := new(big.Int).Set(baseReward)
+	numerator := new(big.Int).Exp(big.NewInt(int64(bc.HalvingRate)), times, nil)
+	denominator := new(big.Int).Exp(big.NewInt(100), times, nil)
+	return reward.Div(reward.Mul(reward, numerator), denominator)
+}
+
+func (bc *BriocheConfig) String() string {
+	return fmt.Sprintf("{BlockReward: %v FirstHalvingBlock: %v HalvingPeriod: %v FinishRewardBlock: %v HalvingTimes: %v HalvingRate: %v}",
+		bc.BlockReward,
+		bc.FirstHalvingBlock,
+		bc.HalvingPeriod,
+		bc.FinishRewardBlock,
+		bc.HalvingTimes,
+		bc.HalvingRate,
+	)
+}
 
 // String implements the stringer interface, returning the consensus engine details.
 func (c *EthashConfig) String() string {
@@ -435,7 +509,7 @@ func (c *ChainConfig) String() string {
 	default:
 		engine = "unknown"
 	}
-	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, Terminal TD: %v, Engine: %v}",
+	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, Terminal TD: %v, BriocheConfig: %v, Engine: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -454,7 +528,9 @@ func (c *ChainConfig) String() string {
 		c.MergeForkBlock,
 		c.PangyoBlock,
 		c.ApplepieBlock,
+		c.BriocheBlock,
 		c.TerminalTotalDifficulty,
+		c.Brioche,
 		engine,
 	)
 }
@@ -537,6 +613,10 @@ func (c *ChainConfig) IsArrowGlacier(num *big.Int) bool {
 	return isForked(c.ArrowGlacierBlock, num)
 }
 
+func (c *ChainConfig) IsBrioche(num *big.Int) bool {
+	return isForked(c.BriocheBlock, num)
+}
+
 // IsTerminalPoWBlock returns whether the given block is the last block of PoW stage.
 func (c *ChainConfig) IsTerminalPoWBlock(parentTotalDiff *big.Int, totalDiff *big.Int) bool {
 	if c.TerminalTotalDifficulty == nil {
@@ -592,6 +672,9 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "londonBlock", block: c.LondonBlock},
 		{name: "arrowGlacierBlock", block: c.ArrowGlacierBlock, optional: true},
 		{name: "mergeStartBlock", block: c.MergeForkBlock, optional: true},
+		{name: "pangyoBlock", block: c.PangyoBlock, optional: true},
+		{name: "applepieBlock", block: c.ApplepieBlock, optional: true},
+		{name: "briocheBlock", block: c.BriocheBlock, optional: true},
 	} {
 		if lastFork.name != "" {
 			// Next one must be higher number
@@ -667,6 +750,15 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 	if isForkIncompatible(c.MergeForkBlock, newcfg.MergeForkBlock, head) {
 		return newCompatError("Merge Start fork block", c.MergeForkBlock, newcfg.MergeForkBlock)
 	}
+	if isForkIncompatible(c.PangyoBlock, newcfg.PangyoBlock, head) {
+		return newCompatError("Pangyo fork block", c.PangyoBlock, newcfg.PangyoBlock)
+	}
+	if isForkIncompatible(c.ApplepieBlock, newcfg.ApplepieBlock, head) {
+		return newCompatError("Applepie fork block", c.ApplepieBlock, newcfg.ApplepieBlock)
+	}
+	if isForkIncompatible(c.BriocheBlock, newcfg.BriocheBlock, head) {
+		return newCompatError("Brioche fork block", c.BriocheBlock, newcfg.BriocheBlock)
+	}
 	return nil
 }
 
@@ -736,7 +828,7 @@ type Rules struct {
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsLondon                                      bool
 	IsMerge                                                 bool
-	IsPangyo, IsApplepie                                    bool
+	IsPangyo, IsApplepie, IsBrioche                         bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -760,5 +852,6 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool) Rules {
 		IsMerge:          isMerge,
 		IsPangyo:         c.IsPangyo(num),
 		IsApplepie:       c.IsApplepie(num),
+		IsBrioche:        c.IsBrioche(num),
 	}
 }

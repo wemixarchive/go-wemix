@@ -43,7 +43,6 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
-	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 	lru "github.com/hashicorp/golang-lru"
 )
 
@@ -1608,11 +1607,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
 
-		// wemix: reward calculation uses governance contract, meaning
-		// the previous block is required. For fast sync, we need to wait for
-		// governance is initialized and try again.
-		retryCount := 2
-	retry:
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return it.index, err
@@ -1642,13 +1636,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		receipts, logs, usedGas, fees, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
-
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them
 		storageReadTimer.Update(statedb.StorageReads)                 // Storage reads are complete, we can mark them
@@ -1664,18 +1657,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		// Validate the state using the default validator
 		substart = time.Now()
-		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas, fees); err != nil {
-			if retryCount--; !wemixminer.IsPoW() && retryCount > 0 {
-				// make sure the previous block exists in order to calculate rewards distribution
-				for try := 100; try > 0; try-- {
-					if _, _, err := wemixminer.CalculateRewards(block.Number(), big.NewInt(0), big.NewInt(100000000), nil); err == nil {
-						break
-					}
-					time.Sleep(100 * time.Millisecond)
-				}
-				goto retry
-			}
-
+		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err

@@ -60,6 +60,8 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
+	github.com/yahoo/coname v0.0.0-20170609175141-84592ddf8673
+	github.com/yoseplee/vrf v0.0.0-20210814110709-d1caf509310b
 	go.etcd.io/etcd/api/v3 v3.5.2
 	go.etcd.io/etcd/client/v3 v3.5.2
 	go.etcd.io/etcd/server/v3 v3.5.2
@@ -72,8 +74,6 @@ require (
 	golang.org/x/tools v0.1.8-0.20211029000441-d6a9af8af023
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
 	gopkg.in/urfave/cli.v1 v1.20.0
-	github.com/yoseplee/vrf v0.0.0-20210814110709-d1caf509310b
-	github.com/yahoo/coname v0.0.0-20170609175141-84592ddf8673
 )
 
 require (

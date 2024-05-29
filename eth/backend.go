@@ -292,6 +292,15 @@ func (s *Ethereum) APIs() []rpc.API {
 	// Append any APIs exposed explicitly by the consensus engine
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
 
+	if brioche := s.blockchain.Config().Brioche; brioche != nil {
+		apis = append(apis, rpc.API{
+			Namespace: "wemix",
+			Version:   "1.0",
+			Service:   NewPublicWemixAPI(s),
+			Public:    true,
+		})
+	}
+
 	// Append all the local APIs and return
 	return append(apis, []rpc.API{
 		{
