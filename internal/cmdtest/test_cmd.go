@@ -27,7 +27,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"text/template"
 	"time"
@@ -208,9 +207,7 @@ func (tt *TestCmd) ExitStatus() int {
 	if tt.Err != nil {
 		exitErr := tt.Err.(*exec.ExitError)
 		if exitErr != nil {
-			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
-				return status.ExitStatus()
-			}
+			return exitErr.ProcessState.ExitCode()
 		}
 	}
 	return 0

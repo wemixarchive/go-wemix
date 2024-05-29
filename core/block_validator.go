@@ -18,7 +18,6 @@ package core
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -80,13 +79,10 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // transition, such as amount of used gas, the receipt roots and the state root
 // itself. ValidateState returns a database batch if the validation was a success
 // otherwise nil and an error is returned.
-func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64, fees *big.Int) error {
+func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
 	header := block.Header()
 	if block.GasUsed() != usedGas {
 		return fmt.Errorf("invalid gas used (remote: %d local: %d)", block.GasUsed(), usedGas)
-	}
-	if !wemixminer.IsPoW() && block.Fees().Cmp(fees) != 0 {
-		return fmt.Errorf("invalid fees collected (remote: %v local: %v)", block.Fees(), fees)
 	}
 
 	// Validate the received block's bloom with the one derived from the generated receipts.
@@ -100,11 +96,13 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	if receiptSha != header.ReceiptHash {
 		return fmt.Errorf("invalid receipt root hash (remote: %x local: %x)", header.ReceiptHash, receiptSha)
 	}
+
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x)", header.Root, root)
 	}
+
 	return nil
 }
 

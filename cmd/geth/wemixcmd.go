@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/charlanxcc/logrot"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -29,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
+	"golang.org/x/sys/unix"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -667,10 +667,10 @@ func logrota(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	syscall.Close(syscall.Stdout)
-	syscall.Close(syscall.Stdout)
-	syscall.Dup2(int(w.Fd()), syscall.Stdout)
-	syscall.Dup2(int(w.Fd()), syscall.Stderr)
+	unix.Close(unix.Stdout)
+	unix.Close(unix.Stdout)
+	unix.Dup2(int(w.Fd()), unix.Stdout)
+	unix.Dup2(int(w.Fd()), unix.Stderr)
 
 	go logrot.LogRotate(r, logFile, logSize, logCount)
 

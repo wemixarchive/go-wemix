@@ -166,6 +166,10 @@ After getting enodes of mining nodes, run gwemix as follows.
 
     bin/gwemix --syncmode full --datadir <data-directory> --bootnodes <enodes> --http --http.addr 0.0.0.0
 
+### Starting Nodes With Docker
+
+See documentation [here](docs/container.md)
+
 ### The original go-ethereum README follows...
 
 ## Go Ethereum

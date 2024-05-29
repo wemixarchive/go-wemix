@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/forkid"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 )
 
@@ -51,7 +52,7 @@ func (p *Peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 		})
 	}()
 	go func() {
-		errc <- p.readStatus(network, &status, genesis, forkFilter)
+		errc <- p.readStatus(network, &status, genesis, forkFilter, forkID)
 	}()
 	timeout := time.NewTimer(handshakeTimeout)
 	defer timeout.Stop()
@@ -76,7 +77,7 @@ func (p *Peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 }
 
 // readStatus reads the remote handshake message.
-func (p *Peer) readStatus(network uint64, status *StatusPacket, genesis common.Hash, forkFilter forkid.Filter) error {
+func (p *Peer) readStatus(network uint64, status *StatusPacket, genesis common.Hash, forkFilter forkid.Filter, myForkID forkid.ID) error {
 	msg, err := p.rw.ReadMsg()
 	if err != nil {
 		return err
@@ -100,7 +101,12 @@ func (p *Peer) readStatus(network uint64, status *StatusPacket, genesis common.H
 	if status.Genesis != genesis {
 		return fmt.Errorf("%w: %x (!= %x)", errGenesisMismatch, status.Genesis, genesis)
 	}
-	if err := forkFilter(status.ForkID); err != nil {
+
+	// Wemix cannot tolerate a fork among etcd members, so we need to check fork ID manually before the hard fork date
+	if status.ForkID.Next != myForkID.Next {
+		defer log.Warn("Checking ForkID: different next fork", "peer", p.ID(), "peerForkID", status.ForkID, "myForkID", myForkID, "error", err)
+	}
+	if err = forkFilter(status.ForkID); err != nil {
 		return fmt.Errorf("%w: %v", errForkIDRejected, err)
 	}
 	return nil

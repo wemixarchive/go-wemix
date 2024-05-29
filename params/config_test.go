@@ -96,3 +96,339 @@ func TestCheckCompatible(t *testing.T) {
 		}
 	}
 }
+
+func TestHalveRewards(t *testing.T) {
+	testcases := []struct {
+		reward   *big.Int
+		period   *big.Int
+		past     *big.Int
+		times    uint64
+		rate     uint32
+		expected *big.Int
+	}{
+		// sample test
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(0), 4, 50, big.NewInt(5e17)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(99), 4, 50, big.NewInt(5e17)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 4, 50, big.NewInt(25e16)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(101), 4, 50, big.NewInt(25e16)},
+
+		// times test
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(0), 0, 50, big.NewInt(1e18)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 0, 50, big.NewInt(1e18)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 1, 50, big.NewInt(5e17)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 50, big.NewInt(25e16)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 3, 50, big.NewInt(25e16)},
+
+		// rate test
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 10, big.NewInt(1e16)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(200), 3, 10, big.NewInt(1e15)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 20, big.NewInt(4e16)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 30, big.NewInt(9e16)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 90, big.NewInt(81e16)},
+		{big.NewInt(1e18), big.NewInt(100), big.NewInt(100), 2, 200, big.NewInt(4e18)},
+
+		// brioche halving test
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(0), 16, 50, big.NewInt(5e17)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 - 1), 16, 50, big.NewInt(5e17)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200), 16, 50, big.NewInt(25e16)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200*2 - 1), 16, 50, big.NewInt(25e16)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 2), 16, 50, big.NewInt(125e15)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 3), 16, 50, big.NewInt(625e14)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 4), 16, 50, big.NewInt(3125e13)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 5), 16, 50, big.NewInt(15625e12)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 6), 16, 50, big.NewInt(78125e11)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 7), 16, 50, big.NewInt(390625e10)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 8), 16, 50, big.NewInt(1953125e9)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 9), 16, 50, big.NewInt(9765625e8)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 10), 16, 50, big.NewInt(48828125e7)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 11), 16, 50, big.NewInt(244140625e6)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 12), 16, 50, big.NewInt(1220703125e5)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 13), 16, 50, big.NewInt(6103515625e4)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 14), 16, 50, big.NewInt(30517578125e3)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 15), 16, 50, big.NewInt(152587890625e2)},
+		{big.NewInt(1e18), big.NewInt(63115200), big.NewInt(63115200 * 15), 17, 50, big.NewInt(152587890625e2)},
+	}
+
+	for _, tc := range testcases {
+		brioche := &BriocheConfig{
+			BlockReward:       tc.reward,
+			FirstHalvingBlock: big.NewInt(0),
+			HalvingPeriod:     tc.period,
+			HalvingTimes:      tc.times,
+			HalvingRate:       tc.rate,
+		}
+		halved := brioche.calcHalvedReward(tc.reward, tc.past)
+		if tc.expected.Cmp(halved) != 0 {
+			t.Errorf("halved reward mismatched (expected=%v, actual=%v)", tc.expected, halved)
+		}
+	}
+}
+
+func TestGetBriocheBlockReward(t *testing.T) {
+	defaultBlockReward := big.NewInt(1234e14)
+	testcases := []struct {
+		id            int32
+		briocheConfig *BriocheConfig
+		blockNum      *big.Int
+		expected      *big.Int
+	}{
+		// nil case
+		{
+			id:            1,
+			briocheConfig: nil,
+			blockNum:      big.NewInt(100),
+			expected:      defaultBlockReward,
+		},
+
+		// normal case
+		{
+			id: 2,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(1e18),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(101),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(5e17),
+		},
+		{
+			id: 3,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(1e18),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(201),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(200),
+			expected: big.NewInt(25e16),
+		},
+
+		// base block reward variations
+		{
+			id: 4,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(7e18),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(101),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(35e17),
+		},
+		{
+			id: 5,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(3),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(101),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(1),
+		},
+		{
+			id: 6,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(1),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(101),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(0),
+		},
+		{
+			id: 7,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       nil, // it will use the default block reward
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(101),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(100),
+			expected: new(big.Int).Div(defaultBlockReward, big.NewInt(2)),
+		},
+
+		// no halving
+		{
+			id: 8,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       nil, // it will use the default block reward
+				FirstHalvingBlock: nil,
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(101),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(100),
+			expected: defaultBlockReward,
+		},
+		{
+			id: 9,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(10),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     nil,
+				FinishRewardBlock: big.NewInt(101),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(10),
+		},
+		{
+			id: 10,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(10),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(101),
+				HalvingTimes:      0,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(10),
+		},
+		{
+			id: 11,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(10),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(200),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(99), // not yet halving time
+			expected: big.NewInt(10),
+		},
+		{
+			id: 12,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(10),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(200),
+				HalvingTimes:      10,
+				HalvingRate:       100, // no halving rate
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(10),
+		},
+
+		// no reward case
+		{
+			id: 13,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(10),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(200),
+				HalvingTimes:      10,
+				HalvingRate:       0, // no reward
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(0),
+		},
+		{
+			id: 14,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(10),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(200),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(199),
+			expected: big.NewInt(5),
+		},
+		{
+			id: 15,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(10),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(200),
+				HalvingTimes:      10,
+				HalvingRate:       50,
+			},
+			blockNum: big.NewInt(200),
+			expected: big.NewInt(0),
+		},
+
+		// halving rate variations
+		{
+			id: 16,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(1e18),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(1000),
+				HalvingTimes:      10,
+				HalvingRate:       10,
+			},
+			blockNum: big.NewInt(100),
+			expected: big.NewInt(1e17),
+		},
+		{
+			id: 17,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(1e18),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(1000),
+				HalvingTimes:      10,
+				HalvingRate:       10,
+			},
+			blockNum: big.NewInt(200),
+			expected: big.NewInt(1e16),
+		},
+		{
+			id: 18,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(1e18),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(1000),
+				HalvingTimes:      10,
+				HalvingRate:       1,
+			},
+			blockNum: big.NewInt(300),
+			expected: big.NewInt(1e12),
+		},
+		{
+			id: 19,
+			briocheConfig: &BriocheConfig{
+				BlockReward:       big.NewInt(1e18),
+				FirstHalvingBlock: big.NewInt(100),
+				HalvingPeriod:     big.NewInt(100),
+				FinishRewardBlock: big.NewInt(1000),
+				HalvingTimes:      10,
+				HalvingRate:       99,
+			},
+			blockNum: big.NewInt(300),
+			expected: big.NewInt(970299e12),
+		},
+	}
+
+	for _, tc := range testcases {
+		actual := tc.briocheConfig.GetBriocheBlockReward(defaultBlockReward, tc.blockNum)
+		if tc.expected.Cmp(actual) != 0 {
+			t.Errorf("getBriocheReward mismatched (id=%d, expected=%v, actual=%v)", tc.id, tc.expected, actual)
+		}
+	}
+}
