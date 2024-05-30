@@ -1,0 +1,69 @@
+{
+  "extraData": "The beginning of Wemix3.0 localnet",
+  "staker": "0xf00d9928ed1dada205aec56ab85e0e2ab5670ad5",
+  "ecosystem": "0x92875d5ba8b104c375a471d58a6de4f75ccb431f",
+  "maintenance": "0x2c77f2c8997182e31a19ec48e321f4d09f36819e",
+  "feecollector": "0x2c77f2c8997182e31a19ec48e321f4d09f36819e",
+  "env": {
+    "ballotDurationMin": 86400,
+    "ballotDurationMax": 604800,
+    "stakingMin": 1500000000000000000000000,
+    "stakingMax": 1500000000000000000000000,
+    "MaxIdleBlockInterval": 100,
+    "blockCreationTime": 5000,
+    "blockRewardAmount": 1000000000000000000,
+    "maxPriorityFeePerGas": 100000000000,
+    "rewardDistributionMethod": [ 4000, 1000, 2500, 2500 ],
+    "maxBaseFee": 50000000000000,
+    "blockGasLimit": 105000000,
+    "baseFeeMaxChangeRate": 55,
+    "gasTargetPercentage": 30
+  },
+  "members": [
+    {
+      "addr": "0x92875d5ba8b104c375a471d58a6de4f75ccb431f",
+      "stake": 1500000000000000000000000,
+      "name": "node1",
+      "id": "0xe4dfe854223c1b85ea7962cd724d98eec1863a49847eb749bc5caa519104713c78a972ebf263b13329ceb8a7b5959125ab6e9a3c73c15f659cc1291d0a7aae1e",
+      "ip": "172.16.237.11",
+      "port": 8589,
+      "bootnode": true
+    },
+    {
+      "addr": "0xb61544371ef73161496009a77989da30f8f91867",
+      "stake": 1500000000000000000000000,
+      "name": "node2",
+      "id": "0x4b8b229f97bbe68fa7cfc43e357fe74503733d0cc236b8d176d896f33547d8fcfd59daa0b4f9e1a4e83157adf1a386ea314dfb9a3e6efe747948fa5e10d5fff5",
+      "ip": "172.16.237.12",
+      "port": 8589,
+      "bootnode": false
+    },
+    {
+      "addr": "0x708ebe75a5dbc5f56176db6e84ce5740897e8a17",
+      "stake": 1500000000000000000000000,
+      "name": "node3",
+      "id": "0xa6f08d187a8da5d76f072b0f0d114e1469e77a53713b710177bd6206b16331b8ead7d41bdeec1df3bb0bb56de8f102e86ecaf44bb6affb4383151c603ff5ac10",
+      "ip": "172.16.237.13",
+      "port": 8589,
+      "bootnode": false
+    }
+  ],
+  "accounts": [
+    {
+      "addr": "0x92875d5ba8b104c375a471d58a6de4f75ccb431f",
+      "balance": 2000000000000000000000000
+    },
+    {
+      "addr": "0xb61544371ef73161496009a77989da30f8f91867",
+      "balance": 2000000000000000000000000
+    },
+    {
+      "addr": "0x708ebe75a5dbc5f56176db6e84ce5740897e8a17",
+      "balance": 2000000000000000000000000
+    },
+    {
+      "addr": "0x2c77f2c8997182e31a19ec48e321f4d09f36819e",
+      "balance": 2000000000000000000000000
+    }
+  ]
+}

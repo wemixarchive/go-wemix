@@ -27,7 +27,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/dop251/goja"
 	"github.com/ethereum/go-ethereum/console/prompt"
@@ -37,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/mattn/go-colorable"
 	"github.com/peterh/liner"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -371,7 +371,7 @@ func (c *Console) interruptHandler() {
 	// Unfortunately, it is not possible to abort the prompt in this case and
 	// the c.readLines goroutine leaks.
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT)
+	signal.Notify(sig, unix.SIGINT)
 	defer signal.Stop(sig)
 
 	for {

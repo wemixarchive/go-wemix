@@ -1,34 +1,77 @@
-version: "3"
 services:
   wemix1:
-    container_name: wemix1
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wemix/node-demo:latest
     hostname: wemix1
-    stdin_open: true
+    networks:
+      wemix_bridge:
+        ipv4_address: 172.16.237.11
+    restart: unless-stopped
     tty: true
-    build: .
-    image: wemix/multinode-demo:latest
     volumes:
-      - ".:/opt"
-    entrypoint: ["/usr/local/wemix/bin/gwemix-demo.sh", "start-leader", "wemix1", "wemix2", "wemix3"]
+      - /etc/localtime:/etc/localtime:ro
+      - ./testdata/bootnode.sh:/usr/local/wemix/bin/bootnode.sh:ro
+      - ./testdata/gwemix.sh:/usr/local/wemix/bin/gwemix.sh:ro
+      - ./testdata/config.json:/usr/local/wemix/conf/config.json:ro
+      - ./testdata/deploy-governance.js:/usr/local/wemix/conf/deploy-governance.js:ro
+      - ./testdata/genesis.json:/usr/local/wemix/genesis.json:ro
+      - ./testdata/.rc:/usr/local/wemix/.rc:ro
+      - ./testdata/keystore:/usr/local/wemix/keystore
+      - ./testdata/nodekey/nodekey1:/usr/local/wemix/geth/nodekey:ro
+    ports:
+      - 8588:8588
+      - 8589:8589
+      - 8598:8598
+    container_name: wemix1
+    entrypoint: ["sh", "-c", "bootnode.sh && sleep 5 && tail -f /usr/local/wemix/logs/log"]
   wemix2:
-    container_name: wemix2
+    image: wemix/node-demo:latest
     hostname: wemix2
-    stdin_open: true
+    networks:
+      wemix_bridge:
+        ipv4_address: 172.16.237.12
+    restart: unless-stopped
     tty: true
-    image: wemix/multinode-demo:latest
     depends_on:
-      - wemix1
+      wemix1:
+        condition: service_started
     volumes:
-      - ".:/opt"
-    entrypoint: ["/usr/local/wemix/bin/gwemix-demo.sh", "start"]
+      - /etc/localtime:/etc/localtime:ro
+      - ./testdata/gwemix.sh:/usr/local/wemix/bin/gwemix.sh:ro
+      - ./testdata/genesis.json:/usr/local/wemix/genesis.json:ro
+      - ./testdata/.rc:/usr/local/wemix/.rc:ro
+      - ./testdata/keystore/account2:/usr/local/wemix/keystore/account2
+      - ./testdata/nodekey/nodekey2:/usr/local/wemix/geth/nodekey:ro
+    container_name: wemix2
+    entrypoint: ["sh", "-c", "gwemix.sh start && sleep 5 && tail -f /usr/local/wemix/logs/log"]
   wemix3:
-    container_name: wemix3
+    image: wemix/node-demo:latest
     hostname: wemix3
-    stdin_open: true
+    networks:
+      wemix_bridge:
+        ipv4_address: 172.16.237.13
+    restart: unless-stopped
     tty: true
-    image: wemix/multinode-demo:latest
     depends_on:
-      - wemix1
+      wemix1:
+        condition: service_started
     volumes:
-      - ".:/opt"
-    entrypoint: ["/usr/local/wemix/bin/gwemix-demo.sh", "start"]
+      - /etc/localtime:/etc/localtime:ro
+      - ./testdata/gwemix.sh:/usr/local/wemix/bin/gwemix.sh:ro
+      - ./testdata/genesis.json:/usr/local/wemix/genesis.json:ro
+      - ./testdata/.rc:/usr/local/wemix/.rc:ro
+      - ./testdata/keystore/account3:/usr/local/wemix/keystore/account3
+      - ./testdata/nodekey/nodekey3:/usr/local/wemix/geth/nodekey:ro
+    container_name: wemix3
+    entrypoint: ["sh", "-c", "gwemix.sh start && sleep 5 && tail -f /usr/local/wemix/logs/log"]
+
+networks:
+  wemix_bridge:
+    name: wemix_bridge
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 172.16.237.0/24

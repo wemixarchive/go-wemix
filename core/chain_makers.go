@@ -104,7 +104,12 @@ func (b *BlockGen) AddTxWithChain(bc *BlockChain, tx *types.Transaction) {
 		b.SetCoinbase(common.Address{})
 	}
 	b.statedb.Prepare(tx.Hash(), len(b.txs))
-	fees := new(big.Int)
+	var fees *big.Int
+	if b.header.Fees != nil {
+		fees = b.header.Fees // wemix block has `Fees` field
+	} else {
+		fees = new(big.Int)
+	}
 	receipt, err := ApplyTransaction(b.config, bc, &b.header.Coinbase, b.gasPool, b.statedb, b.header, tx, &b.header.GasUsed, fees, vm.Config{})
 	if err != nil {
 		panic(err)
@@ -305,6 +310,9 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 		GasLimit: parent.GasLimit(),
 		Number:   new(big.Int).Add(parent.Number(), common.Big1),
 		Time:     time,
+	}
+	if !wemixminer.IsPoW() {
+		header.Fees = new(big.Int)
 	}
 	if chain.Config().IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(chain.Config(), parent.Header())

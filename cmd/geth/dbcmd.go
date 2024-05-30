@@ -25,7 +25,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/cmd/utils"
@@ -40,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/olekukonko/tablewriter"
+	"golang.org/x/sys/unix"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -597,7 +597,7 @@ func importLDBdata(ctx *cli.Context) error {
 		stop      = make(chan struct{})
 	)
 	defer stack.Close()
-	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(interrupt, unix.SIGINT, unix.SIGTERM)
 	defer signal.Stop(interrupt)
 	defer close(interrupt)
 	go func() {
@@ -693,7 +693,7 @@ func exportChaindata(ctx *cli.Context) error {
 		stop      = make(chan struct{})
 	)
 	defer stack.Close()
-	signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(interrupt, unix.SIGINT, unix.SIGTERM)
 	defer signal.Stop(interrupt)
 	defer close(interrupt)
 	go func() {

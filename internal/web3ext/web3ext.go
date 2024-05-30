@@ -30,6 +30,7 @@ var Modules = map[string]string{
 	"txpool":   TxpoolJs,
 	"les":      LESJs,
 	"vflux":    VfluxJs,
+	"wemix":    WemixJs,
 }
 
 const CliqueJs = `
@@ -1001,6 +1002,30 @@ web3._extend({
 			name: 'requestStats',
 			getter: 'vflux_requestStats'
 		}),
+	]
+});
+`
+
+const WemixJs = `
+web3._extend({
+	property: 'wemix',
+	methods: [
+		new web3._extend.Method({
+			name: 'getBriocheBlockReward',
+			call: 'wemix_getBriocheBlockReward',
+			params: 1
+		})
+	],
+	properties:
+	[
+		new web3._extend.Property({
+			name: 'briocheConfig',
+			getter: 'wemix_briocheConfig'
+		}),
+		new web3._extend.Property({
+			name: 'halvingSchedule',
+			getter: 'wemix_halvingSchedule'
+		})
 	]
 });
 `
