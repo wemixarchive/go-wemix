@@ -159,7 +159,7 @@ Download a genesis file from a peer to initialize.`,
 					gasPriceFlag,
 				},
 				Description: `
-    geth wemix deploy-governance [--password value] [--url <url>] [--gas <gas>] [--gasprice <gas-price>] <contract-js-file> <config.js> <account-file>
+    geth wemix deploy-governance [--password value] [--url <url>] [--gas <gas>] [--gasprice <gas-price>] <config.js> <account-file> <lockAmount>
 
 Deploy governance contracts.
 To give password in command line, use "--password <(echo <password>)".
@@ -184,11 +184,11 @@ To give password in command line, use "--password <(echo <password>)".
 		Name:  "out",
 		Usage: "out file",
 	}
-	gasFlag = cli.IntFlag{
+	gasFlag = cli.Uint64Flag{
 		Name:  "gas",
 		Usage: "gas amount",
 	}
-	gasPriceFlag = cli.IntFlag{
+	gasPriceFlag = cli.Int64Flag{
 		Name:  "gasprice",
 		Usage: "gas price",
 	}
@@ -297,14 +297,14 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 	}
 
 	if len(config.Accounts) == 0 || len(config.Members) == 0 {
-		return nil, fmt.Errorf("At least one account and node are required.")
+		return nil, fmt.Errorf("at least one account and node are required")
 	}
 
 	bootnodeExists := false
 	for _, m := range config.Members {
 		// to conforming form to avoid checksum error
 		if !(len(m.Id) == 128 || len(m.Id) == 130) {
-			return nil, fmt.Errorf("Not a node id: %s\n", m.Id)
+			return nil, fmt.Errorf("not a node id: %s", m.Id)
 		}
 		if len(m.Id) == 128 {
 			m.Id = "0x" + m.Id
@@ -316,7 +316,7 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 	}
 
 	if !bootnodeExists {
-		return nil, fmt.Errorf("No bootnode found")
+		return nil, fmt.Errorf("no bootnode found")
 	}
 
 	return &config, nil

@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
 	"github.com/pkg/errors"
@@ -114,18 +115,22 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	contractAddresses := make(map[common.Hash]common.Address)
 	impAddress := make(map[string]common.Address)
 
+	logroot := log.New("func", "DeployGovContracts")
+
 	// deploy registry
+	logroot.Info("Deploying Registry...")
 	txs := make([]*types.Transaction, 0)
 	if address, tx, contract, err := DeployRegistry(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployRegistry")
 	} else {
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
-		gov.Registry = contract
-		gov.address.Registry = address
+		gov.address.Registry, gov.Registry = address, contract
 	}
 
+	logger := logroot.New("step", "deploy imps")
 	// deploy imps
+	logger.Info("Deploying GovImp...")
 	if address, tx, _, err := DeployGovImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployGovImp")
 	} else {
@@ -133,6 +138,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		contractAddresses[tx.Hash()] = address
 		impAddress["GovImp"] = address
 	}
+	logger.Info("Deploying StakingImp...")
 	if address, tx, _, err := DeployStakingImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployStakingImp")
 	} else {
@@ -140,6 +146,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		contractAddresses[tx.Hash()] = address
 		impAddress["StakingImp"] = address
 	}
+	logger.Info("Deploying BallotStorageImp...")
 	if address, tx, _, err := DeployBallotStorageImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployBallotStorageImp")
 	} else {
@@ -147,6 +154,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		contractAddresses[tx.Hash()] = address
 		impAddress["BallotStorageImp"] = address
 	}
+	logger.Info("Deploying EnvStorageImp...")
 	if address, tx, _, err := DeployEnvStorageImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployEnvStorageImp")
 	} else {
@@ -155,6 +163,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		impAddress["EnvStorageImp"] = address
 	}
 	// check deployed contracts (registry + imps)
+	logger.Info("Waiting for receipts...")
 	for _, tx := range txs {
 		address, err := bind.WaitDeployed(context.TODO(), backend, tx)
 		if err != nil {
@@ -165,38 +174,40 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		}
 	}
 
-	// deploy proxys
+	// deploy proxies
+	logger = logroot.New("step", "deploy proxies")
 	txs = make([]*types.Transaction, 0)
+	logger.Info("Deploying Gov...")
 	if address, tx, contract, err := DeployGov(opts, backend, impAddress["GovImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployGov")
 	} else {
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
-		gov.Gov = contract
-		gov.address.Gov = address
+		gov.address.Gov, gov.Gov = address, contract
 	}
+	logger.Info("Deploying Staking...")
 	if address, tx, contract, err := DeployStaking(opts, backend, impAddress["StakingImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployStaking")
 	} else {
 		contractAddresses[tx.Hash()] = address
-		gov.Staking = contract
-		gov.address.Staking = address
+		gov.address.Staking, gov.Staking = address, contract
 	}
+	logger.Info("Deploying BallotStorage...")
 	if address, tx, contract, err := DeployBallotStorage(opts, backend, impAddress["BallotStorageImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployBallotStorage")
 	} else {
 		contractAddresses[tx.Hash()] = address
-		gov.BallotStorage = contract
-		gov.address.BallotStorage = address
+		gov.address.BallotStorage, gov.BallotStorage = address, contract
 	}
+	logger.Info("Deploying EnvStorage...")
 	if address, tx, contract, err := DeployEnvStorage(opts, backend, impAddress["EnvStorageImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployEnvStorage")
 	} else {
 		contractAddresses[tx.Hash()] = address
-		gov.EnvStorage = contract
-		gov.address.EnvStorage = address
+		gov.address.EnvStorage, gov.EnvStorage = address, contract
 	}
 	// check deployed contracts (proxies)
+	logger.Info("Waiting for receipts...")
 	for _, tx := range txs {
 		address, err := bind.WaitDeployed(opts.Context, backend, tx)
 		if err != nil {
@@ -207,7 +218,9 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		}
 	}
 
+	logger = logroot.New("step", "register")
 	// setup registry
+	logger.Info("Setting registry...")
 	txs = make([]*types.Transaction, 0)
 	if tx, err := gov.Registry.SetContractDomain(opts, metclient.ToBytes32("GovernanceContract"), gov.address.Gov); err != nil {
 		return nil, nil, errors.Wrap(err, "SetContractDomain(GovernanceContract)")
@@ -236,7 +249,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 			txs = append(txs, tx)
 		}
 	}
-	// check setup registry
+	logger.Info("Waiting for receipts...")
 	for _, tx := range txs {
 		receipt, err := bind.WaitMined(opts.Context, backend, tx)
 		if err != nil {
@@ -261,7 +274,11 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	}
 }
 
-func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBackend, envConfig InitEnvStorage, members InitMembers) error {
+func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBackend, lockAmount *big.Int, envConfig InitEnvStorage, members InitMembers) error {
+	if lockAmount.Cmp(envConfig.STAKING_MIN) < 0 || lockAmount.Cmp(envConfig.STAKING_MAX) > 0 {
+		return fmt.Errorf("invalid lock amount, input:%v, min:%v, max:%v", lockAmount, envConfig.STAKING_MIN, envConfig.STAKING_MAX)
+	}
+
 	waitMined := func(txs ...*types.Transaction) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5e9)
 		defer cancel()
@@ -279,17 +296,22 @@ func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBack
 
 	registryAddress := gov.address.Registry
 
+	logger := log.New("func", "ExecuteInitialize")
+
 	txs := make([]*types.Transaction, 0)
+	logger.Info("Initializing Staking...")
 	if tx, err := gov.StakingImp.Init(opts, registryAddress, members.StakingInit()); err != nil {
 		return errors.Wrap(err, "StakingImp.Init")
 	} else {
 		txs = append(txs, tx)
 	}
+	logger.Info("Initializing BallotStorage...")
 	if tx, err := gov.BallotStorageImp.Initialize(opts, registryAddress); err != nil {
 		return errors.Wrap(err, "BallotStorageImp.Initialize")
 	} else {
 		txs = append(txs, tx)
 	}
+	logger.Info("Initializing EnvStorage...")
 	envNames, envValues := envConfig.Args()
 	if tx, err := gov.EnvStorageImp.Initialize(opts, registryAddress, envNames, envValues); err != nil {
 		return errors.Wrap(err, "EnvStorageImp.Initialize")
@@ -297,13 +319,16 @@ func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBack
 		txs = append(txs, tx)
 	}
 
+	logger.Info("Waiting for receipts...")
 	if err := waitMined(txs...); err != nil {
 		return err
 	}
+	logger.Info("good")
 
+	logger.Info("Initializing Gov...")
 	if datas, err := members.GovInitOnce(); err != nil {
 		return errors.Wrap(err, "members.GovInitOnce")
-	} else if tx, err := gov.GovImp.InitOnce(opts, registryAddress, envConfig.STAKING_MIN, datas); err != nil {
+	} else if tx, err := gov.GovImp.InitOnce(opts, registryAddress, lockAmount, datas); err != nil {
 		return errors.Wrap(err, "GovImp.InitOnce")
 	} else if err := waitMined(tx); err != nil {
 		return err

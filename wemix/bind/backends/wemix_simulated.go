@@ -163,7 +163,7 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 		},
 	}
 
-	if err := gov.ExecuteInitialize(contracts, opts, ethClient, envConfig, members); err != nil {
+	if err := gov.ExecuteInitialize(contracts, opts, ethClient, envConfig.STAKING_MIN, envConfig, members); err != nil {
 		return nil, err
 	}
 
