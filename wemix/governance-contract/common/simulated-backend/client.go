@@ -107,26 +107,20 @@ func (p *Client) SendTransactionWithoutCommit(t *testing.T, sender common.Addres
 
 	cap := new(big.Int).Add(tip, new(big.Int).Mul(head.BaseFee, big.NewInt(2))) // tip + (head.baseFee*2)
 
-	if (to != common.Address{}) {
-		tx = types.NewTx(&types.DynamicFeeTx{
-			To:        &to,
-			Nonce:     nonce,
-			GasFeeCap: cap,
-			GasTipCap: tip,
-			Gas:       defaultGasLimit,
-			Value:     value,
-			Data:      payload,
-		})
-	} else {
-		tx = types.NewTx(&types.DynamicFeeTx{
-			Nonce:     nonce,
-			GasFeeCap: cap,
-			GasTipCap: tip,
-			Gas:       defaultGasLimit,
-			Value:     value,
-			Data:      payload,
-		})
-	}
+	tx = types.NewTx(&types.DynamicFeeTx{
+		To: func() *common.Address {
+			if (to != common.Address{}) {
+				return &to
+			}
+			return nil
+		}(),
+		Nonce:     nonce,
+		GasFeeCap: cap,
+		GasTipCap: tip,
+		Gas:       defaultGasLimit,
+		Value:     value,
+		Data:      payload,
+	})
 
 	tx, err = p.Signer(sender, tx)
 	require.NoError(t, err)

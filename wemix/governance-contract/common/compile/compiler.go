@@ -14,7 +14,6 @@ func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract,
 	if root == "" {
 		root = "../contracts"
 	}
-	// solc의 path를 찾아서 args에 넣고 cmd객체를 생성
 	args := []string{
 		"--combined-json", "bin,bin-runtime,srcmap,srcmap-runtime,abi,userdoc,devdoc,metadata,hashes",
 		"--optimize",                // code optimizer switched on
@@ -25,7 +24,6 @@ func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract,
 	}
 	cmd := exec.Command("solc", append(args, sourceFiles...)...)
 
-	// cmd를 실행하고 결과를 Contract로 변환
 	var stderr, stdout bytes.Buffer
 	cmd.Stderr, cmd.Stdout = &stderr, &stdout
 	if err := cmd.Run(); err != nil {
@@ -44,7 +42,7 @@ func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract,
 	} else {
 		out := make(map[string]*compiler.Contract)
 		for name, v := range contracts {
-			n := strings.Split(name, ":")[1] // 파일경로 제거
+			n := strings.Split(name, ":")[1]
 			if _, ok := out[n]; ok {
 				return nil, fmt.Errorf("duplicated contract name: %s", name)
 			} else {

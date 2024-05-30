@@ -126,7 +126,7 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 		}
 		time.Sleep(0.2e9)
 	}
-	log.Root().Warn("Wait Genesis Block Mined", "elapsed", time.Since(now).Seconds())
+	log.Warn("Wait Genesis Block Mined", "elapsed", time.Since(now).Seconds())
 
 	rpcClient, err := stack.Attach()
 	if err != nil {

@@ -217,14 +217,16 @@ func (p *Contract) execute(t *testing.T, sender common.Address, value *big.Int, 
 		err = CallRevertReason(t, p.Client.Backend, sender, receipt.BlockNumber, tx)
 	} else {
 		if p.Logic != nil {
-			if e, err := p.Abi.EventByID(crypto.Keccak256Hash([]byte("Upgraded(address)"))); err == nil {
-			search:
-				for _, g := range receipt.Logs {
-					if g.Topics[0] == e.ID {
-						newLogic := p.Client.FindContractByAddress(common.BytesToAddress(g.Topics[1][:]))
-						require.NotNil(t, newLogic)
-						p.Logic = newLogic
-						break search
+			topic := crypto.Keccak256Hash([]byte("Upgraded(address)"))
+			if types.BloomLookup(receipt.Bloom, topic) {
+				if e, err := p.Abi.EventByID(topic); err == nil {
+					for _, g := range receipt.Logs {
+						if g.Topics[0] == e.ID {
+							newLogic := p.Client.FindContractByAddress(common.BytesToAddress(g.Topics[1][:]))
+							require.NotNil(t, newLogic)
+							p.Logic = newLogic
+							break
+						}
 					}
 				}
 			}
