@@ -502,11 +502,11 @@ func deployContract(ctx *cli.Context) error {
 
 	passwd := ctx.String(utils.PasswordFileFlag.Name)
 	url := ctx.String(urlFlag.Name)
-	gas := ctx.Int(gasFlag.Name)
-	gasPrice := ctx.Int(gasPriceFlag.Name)
+	gas := ctx.Uint64(gasFlag.Name)
+	gasPrice := ctx.Int64(gasPriceFlag.Name)
 
 	if len(url) == 0 || len(ctx.Args()) != 3 {
-		return fmt.Errorf("Invalid Arguments")
+		return fmt.Errorf("invalid Arguments")
 	}
 
 	accountFile, contractName, contractFile := ctx.Args()[0], ctx.Args()[1], ctx.Args()[2]
@@ -533,8 +533,7 @@ func deployContract(ctx *cli.Context) error {
 	}
 
 	var hash common.Hash
-	hash, err = metclient.Deploy(ctxx, cli, acct, contractData, nil, gas,
-		gasPrice)
+	hash, err = metclient.Deploy(ctxx, cli, acct, contractData, nil, int(gas), int(gasPrice))
 	if err != nil {
 		return err
 	}
@@ -642,7 +641,7 @@ func logrota(ctx *cli.Context) error {
 	logOpts := strings.Split(logflag, ",")
 	logFile := ""
 	if len(logOpts) == 0 {
-		return errors.New("No log file name")
+		return errors.New("no log file name")
 	}
 	if len(logOpts) >= 1 {
 		logFile = strings.TrimSpace(logOpts[0])
