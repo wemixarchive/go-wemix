@@ -77,13 +77,22 @@ func deployGovernanceContracts(ctx *cli.Context) error {
 	// get command line arguments
 	args := ctx.Args()
 
-	var errInvalidArguments error = errors.New("invalid Arguments")
-	if len(ctx.Args()) != 3 {
-		return errInvalidArguments
-	}
-	configFile, accountFile, lockAmountStr := args[0], args[1], args[3]
-	lockAmount, ok := new(big.Int).SetString(lockAmountStr, 10)
-	if !ok || lockAmount.Sign() <= 0 {
+	var (
+		errInvalidArguments     error = errors.New("invalid Arguments")
+		configFile, accountFile string
+		lockAmount              *big.Int
+	)
+	switch len(args) {
+	case 3:
+		configFile, accountFile = args[0], args[1]
+		lockAmount, ok := new(big.Int).SetString(args[2], 10)
+		if !ok || lockAmount.Sign() <= 0 {
+			return errInvalidArguments
+		}
+	case 2:
+		configFile, accountFile = args[0], args[1]
+		lockAmount = gov.DefaultInitEnvStorage.STAKING_MIN
+	default:
 		return errInvalidArguments
 	}
 
@@ -97,9 +106,7 @@ func deployGovernanceContracts(ctx *cli.Context) error {
 	}
 
 	var opts *bind.TransactOpts
-	if passwd := utils.GetPassPhraseWithList("", false, 0, utils.MakePasswordList(ctx)); len(passwd) == 0 {
-		return errInvalidArguments
-	} else if from, err := metclient.LoadAccount(passwd, accountFile); err != nil {
+	if from, err := metclient.LoadAccount(utils.GetPassPhraseWithList("", false, 0, utils.MakePasswordList(ctx)), accountFile); err != nil {
 		return err
 	} else if opts, err = bind.NewKeyedTransactorWithChainID(from.PrivateKey, chainID); err != nil {
 		return err

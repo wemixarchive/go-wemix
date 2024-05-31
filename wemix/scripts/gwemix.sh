@@ -77,10 +77,15 @@ function init_gov ()
     NODE="$1"
     CONFIG="$2"
     ACCT="$3"
-    [ "$4" = "0" ] && INIT_ONCE=false || INIT_ONCE=true
+    LOCKAMOUNT="$4"
 
     if [ ! -f "$CONFIG" ]; then
 	echo "Cannot find config file: $2"
+	return 1
+    fi
+
+    if [ ! -f "$ACCT" ]; then
+	echo "Cannot find account file: $2"
 	return 1
     fi
 
@@ -92,15 +97,7 @@ function init_gov ()
 	return 1
     fi
 
-    if [ ! -f "${d}/conf/WemixGovernance.js" ]; then
-	echo "Cannot find ${d}/conf/WemixGovernance.js"
-	return 1
-    fi
-
-    PORT=$(grep PORT ${d}/.rc | sed -e 's/PORT=//')
-    [ "$PORT" = "" ] && PORT=8588
-
-    exec ${GWEMIX} attach http://localhost:${PORT} --preload "$d/conf/WemixGovernance.js,$d/conf/deploy-governance.js" --exec 'GovernanceDeployer.deploy("'${ACCT}'", "", "'${CONFIG}'", '${INIT_ONCE}')'
+    exec ${GWEMIX} wemix deploy-governance --url="$d/gwemix.ipc" ${CONFIG} ${ACCT} ${LOCKAMOUNT}
 }
 
 function wipe ()

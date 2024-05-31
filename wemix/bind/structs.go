@@ -323,7 +323,6 @@ func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBack
 	if err := waitMined(txs...); err != nil {
 		return err
 	}
-	logger.Info("good")
 
 	logger.Info("Initializing Gov...")
 	if datas, err := members.GovInitOnce(); err != nil {
@@ -333,6 +332,7 @@ func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBack
 	} else if err := waitMined(tx); err != nil {
 		return err
 	} else {
+		logger.Info("good")
 		return nil
 	}
 }
