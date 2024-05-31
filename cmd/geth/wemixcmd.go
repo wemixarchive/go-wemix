@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
 	"golang.org/x/sys/unix"
 	"gopkg.in/urfave/cli.v1"
@@ -267,25 +268,17 @@ func nodeKey2Id(ctx *cli.Context) error {
 }
 
 type genesisConfig struct {
-	ExtraData   string         `json:"extraData"`
-	RewardPool  common.Address `json:"pool"`
-	Maintenance common.Address `json:"maintenance"`
-	Accounts    []*struct {
+	ExtraData     string                 `json:"extraData"`
+	StakingReward common.Address         `json:"staker"`
+	Ecosystem     common.Address         `json:"ecosystem"`
+	Maintenance   common.Address         `json:"maintenance"`
+	FeeCollector  common.Address         `json:"feecollector"`
+	Env           *genesisEnvConfig      `json:"env"`
+	Members       []*genesisMemberConfig `json:"members"`
+	Accounts      []*struct {
 		Addr    common.Address `json:"addr"`
 		Balance *big.Int       `json:"balance"`
 	} `json:"accounts"`
-	Members []*struct {
-		Addr     common.Address `json:"addr"`
-		Staker   common.Address `json:"staker"`
-		Voter    common.Address `json:"voter"`
-		Reward   common.Address `json:"reward"`
-		Stake    *big.Int       `json:"stake"`
-		Name     string         `json:"name"`
-		Id       string         `json:"id"`
-		Ip       string         `json:"ip"`
-		Port     int            `json:"port"`
-		Bootnode bool           `json:"bootnode"`
-	} `json:"members"`
 }
 
 func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
@@ -320,6 +313,98 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 	}
 
 	return &config, nil
+}
+
+type genesisEnvConfig struct {
+	BlocksPer                *big.Int    `json:"blocksPer"`
+	BallotDurationMin        *big.Int    `json:"ballotDurationMin"`
+	BallotDurationMax        *big.Int    `json:"ballotDurationMax"`
+	StakingMin               *big.Int    `json:"stakingMin"`
+	StakingMax               *big.Int    `json:"stakingMax"`
+	MaxIdleBlockInterval     *big.Int    `json:"MaxIdleBlockInterval"`
+	BlockCreationTime        *big.Int    `json:"blockCreationTime"`
+	BlockRewardAmount        *big.Int    `json:"blockRewardAmount"`
+	MaxPriorityFeePerGas     *big.Int    `json:"maxPriorityFeePerGas"`
+	RewardDistributionMethod [4]*big.Int `json:"rewardDistributionMethod"` // [BLOCK_PRODUCER, STAKING_REWARD, ECOSYSTEM, MAINTANANCE]
+	MaxBaseFee               *big.Int    `json:"maxBaseFee"`
+	BlockGasLimit            *big.Int    `json:"blockGasLimit"`
+	BaseFeeMaxChangeRate     *big.Int    `json:"baseFeeMaxChangeRate"`
+	GasTargetPercentage      *big.Int    `json:"gasTargetPercentage"`
+}
+
+func (cfg *genesisEnvConfig) ToInitData() gov.InitEnvStorage {
+	defaultValue := gov.DefaultInitEnvStorage
+	withDefault := func(v, d *big.Int) *big.Int {
+		// '0' is no init
+		if v == nil || v.Sign() < 0 {
+			return d
+		}
+		return v
+	}
+
+	return gov.InitEnvStorage{
+		BLOCKS_PER:                               withDefault(cfg.BlocksPer, defaultValue.BLOCKS_PER),
+		BALLOT_DURATION_MIN:                      withDefault(cfg.BallotDurationMin, defaultValue.BALLOT_DURATION_MIN),
+		BALLOT_DURATION_MAX:                      withDefault(cfg.BallotDurationMax, defaultValue.BALLOT_DURATION_MAX),
+		STAKING_MIN:                              withDefault(cfg.StakingMin, defaultValue.STAKING_MIN),
+		STAKING_MAX:                              withDefault(cfg.StakingMax, defaultValue.STAKING_MAX),
+		MAX_IDLE_BLOCK_INTERVAL:                  withDefault(cfg.MaxIdleBlockInterval, defaultValue.MAX_IDLE_BLOCK_INTERVAL),
+		BLOCK_CREATION_TIME:                      withDefault(cfg.BlockCreationTime, defaultValue.BLOCK_CREATION_TIME),
+		BLOCK_REWARD_AMOUNT:                      withDefault(cfg.BlockRewardAmount, defaultValue.BLOCK_REWARD_AMOUNT),
+		MAX_PRIORITY_FEE_PER_GAS:                 withDefault(cfg.MaxPriorityFeePerGas, defaultValue.MAX_PRIORITY_FEE_PER_GAS),
+		BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: withDefault(cfg.RewardDistributionMethod[0], defaultValue.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER),
+		BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: withDefault(cfg.RewardDistributionMethod[1], defaultValue.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD),
+		BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      withDefault(cfg.RewardDistributionMethod[2], defaultValue.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM),
+		BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    withDefault(cfg.RewardDistributionMethod[3], defaultValue.BLOCK_REWARD_DISTRIBUTION_MAINTANANCE),
+		MAX_BASE_FEE:                             withDefault(cfg.MaxBaseFee, defaultValue.MAX_BASE_FEE),
+		BLOCK_GASLIMIT:                           withDefault(cfg.BlockGasLimit, defaultValue.BLOCK_GASLIMIT),
+		BASE_FEE_MAX_CHANGE_RATE:                 withDefault(cfg.BaseFeeMaxChangeRate, defaultValue.BASE_FEE_MAX_CHANGE_RATE),
+		GAS_TARGET_PERCENTAGE:                    withDefault(cfg.GasTargetPercentage, defaultValue.GAS_TARGET_PERCENTAGE),
+	}
+}
+
+type genesisMemberConfig struct {
+	Addr     common.Address `json:"addr"`
+	Staker   common.Address `json:"staker"`
+	Voter    common.Address `json:"voter"`
+	Reward   common.Address `json:"reward"`
+	Stake    *big.Int       `json:"stake"`
+	Name     string         `json:"name"`
+	Id       string         `json:"id"`
+	Ip       string         `json:"ip"`
+	Port     int            `json:"port"`
+	Bootnode bool           `json:"bootnode"`
+}
+
+func (cfg *genesisMemberConfig) ToInitData() gov.InitMember {
+	var (
+		zeroAddress = common.Address{}
+
+		staker, voter, reward common.Address = cfg.Staker, cfg.Voter, cfg.Reward
+	)
+
+	if addr := cfg.Addr; addr != zeroAddress {
+		if staker == zeroAddress {
+			staker = addr
+		}
+		if voter == zeroAddress {
+			voter = addr
+		}
+		if reward == zeroAddress {
+			reward = addr
+		}
+	}
+
+	return gov.InitMember{
+		Staker:  staker,
+		Voter:   voter,
+		Reward:  reward,
+		Name:    cfg.Name,
+		Enode:   cfg.Id,
+		Ip:      cfg.Ip,
+		Port:    cfg.Port,
+		Deposit: cfg.Stake,
+	}
 }
 
 func genGenesis(ctx *cli.Context) error {

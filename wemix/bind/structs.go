@@ -467,7 +467,6 @@ type InitEnvStorage struct {
 	BLOCK_GASLIMIT                           *big.Int
 	BASE_FEE_MAX_CHANGE_RATE                 *big.Int
 	GAS_TARGET_PERCENTAGE                    *big.Int
-	Options                                  map[string]*big.Int
 }
 
 func (cfg InitEnvStorage) Args() (names [][32]byte, values []*big.Int) {
@@ -541,13 +540,6 @@ func (cfg InitEnvStorage) Args() (names [][32]byte, values []*big.Int) {
 		names = append(names, crypto.Keccak256Hash([]byte("gasTargetPercentage")))
 		values = append(values, value)
 	}
-	for key, value := range cfg.Options {
-		if value != nil && value.Sign() > 0 {
-			names = append(names, crypto.Keccak256Hash([]byte(key)))
-			values = append(values, value)
-		}
-	}
-
 	return
 }
 
@@ -569,7 +561,6 @@ var DefaultInitEnvStorage InitEnvStorage = InitEnvStorage{
 	BLOCK_GASLIMIT:                           big.NewInt(105000000),
 	BASE_FEE_MAX_CHANGE_RATE:                 big.NewInt(55),
 	GAS_TARGET_PERCENTAGE:                    big.NewInt(30),
-	Options:                                  make(map[string]*big.Int),
 }
 
 // /////////////////////////

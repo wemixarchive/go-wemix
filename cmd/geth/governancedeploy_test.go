@@ -3,18 +3,16 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"math"
 	"math/big"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -23,8 +21,6 @@ import (
 )
 
 func TestDeployGoverananceContracts(t *testing.T) {
-	var Bootnodes []string = params.MainnetBootnodes
-
 	owner, err := crypto.GenerateKey()
 	require.NoError(t, err)
 
@@ -38,35 +34,8 @@ func TestDeployGoverananceContracts(t *testing.T) {
 		params.MaxGasLimit,
 	)
 
-	address := make([]common.Address, 0)
-	address = append(address, opts.From)
-	for i := 1; i < len(Bootnodes); i++ {
-		address = append(address, common.Address{byte(i)})
-	}
-
 	// make temp config.json
 	configJSFile := filepath.Join(t.TempDir(), "config.json")
-	memberStr := func(addr common.Address, enode string) string {
-		enode = strings.TrimLeft(enode, "enode://")
-		sp := strings.Split(enode, "@")
-		t.Log(enode, sp)
-		id := sp[0]
-		if len(id) != 128 {
-			return ""
-		}
-		sp = strings.Split(sp[1], ":")
-		ip := sp[0]
-		port := sp[1]
-		return fmt.Sprintf(`{"addr":"%s","stake":4980000000000000000000000,"name":"%s","id":"%s","ip":"%s","port":%s,"bootnode":true},`, addr.Hex(), id[:8], id, ip, port)
-	}
-	var configStr string = `{"members":[`
-	for i, enode := range Bootnodes {
-		configStr += memberStr(address[i], enode)
-	}
-	configStr = configStr[:len(configStr)-1] + "],"
-
-	// to avoid error 'at least one account and node are required'
-	configStr += `"accounts":[{"addr":"0x0000000000000000000000000000000000000000","balance":0}]}`
 	require.NoError(t, os.WriteFile(configJSFile, []byte(configStr), 0775))
 
 	go func() {
@@ -76,5 +45,70 @@ func TestDeployGoverananceContracts(t *testing.T) {
 		}
 	}()
 
+	domains, env, members, err := getInitialGovernanceInitDatas(configJSFile)
+	require.NoError(t, err)
+	for name, addr := range domains {
+		t.Log(name, addr)
+	}
+	bytes, _ := json.MarshalIndent(env, "", "  ")
+	t.Log(string(bytes))
+	for i, member := range members {
+		t.Log(i, member)
+	}
 	require.NoError(t, deployGovernance(backend, opts, gov.DefaultInitEnvStorage.STAKING_MIN, configJSFile))
 }
+
+// config.json.example
+const configStr string = `
+{
+	"extraData": "The beginning of Wemix3.0 testnet on July 1st, 2022",
+	"staker": "0xf00d9928ed1dada205aec56ab85e0e2ab5670ad5",
+	"ecosystem": "0x1be19928ed1dada205aec56ab85e0e2ab5670ad5",
+	"maintenance": "0x900d9928ed1dada205aec56ab85e0e2ab5670ad5",
+	"feecollector": "0x900d9928ed1dada205aec56ab85e0e2ab5670ad5",
+	"env": {
+	  "ballotDurationMin": 86400,
+	  "ballotDurationMax": 604800,
+	  "stakingMin": 1500000000000000000000000,
+	  "stakingMax": 1500000000000000000000000,
+	  "MaxIdleBlockInterval": 5,
+	  "blockCreationTime": 1000,
+	  "blockRewardAmount": 1000000000000000000,
+	  "maxPriorityFeePerGas": 100000000000,
+	  "rewardDistributionMethod": [ 4000, 1000, 2500, 2500 ],
+	  "maxBaseFee": 50000000000000,
+	  "blockGasLimit": 105000000,
+	  "baseFeeMaxChangeRate": 55,
+	  "gasTargetPercentage": 30
+	},
+	"members": [
+	  {
+		"addr": "0x1be19928ed1dada205aec56ab85e0e2ab5670ad5",
+		"stake": 2000000000000000000000000000,
+		"name": "fak1",
+		"id": "0xfa5f92fc954e4e45ac5773d5472bf8ab0b888979a5e65d49bac65e1b4345e82a745e255d1018d7a6de7ae8fd3a04b0e8eca4359f0fd35c2d0c45d29f7ffa0290",
+		"ip": "172.18.0.1",
+		"port": 8589,
+		"bootnode": true
+	  },
+	  {
+		"addr": "0xb4388353fd0f3b3a017e09f2b857052ff219e663",
+		"stake": 2000000000000000000000000000,
+		"name": "fak2",
+		"id": "0xea5f92fc954e4e45ac5773d5472bf8ab0b888979a5e65d49bac65e1b4345e82a745e255d1018d7a6de7ae8fd3a04b0e8eca4359f0fd35c2d0c45d29f7ffa0290",
+		"ip": "172.18.0.2",
+		"port": 8589
+	  }
+	],
+	"accounts": [
+	  {
+		"addr": "0x1be19928ed1dada205aec56ab85e0e2ab5670ad5",
+		"balance": 200000000000000000000000
+	  },
+	  {
+		"addr": "0xb4388353fd0f3b3a017e09f2b857052ff219e663",
+		"balance": 200000000000000000000000
+	  }
+	]
+}
+`

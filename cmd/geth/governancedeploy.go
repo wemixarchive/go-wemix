@@ -19,7 +19,12 @@ import (
 	"gopkg.in/urfave/cli.v1"
 )
 
-func getInitialGovernanceMembersAndNodes(configJsFile string) (members gov.InitMembers, rewardPoolAccount, maintenanceAccount *common.Address, err error) {
+func getInitialGovernanceInitDatas(configJsFile string) (
+	domains map[string]common.Address,
+	env gov.InitEnvStorage,
+	members gov.InitMembers,
+	err error,
+) {
 	var fin *os.File
 	if fin, err = os.Open(configJsFile); err != nil {
 		return
@@ -32,40 +37,26 @@ func getInitialGovernanceMembersAndNodes(configJsFile string) (members gov.InitM
 		return
 	}
 
+	domains = make(map[string]common.Address)
 	zeroAddress := common.Address{}
-
-	if cfg.RewardPool != zeroAddress {
-		rewardPoolAccount = &cfg.RewardPool
+	if cfg.StakingReward != zeroAddress {
+		domains["StakingReward"] = cfg.StakingReward
+	}
+	if cfg.Ecosystem != zeroAddress {
+		domains["Ecosystem"] = cfg.Ecosystem
 	}
 	if cfg.Maintenance != zeroAddress {
-		maintenanceAccount = &cfg.Maintenance
+		domains["Maintenance"] = cfg.Maintenance
 	}
+	if cfg.FeeCollector != zeroAddress {
+		domains["FeeCollector"] = cfg.FeeCollector
+	}
+
+	env = cfg.Env.ToInitData()
+
 	members = make(gov.InitMembers, len(cfg.Members))
 	for i, member := range cfg.Members {
-		var (
-			staker, voter, reward common.Address = member.Staker, member.Voter, member.Reward
-		)
-		if addr := member.Addr; addr != zeroAddress {
-			if staker == zeroAddress {
-				staker = addr
-			}
-			if voter == zeroAddress {
-				voter = addr
-			}
-			if reward == zeroAddress {
-				reward = addr
-			}
-		}
-		members[i] = gov.InitMember{
-			Staker:  staker,
-			Voter:   voter,
-			Reward:  reward,
-			Name:    member.Name,
-			Enode:   member.Id,
-			Ip:      member.Ip,
-			Port:    member.Port,
-			Deposit: member.Stake,
-		}
+		members[i] = member.ToInitData()
 	}
 
 	return
@@ -128,41 +119,27 @@ type Client interface {
 }
 
 func deployGovernance(cli Client, ownerOpts *bind.TransactOpts, lockAmount *big.Int, configJsFile string) error {
-	envConfig := gov.DefaultInitEnvStorage
-	if lockAmount.Cmp(envConfig.STAKING_MIN) < 0 || lockAmount.Cmp(envConfig.STAKING_MAX) > 0 {
-		return fmt.Errorf("invalid lock amount, input:%v, min:%v, max:%v", lockAmount, envConfig.STAKING_MIN, envConfig.STAKING_MAX)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	ownerOpts.Context = ctx
 
 	// initial members and nodes data
-	members, rewardPoolAccount, maintenanceAccount, err := getInitialGovernanceMembersAndNodes(configJsFile)
+	domains, env, members, err := getInitialGovernanceInitDatas(configJsFile)
 	if err != nil {
 		return err
 	}
+	if lockAmount.Cmp(env.STAKING_MIN) < 0 || lockAmount.Cmp(env.STAKING_MAX) > 0 {
+		return fmt.Errorf("invalid lock amount, input:%v, min:%v, max:%v", lockAmount, env.STAKING_MIN, env.STAKING_MAX)
+	}
 
 	// deploy & set domains
-	contracts, impAddress, err := gov.DeployGovContracts(ownerOpts, cli, func() map[string]common.Address {
-		if rewardPoolAccount == nil && maintenanceAccount == nil {
-			return nil
-		}
-		optionDomains := make(map[string]common.Address)
-		if rewardPoolAccount != nil {
-			optionDomains["RewardPool"] = *rewardPoolAccount
-		}
-		if maintenanceAccount != nil {
-			optionDomains["Maintenance"] = *maintenanceAccount
-		}
-		return optionDomains
-	}())
+	contracts, impAddress, err := gov.DeployGovContracts(ownerOpts, cli, domains)
 	if err != nil {
 		return err
 	}
 	// init contracts
-	err = gov.ExecuteInitialize(contracts, ownerOpts, cli, lockAmount, envConfig, members)
+	err = gov.ExecuteInitialize(contracts, ownerOpts, cli, lockAmount, env, members)
 	if err != nil {
 		return err
 	}
