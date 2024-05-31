@@ -936,7 +936,7 @@ func TestGov(t *testing.T) {
 				"Expired",
 			)
 		})
-		t.Run("cannot add proposal durring period time", func(t *testing.T) {
+		t.Run("cannot add proposal during period time", func(t *testing.T) {
 			gov := DeployGovernance(t)
 
 			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeEnv",
@@ -2026,7 +2026,7 @@ func TestGov(t *testing.T) {
 				"Expired",
 			)
 		})
-		t.Run("cannot add proposal durring period time", func(t *testing.T) {
+		t.Run("cannot add proposal during period time", func(t *testing.T) {
 			gov, voter := deployGovernance(t)
 
 			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeEnv",
