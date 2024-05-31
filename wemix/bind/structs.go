@@ -433,7 +433,7 @@ type InitEnvStorage struct {
 	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER *big.Int
 	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD *big.Int
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM      *big.Int
-	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE    *big.Int
+	BLOCK_REWARD_DISTRIBUTION_MAINTENANCE    *big.Int
 	MAX_BASE_FEE                             *big.Int
 	BLOCK_GASLIMIT                           *big.Int
 	BASE_FEE_MAX_CHANGE_RATE                 *big.Int
@@ -492,7 +492,7 @@ func (cfg InitEnvStorage) Args() (names [][32]byte, values []*big.Int) {
 		names = append(names, crypto.Keccak256Hash([]byte("blockRewardDistributionEcosystem")))
 		values = append(values, value)
 	}
-	if value := cfg.BLOCK_REWARD_DISTRIBUTION_MAINTANANCE; value != nil && value.Sign() > 0 {
+	if value := cfg.BLOCK_REWARD_DISTRIBUTION_MAINTENANCE; value != nil && value.Sign() > 0 {
 		names = append(names, crypto.Keccak256Hash([]byte("blockRewardDistributionMaintenance")))
 		values = append(values, value)
 	}
@@ -535,7 +535,7 @@ var DefaultInitEnvStorage InitEnvStorage = InitEnvStorage{
 	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: big.NewInt(4000),
 	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: big.NewInt(1000),
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      big.NewInt(2500),
-	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    big.NewInt(2500),
+	BLOCK_REWARD_DISTRIBUTION_MAINTENANCE:    big.NewInt(2500),
 	MAX_BASE_FEE:                             new(big.Int).Mul(big.NewInt(5000), big.NewInt(params.GWei)),
 	BLOCK_GASLIMIT:                           big.NewInt(1050000000),
 	BASE_FEE_MAX_CHANGE_RATE:                 big.NewInt(46),

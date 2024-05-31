@@ -33,7 +33,7 @@ var EnvConstants = struct {
 	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER env
 	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD env
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM      env
-	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE    env
+	BLOCK_REWARD_DISTRIBUTION_MAINTENANCE    env
 	MAX_BASE_FEE                             env
 	BLOCK_GASLIMIT                           env
 	BASE_FEE_MAX_CHANGE_RATE                 env
@@ -51,7 +51,7 @@ var EnvConstants = struct {
 	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: newEnvInt64("blockRewardDistributionBlockProducer", 4000),
 	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: newEnvInt64("blockRewardDistributionStakingReward", 1000),
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      newEnvInt64("blockRewardDistributionEcosystem", 2500),
-	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    newEnvInt64("blockRewardDistributionMaintenance", 2500),
+	BLOCK_REWARD_DISTRIBUTION_MAINTENANCE:    newEnvInt64("blockRewardDistributionMaintenance", 2500),
 	MAX_BASE_FEE:                             newEnvBig("maxBaseFee", toGwei(5000)),
 	BLOCK_GASLIMIT:                           newEnvInt64("blockGasLimit", 1050000000),
 	BASE_FEE_MAX_CHANGE_RATE:                 newEnvInt64("baseFeeMaxChangeRate", 46),
