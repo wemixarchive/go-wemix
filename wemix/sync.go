@@ -3,11 +3,11 @@
 package wemix
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -324,7 +324,7 @@ func syncCheck() error {
 	}
 
 	// if we're in sync, nothing we can do
-	if work != nil && work.Height == header.Number.Int64() && bytes.Equal(work.Hash.Bytes(), header.Hash().Bytes()) {
+	if work != nil && work.Height == header.Number.Int64() && reflect.DeepEqual(work.Hash, header.Hash()) {
 		log.Debug("sync check: in sync", "height", work.Height, "hash", work.Hash)
 		return err
 	}
@@ -355,7 +355,7 @@ func syncCheck() error {
 			if state.LatestBlockHeight == nil {
 				continue
 			}
-			if state.LatestBlockHeight.Int64() == work.Height && bytes.Equal(work.Hash.Bytes(), state.LatestBlockHash.Bytes()) {
+			if state.LatestBlockHeight.Int64() == work.Height && reflect.DeepEqual(work.Hash, state.LatestBlockHash) {
 				exists = true
 				break
 			}

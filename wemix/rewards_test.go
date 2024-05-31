@@ -3,10 +3,10 @@
 package wemix
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
 	"math/big"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -203,10 +203,7 @@ func verifyBlockSigForTest(height *big.Int, coinbase common.Address, nodeId []by
 		return false
 	}
 	signer := crypto.PubkeyToAddress(*pubKey)
-	if err != nil || !bytes.Equal(coinbase.Bytes(), signer.Bytes()) {
-		return false
-	}
-	return true
+	return reflect.DeepEqual(coinbase.Bytes(), signer.Bytes())
 }
 
 func TestRewardValidation(t *testing.T) {
