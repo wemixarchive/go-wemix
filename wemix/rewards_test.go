@@ -6,7 +6,6 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"math/big"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -203,7 +202,7 @@ func verifyBlockSigForTest(height *big.Int, coinbase common.Address, nodeId []by
 		return false
 	}
 	signer := crypto.PubkeyToAddress(*pubKey)
-	return reflect.DeepEqual(coinbase.Bytes(), signer.Bytes())
+	return coinbase == signer
 }
 
 func TestRewardValidation(t *testing.T) {

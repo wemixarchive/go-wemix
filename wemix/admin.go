@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math/big"
 	"path"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -668,7 +667,7 @@ func (ma *wemixAdmin) update() {
 					"maxPriorityFeePerGas", data.maxPriorityFeePerGas)
 			}
 
-			if ma.self != nil && !reflect.DeepEqual(ma.self.Addr[:], nilAddress[:]) {
+			if ma.self != nil && ma.self.Addr != nilAddress {
 				err = ma.rpcCli.CallContext(ctx, &v, "miner_setEtherbase", &ma.self.Addr)
 				if err != nil || !*v {
 					log.Info("set the coinbase", "error", err)
@@ -787,9 +786,9 @@ type reward struct {
 // handles rewards in testnet block 94
 func handleBlock94Rewards(height *big.Int, rp *rewardParameters, _ /*fees*/ *big.Int) []reward {
 	if height.Int64() != 94 || len(rp.members) != 0 ||
-		!reflect.DeepEqual(rp.staker[:], testnetBlock94Rewards[0].Addr[:]) ||
-		!reflect.DeepEqual(rp.ecoSystem[:], testnetBlock94Rewards[1].Addr[:]) ||
-		!reflect.DeepEqual(rp.maintenance[:], testnetBlock94Rewards[2].Addr[:]) {
+		*rp.staker != testnetBlock94Rewards[0].Addr ||
+		*rp.ecoSystem != testnetBlock94Rewards[1].Addr ||
+		*rp.maintenance != testnetBlock94Rewards[2].Addr {
 		return nil
 	}
 	return testnetBlock94Rewards

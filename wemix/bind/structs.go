@@ -202,7 +202,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		if err != nil {
 			return nil, nil, err
 		}
-		if !reflect.DeepEqual(contractAddresses[tx.Hash()], address) {
+		if contractAddresses[tx.Hash()] != address {
 			return nil, nil, errors.New("deployed error")
 		}
 	}
@@ -382,11 +382,7 @@ func (src *GovContracts) Copy(dst *GovContracts, backend bind.ContractBackend) e
 }
 
 func (src *GovContracts) Equal(dst *GovContracts) bool {
-	return reflect.DeepEqual(src.address.Registry, dst.address.Registry) &&
-		reflect.DeepEqual(src.address.Gov, dst.address.Gov) &&
-		reflect.DeepEqual(src.address.Staking, dst.address.Staking) &&
-		reflect.DeepEqual(src.address.BallotStorage, dst.address.BallotStorage) &&
-		reflect.DeepEqual(src.address.EnvStorage, dst.address.EnvStorage)
+	return reflect.DeepEqual(src.address, dst.address)
 }
 
 func GetGovContractsByOwner(opts *bind.CallOpts, backend bind.ContractBackend, owner common.Address) (*GovContracts, error) {
