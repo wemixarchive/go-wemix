@@ -115,49 +115,48 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	contractAddresses := make(map[common.Hash]common.Address)
 	impAddress := make(map[string]common.Address)
 
-	logroot := log.New("func", "DeployGovContracts")
+	logger := log.New("func", "DeployGovContracts")
 
 	// deploy registry
-	logroot.Info("Deploying Registry...")
 	txs := make([]*types.Transaction, 0)
 	if address, tx, contract, err := DeployRegistry(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployRegistry")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying Registry at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		gov.address.Registry, gov.Registry = address, contract
 	}
 
-	logger := logroot.New("step", "deploy imps")
 	// deploy imps
-	logger.Info("Deploying GovImp...")
 	if address, tx, _, err := DeployGovImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployGovImp")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying DeployGovImp at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		impAddress["GovImp"] = address
 	}
-	logger.Info("Deploying StakingImp...")
 	if address, tx, _, err := DeployStakingImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployStakingImp")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying DeployStakingImp at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		impAddress["StakingImp"] = address
 	}
-	logger.Info("Deploying BallotStorageImp...")
 	if address, tx, _, err := DeployBallotStorageImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployBallotStorageImp")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying DeployBallotStorageImp at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		impAddress["BallotStorageImp"] = address
 	}
-	logger.Info("Deploying EnvStorageImp...")
 	if address, tx, _, err := DeployEnvStorageImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployEnvStorageImp")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying DeployEnvStorageImp at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		impAddress["EnvStorageImp"] = address
@@ -175,34 +174,34 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	}
 
 	// deploy proxies
-	logger = logroot.New("step", "deploy proxies")
 	txs = make([]*types.Transaction, 0)
 	logger.Info("Deploying Gov...")
 	if address, tx, contract, err := DeployGov(opts, backend, impAddress["GovImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployGov")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying Gov at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		gov.address.Gov, gov.Gov = address, contract
 	}
-	logger.Info("Deploying Staking...")
 	if address, tx, contract, err := DeployStaking(opts, backend, impAddress["StakingImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployStaking")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying Staking at %s ...", address))
 		contractAddresses[tx.Hash()] = address
 		gov.address.Staking, gov.Staking = address, contract
 	}
-	logger.Info("Deploying BallotStorage...")
 	if address, tx, contract, err := DeployBallotStorage(opts, backend, impAddress["BallotStorageImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployBallotStorage")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying BallotStorage at %s ...", address))
 		contractAddresses[tx.Hash()] = address
 		gov.address.BallotStorage, gov.BallotStorage = address, contract
 	}
-	logger.Info("Deploying EnvStorage...")
 	if address, tx, contract, err := DeployEnvStorage(opts, backend, impAddress["EnvStorageImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployEnvStorage")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying EnvStorage at %s ...", address))
 		contractAddresses[tx.Hash()] = address
 		gov.address.EnvStorage, gov.EnvStorage = address, contract
 	}
@@ -218,7 +217,6 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		}
 	}
 
-	logger = logroot.New("step", "register")
 	// setup registry
 	logger.Info("Setting registry...")
 	txs = make([]*types.Transaction, 0)
@@ -295,7 +293,6 @@ func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBack
 	}
 
 	registryAddress := gov.address.Registry
-
 	logger := log.New("func", "ExecuteInitialize")
 
 	txs := make([]*types.Transaction, 0)
