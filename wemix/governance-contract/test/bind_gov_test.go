@@ -10,6 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	sim "github.com/ethereum/go-ethereum/wemix/governance-contract/common/simulated-backend"
 	"github.com/stretchr/testify/require"
@@ -125,4 +127,70 @@ func TestDeploy(t *testing.T) {
 			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
 		}
 	})
+}
+
+func TestCheckMainnetEnvStorageValues(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client, err := ethclient.DialContext(ctx, "https://api.wemix.com/")
+	require.NoError(t, err)
+
+	block, err := client.BlockByNumber(ctx, common.Big0)
+	require.NoError(t, err)
+
+	callOpts := &bind.CallOpts{Context: ctx}
+	contracts, err := gov.GetGovContractsByOwner(callOpts, client, block.Coinbase())
+	require.NoError(t, err)
+
+	envStorage := contracts.EnvStorageImp
+	BLOCKS_PER, _ := envStorage.GetBlocksPer(callOpts)
+	t.Log("BLOCKS_PER:", BLOCKS_PER)
+
+	BALLOT_DURATION_MIN, _ := envStorage.GetBallotDurationMin(callOpts)
+	t.Log("BALLOT_DURATION_MIN:", BALLOT_DURATION_MIN)
+
+	BALLOT_DURATION_MAX, _ := envStorage.GetBallotDurationMax(callOpts)
+	t.Log("BALLOT_DURATION_MAX:", BALLOT_DURATION_MAX)
+
+	STAKING_MIN, _ := envStorage.GetStakingMin(callOpts)
+	t.Log("STAKING_MIN:", STAKING_MIN)
+
+	STAKING_MAX, _ := envStorage.GetStakingMax(callOpts)
+	t.Log("STAKING_MAX:", STAKING_MAX)
+
+	MAX_IDLE_BLOCK_INTERVAL, _ := envStorage.GetMaxIdleBlockInterval(callOpts)
+	t.Log("MAX_IDLE_BLOCK_INTERVAL:", MAX_IDLE_BLOCK_INTERVAL)
+
+	BLOCK_CREATION_TIME, _ := envStorage.GetBlockCreationTime(callOpts)
+	t.Log("BLOCK_CREATION_TIME:", BLOCK_CREATION_TIME)
+
+	BLOCK_REWARD_AMOUNT, _ := envStorage.GetBlockRewardAmount(callOpts)
+	t.Log("BLOCK_REWARD_AMOUNT:", BLOCK_REWARD_AMOUNT)
+
+	MAX_PRIORITY_FEE_PER_GAS, _ := envStorage.GetMaxPriorityFeePerGas(callOpts)
+	t.Log("MAX_PRIORITY_FEE_PER_GAS:", MAX_PRIORITY_FEE_PER_GAS)
+
+	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("blockRewardDistributionBlockProducer")))
+	t.Log("BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER:", BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER)
+
+	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("blockRewardDistributionStakingReward")))
+	t.Log("BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD:", BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD)
+
+	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("blockRewardDistributionEcosystem")))
+	t.Log("BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:", BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM)
+
+	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("blockRewardDistributionMaintenance")))
+	t.Log("BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:", BLOCK_REWARD_DISTRIBUTION_MAINTANANCE)
+
+	MAX_BASE_FEE, _ := envStorage.GetMaxBaseFee(callOpts)
+	t.Log("MAX_BASE_FEE:", MAX_BASE_FEE)
+
+	BLOCK_GASLIMIT, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("blockGasLimit")))
+	t.Log("BLOCK_GASLIMIT:", BLOCK_GASLIMIT)
+
+	BASE_FEE_MAX_CHANGE_RATE, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("baseFeeMaxChangeRate")))
+	t.Log("BASE_FEE_MAX_CHANGE_RATE:", BASE_FEE_MAX_CHANGE_RATE)
+
+	GAS_TARGET_PERCENTAGE, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("gasTargetPercentage")))
+	t.Log("GAS_TARGET_PERCENTAGE:", GAS_TARGET_PERCENTAGE)
 }
