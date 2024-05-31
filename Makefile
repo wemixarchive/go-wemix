@@ -87,12 +87,12 @@ test: all
 test-short: all
 	$(GORUN) build/ci.go test -short
 
-lint: wemix/governance_abi.go ## Run linters.
+lint: ## Run linters.
 	$(GORUN) build/ci.go lint
 
 clean:
 	env GO111MODULE=on go clean -cache
-	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf wemix/admin_abi.go wemix/governance_abi.go
+	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf
 	@ROCKSDB_DIR=$(ROCKSDB_DIR);			\
 	if [ -e $${ROCKSDB_DIR}/Makefile ]; then	\
 		cd $${ROCKSDB_DIR};			\
