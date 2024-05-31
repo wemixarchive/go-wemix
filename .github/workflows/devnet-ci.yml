@@ -27,13 +27,13 @@ jobs:
         tar tf build/gwemix.tar.gz
 
     - name: Move results to artifact
-      run: mv build/gwemix.tar.gz gwemix-${{ github.event.pull_request.head.sha }}-linux-rocksdb.tar.gz
+      run: mv build/gwemix.tar.gz gwemix-${{ github.event.pull_request.head.sha }}-linux-amd64-rocksdb.tar.gz
 
     - name: Upload Go-WEMIX
       uses: actions/upload-artifact@v4
       with:
         name: artifact-${{ github.event.pull_request.head.sha }}
-        path: gwemix-${{ github.event.pull_request.head.sha }}-linux-rocksdb.tar.gz
+        path: gwemix-${{ github.event.pull_request.head.sha }}-linux-amd64-rocksdb.tar.gz
         retention-days: 7
 
   lint_test:
