@@ -80,12 +80,12 @@ function init_gov ()
     LOCKAMOUNT="$4"
 
     if [ ! -f "$CONFIG" ]; then
-	echo "Cannot find config file: $2"
+	echo "Cannot find config file: $CONFIG"
 	return 1
     fi
 
     if [ ! -f "$ACCT" ]; then
-	echo "Cannot find account file: $2"
+	echo "Cannot find account file: $ACCT"
 	return 1
     fi
 
