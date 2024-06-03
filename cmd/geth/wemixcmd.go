@@ -325,7 +325,7 @@ type genesisEnvConfig struct {
 	BlockCreationTime        *big.Int    `json:"blockCreationTime"`
 	BlockRewardAmount        *big.Int    `json:"blockRewardAmount"`
 	MaxPriorityFeePerGas     *big.Int    `json:"maxPriorityFeePerGas"`
-	RewardDistributionMethod [4]*big.Int `json:"rewardDistributionMethod"` // [BLOCK_PRODUCER, STAKING_REWARD, ECOSYSTEM, MAINTANANCE]
+	RewardDistributionMethod [4]*big.Int `json:"rewardDistributionMethod"` // [BLOCK_PRODUCER, STAKING_REWARD, ECOSYSTEM, MAINTENANCE]
 	MaxBaseFee               *big.Int    `json:"maxBaseFee"`
 	BlockGasLimit            *big.Int    `json:"blockGasLimit"`
 	BaseFeeMaxChangeRate     *big.Int    `json:"baseFeeMaxChangeRate"`
@@ -355,7 +355,7 @@ func (cfg *genesisEnvConfig) ToInitData() gov.InitEnvStorage {
 		BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: withDefault(cfg.RewardDistributionMethod[0], defaultValue.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER),
 		BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: withDefault(cfg.RewardDistributionMethod[1], defaultValue.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD),
 		BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      withDefault(cfg.RewardDistributionMethod[2], defaultValue.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM),
-		BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    withDefault(cfg.RewardDistributionMethod[3], defaultValue.BLOCK_REWARD_DISTRIBUTION_MAINTANANCE),
+		BLOCK_REWARD_DISTRIBUTION_MAINTENANCE:    withDefault(cfg.RewardDistributionMethod[3], defaultValue.BLOCK_REWARD_DISTRIBUTION_MAINTENANCE),
 		MAX_BASE_FEE:                             withDefault(cfg.MaxBaseFee, defaultValue.MAX_BASE_FEE),
 		BLOCK_GASLIMIT:                           withDefault(cfg.BlockGasLimit, defaultValue.BLOCK_GASLIMIT),
 		BASE_FEE_MAX_CHANGE_RATE:                 withDefault(cfg.BaseFeeMaxChangeRate, defaultValue.BASE_FEE_MAX_CHANGE_RATE),

@@ -179,8 +179,8 @@ func TestCheckMainnetEnvStorageValues(t *testing.T) {
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("blockRewardDistributionEcosystem")))
 	t.Log("BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:", BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM)
 
-	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("blockRewardDistributionMaintenance")))
-	t.Log("BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:", BLOCK_REWARD_DISTRIBUTION_MAINTANANCE)
+	BLOCK_REWARD_DISTRIBUTION_MAINTENANCE, _ := envStorage.GetUint(callOpts, crypto.Keccak256Hash([]byte("blockRewardDistributionMaintenance")))
+	t.Log("BLOCK_REWARD_DISTRIBUTION_MAINTENANCE:", BLOCK_REWARD_DISTRIBUTION_MAINTENANCE)
 
 	MAX_BASE_FEE, _ := envStorage.GetMaxBaseFee(callOpts)
 	t.Log("MAX_BASE_FEE:", MAX_BASE_FEE)
