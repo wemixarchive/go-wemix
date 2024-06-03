@@ -213,7 +213,7 @@ contract EnvStorageImp is
     //     return getAddress(ECOFUND_ADDRESS_NAME);
     // }
 
-    // function getMaintananceAddress() public override view returns(address){
+    // function getMaintenanceAddress() public override view returns(address){
     //     return getAddress(MAINTENANCE_ADDRESS_NAME);
     // }
 
@@ -258,17 +258,17 @@ contract EnvStorageImp is
         uint256 _block_producer,
         uint256 _staking_reward,
         uint256 _ecofund,
-        uint256 _maintanance
+        uint256 _maintenance
     ) public onlyGov {
         require(
-            (_block_producer + _staking_reward + _ecofund + _maintanance) ==
+            (_block_producer + _staking_reward + _ecofund + _maintenance) ==
                 DENOMINATOR,
             "Wrong reward distrubtion ratio"
         );
         setUint(BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER_NAME, _block_producer);
         setUint(BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD_NAME, _staking_reward);
         setUint(BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM_NAME, _ecofund);
-        setUint(BLOCK_REWARD_DISTRIBUTION_MAINTENANCE_NAME, _maintanance);
+        setUint(BLOCK_REWARD_DISTRIBUTION_MAINTENANCE_NAME, _maintenance);
     }
 
     function setGasLimitAndBaseFee(
@@ -326,13 +326,13 @@ contract EnvStorageImp is
             uint256 _block_producer,
             uint256 _staking_reward,
             uint256 _ecosystem,
-            uint256 _maintanance
+            uint256 _maintenance
         ) = to4Uint(_value);
         setBlockRewardDistributionMethod(
             _block_producer,
             _staking_reward,
             _ecosystem,
-            _maintanance
+            _maintenance
         );
     }
 
@@ -362,10 +362,10 @@ contract EnvStorageImp is
                 uint256 _block_producer,
                 uint256 _staking_reward,
                 uint256 _ecofund,
-                uint256 _maintanance
+                uint256 _maintenance
             ) = abi.decode(envVal, (uint256, uint256, uint256, uint256));
             if (
-                (_block_producer + _staking_reward + _ecofund + _maintanance) !=
+                (_block_producer + _staking_reward + _ecofund + _maintenance) !=
                 DENOMINATOR
             ) return false;
         } else if (

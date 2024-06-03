@@ -79,8 +79,14 @@ require (
 require github.com/pkg/errors v0.9.1
 
 require (
+	github.com/fabelx/go-solc-select v0.2.0
+	github.com/pkg/errors v0.9.1
+)
+
+require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.21.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.3 // indirect
+	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.0.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.0.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.1.1 // indirect
