@@ -16,8 +16,7 @@ var (
 	AmPartnerFunc               func() bool
 	IsPartnerFunc               func(string) bool
 	AmHubFunc                   func(string) int
-	CalculateRewardsFunc        func(*big.Int, *big.Int, *big.Int, func(common.Address, *big.Int)) (*common.Address, []byte, error)
-	VerifyRewardsFunc           func(*big.Int, string) error
+	CalculateRewardsFunc        func(*params.ChainConfig, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
 	GetCoinbaseFunc             func(height *big.Int) (coinbase common.Address, err error)
 	SignBlockFunc               func(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error)
 	VerifyBlockSigFunc          func(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool
@@ -79,19 +78,11 @@ func IsPoW() bool {
 	return params.ConsensusMethod == params.ConsensusPoW
 }
 
-func CalculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
+func CalculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
 	if CalculateRewardsFunc == nil {
-		return nil, nil, ErrNotInitialized
+		return nil, ErrNotInitialized
 	} else {
-		return CalculateRewardsFunc(num, blockReward, fees, addBalance)
-	}
-}
-
-func VerifyRewards(num *big.Int, rewards string) error {
-	if VerifyRewardsFunc == nil {
-		return ErrNotInitialized
-	} else {
-		return VerifyRewardsFunc(num, rewards)
+		return CalculateRewardsFunc(config, num, fees, addBalance)
 	}
 }
 

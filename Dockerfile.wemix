@@ -1,24 +1,94 @@
-# builder image
+# Stage 1: Build stage
+FROM golang:1.19 as builder
 
-FROM ubuntu:focal as base
+# Set environment variables
+ENV PATH=/usr/local/go/bin:$PATH
 
-SHELL ["/bin/bash", "-c"]
+# Update and upgrade the package list
+RUN apt-get update && \
+    apt-get upgrade -q -y
 
-RUN apt-get update -q -y && apt-get upgrade -q -y
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential ca-certificates curl libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev git
+# Install required packages
+RUN apt-get install -y --no-install-recommends \
+    git \
+    ca-certificates \
+    openssl \
+    make && \
+    rm -rf /var/lib/apt/lists/*
 
-# golang
-RUN curl -sL -o /tmp/go.tar.gz https://dl.google.com/go/$(curl -sL https://golang.org/VERSION?m=text | head -1).linux-amd64.tar.gz && \
-    pushd /usr/local/ && \
-    tar xfz /tmp/go.tar.gz && \
-    cd /usr/local/bin/ && \
-    ln -sf ../go/bin/* . && \
-    popd && \
-    rm /tmp/go.tar.gz
+# Define the location for custom certificates
+ARG cert_location=/usr/local/share/ca-certificates
 
-RUN apt autoremove && apt autoclean
+# Fetch and install certificates for github.com and proxy.golang.org
+RUN openssl s_client -showcerts -connect github.com:443 </dev/null 2>/dev/null | \
+    openssl x509 -outform PEM > ${cert_location}/github.crt && \
+    openssl s_client -showcerts -connect proxy.golang.org:443 </dev/null 2>/dev/null | \
+    openssl x509 -outform PEM > ${cert_location}/proxy.golang.crt && \
+    update-ca-certificates
 
-ENTRYPOINT ["/bin/bash", "-c"]
+# Clone the repository, install dependencies, and build the project
+RUN git clone https://github.com/wemixarchive/go-wemix.git /go-wemix && \
+    cd /go-wemix && \
+    go mod download && \
+    make
 
-# EOF
+# Clean up unnecessary packages and files after building
+RUN apt-get remove -y \
+    git \
+    ca-certificates \
+    openssl \
+    make && \
+    apt autoremove -y && \
+    apt-get clean
+
+# Stage 2: Runtime stage
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+# Update and upgrade the package list
+RUN apt-get update && \
+    apt-get upgrade -q -y
+
+# Install required runtime packages
+RUN apt-get install -y --no-install-recommends \
+    g++ \
+    libc-dev \
+    ca-certificates \
+    bash \
+    wget && \
+    update-ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create directories for wemix
+RUN mkdir -p /usr/local/wemix /usr/local/wemix/keystore
+
+# Set environment variables
+ENV PATH=/usr/local/wemix/bin:$PATH
+
+# Copy the built binaries and configuration files from the builder stage
+COPY --from=builder /go-wemix/build /usr/local/wemix/
+
+# Download and install solc
+RUN wget -nv -O /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.4.24/solc-static-linux && \
+    chmod a+x /usr/local/bin/solc
+
+# Create new accounts for wemix
+RUN bash -c 'for i in 1 2 3 4; do \
+    /usr/local/wemix/bin/gwemix wemix new-account --password <(echo demo) --out /usr/local/wemix/keystore/account-$i; \
+done'
+
+# Clean up unnecessary packages
+RUN apt-get remove -y \
+    g++ \
+    libc-dev \
+    wget && \
+    apt autoremove -y && \
+    apt-get clean
+
+# Expose necessary ports
+EXPOSE 8588 8589 8598
+
+# Set the entrypoint
+ENTRYPOINT ["/usr/local/wemix/bin/gwemix"]
