@@ -1015,7 +1015,7 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 	num := new(big.Int).Sub(height, common.Big1)
 	contracts, err := admin.getRegGovEnvContracts(ctx, num)
 	if err != nil {
-		return err == wemixminer.ErrNotInitialized || err == ethereum.NotFound
+		return err == wemixminer.ErrNotInitialized || errors.Is(err, ethereum.NotFound)
 	} else if count, err := contracts.GovImp.GetMemberLength(&bind.CallOpts{Context: ctx, BlockNumber: num}); err != nil || count.Sign() == 0 {
 		return err == wemixminer.ErrNotInitialized || count.Sign() == 0
 	}
