@@ -212,7 +212,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		if err != nil {
 			return nil, nil, err
 		}
-		if !bytes.Equal(contractAddresses[tx.Hash()].Bytes(), address.Bytes()) {
+		if contractAddresses[tx.Hash()] != address {
 			return nil, nil, errors.New("deployed error")
 		}
 	}
@@ -404,11 +404,7 @@ func (src *GovContracts) Copy(dst *GovContracts, backend bind.ContractBackend) e
 }
 
 func (src *GovContracts) Equal(dst *GovContracts) bool {
-	return bytes.Equal(src.address.Registry.Bytes(), dst.address.Registry.Bytes()) &&
-		bytes.Equal(src.address.Gov.Bytes(), dst.address.Gov.Bytes()) &&
-		bytes.Equal(src.address.Staking.Bytes(), dst.address.Staking.Bytes()) &&
-		bytes.Equal(src.address.BallotStorage.Bytes(), dst.address.BallotStorage.Bytes()) &&
-		bytes.Equal(src.address.EnvStorage.Bytes(), dst.address.EnvStorage.Bytes())
+	return reflect.DeepEqual(src.address, dst.address)
 }
 
 func GetGovContractsByOwner(opts *bind.CallOpts, backend bind.ContractBackend, owner common.Address) (*GovContracts, error) {
@@ -459,7 +455,7 @@ type InitEnvStorage struct {
 	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER *big.Int
 	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD *big.Int
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM      *big.Int
-	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE    *big.Int
+	BLOCK_REWARD_DISTRIBUTION_MAINTENANCE    *big.Int
 	MAX_BASE_FEE                             *big.Int
 	BLOCK_GASLIMIT                           *big.Int
 	BASE_FEE_MAX_CHANGE_RATE                 *big.Int
@@ -517,7 +513,7 @@ func (cfg InitEnvStorage) Args() (names [][32]byte, values []*big.Int) {
 		names = append(names, crypto.Keccak256Hash([]byte("blockRewardDistributionEcosystem")))
 		values = append(values, value)
 	}
-	if value := cfg.BLOCK_REWARD_DISTRIBUTION_MAINTANANCE; value != nil && value.Sign() > 0 {
+	if value := cfg.BLOCK_REWARD_DISTRIBUTION_MAINTENANCE; value != nil && value.Sign() > 0 {
 		names = append(names, crypto.Keccak256Hash([]byte("blockRewardDistributionMaintenance")))
 		values = append(values, value)
 	}
@@ -553,10 +549,10 @@ var DefaultInitEnvStorage InitEnvStorage = InitEnvStorage{
 	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: big.NewInt(5000),
 	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: big.NewInt(0),
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      big.NewInt(2500),
-	BLOCK_REWARD_DISTRIBUTION_MAINTANANCE:    big.NewInt(2500),
-	MAX_BASE_FEE:                             new(big.Int).Mul(big.NewInt(50000), big.NewInt(params.GWei)),
-	BLOCK_GASLIMIT:                           big.NewInt(105000000),
-	BASE_FEE_MAX_CHANGE_RATE:                 big.NewInt(55),
+	BLOCK_REWARD_DISTRIBUTION_MAINTENANCE:    big.NewInt(2500),
+	MAX_BASE_FEE:                             new(big.Int).Mul(big.NewInt(5000), big.NewInt(params.GWei)),
+	BLOCK_GASLIMIT:                           big.NewInt(1050000000),
+	BASE_FEE_MAX_CHANGE_RATE:                 big.NewInt(46),
 	GAS_TARGET_PERCENTAGE:                    big.NewInt(30),
 }
 

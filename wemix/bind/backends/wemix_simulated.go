@@ -55,7 +55,7 @@ type wemixSimulatedBackend struct {
 	governance *gov.GovContracts
 }
 
-func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.GenesisAlloc, options ...func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage)) (SimClient, error) {
+func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.GenesisAlloc, options ...OptionFn) (SimClient, error) {
 	params.ConsensusMethod = params.ConsensusPoA
 
 	nodeConfig := node.DefaultConfig

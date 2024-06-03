@@ -10,7 +10,9 @@ import (
 	gov "github.com/ethereum/go-ethereum/wemix/bind"
 )
 
-func SetLogLevel(level int) func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage) {
+type OptionFn func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage)
+
+func SetLogLevel(level int) OptionFn {
 	return func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage) {
 		log.Root().SetHandler(log.LvlFilterHandler(log.Lvl(level), log.StreamHandler(os.Stdout, log.TerminalFormat(true))))
 	}
@@ -18,7 +20,7 @@ func SetLogLevel(level int) func(nodeConf *node.Config, ethConf *ethconfig.Confi
 
 // WithBlockGasLimit configures the simulated backend to target a specific gas limit
 // when producing blocks.
-func WithBlockGasLimit(gaslimit uint64) func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage) {
+func WithBlockGasLimit(gaslimit uint64) OptionFn {
 	return func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage) {
 		ethConf.Genesis.GasLimit = gaslimit
 		ethConf.Miner.GasCeil = gaslimit
@@ -27,7 +29,7 @@ func WithBlockGasLimit(gaslimit uint64) func(nodeConf *node.Config, ethConf *eth
 
 // WithCallGasLimit configures the simulated backend to cap eth_calls to a specific
 // gas limit when running client operations.
-func WithCallGasLimit(gaslimit uint64) func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage) {
+func WithCallGasLimit(gaslimit uint64) OptionFn {
 	return func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage) {
 		ethConf.RPCGasCap = gaslimit
 	}
@@ -38,7 +40,7 @@ func WithCallGasLimit(gaslimit uint64) func(nodeConf *node.Config, ethConf *ethc
 //
 // 0 is not possible as a live Geth node would reject that due to DoS protection,
 // so the simulated backend will replicate that behavior for consistency.
-func WithMinerMinTip(tip *big.Int) func(nodeConf *node.Config, ethConf *ethconfig.Config, envConfig *gov.InitEnvStorage) {
+func WithMinerMinTip(tip *big.Int) OptionFn {
 	if tip == nil || tip.Sign() <= 0 {
 		panic("invalid miner minimum tip")
 	}
