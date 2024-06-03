@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - devnet
-      - dev
       - master
 
 jobs:
@@ -35,4 +34,3 @@ jobs:
       with:
         name: artifact-${{ github.ref_name }}-${{ github.sha }}
         path: gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-rocksdb.tar.gz
-        retention-days: 7
