@@ -37,4 +37,4 @@ jobs:
         prerelease: true
         files: |
           gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-rocksdb.tar.gz
-          gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-level.tar.gz
+          gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-leveldb.tar.gz
