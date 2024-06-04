@@ -2,14 +2,11 @@ package test
 
 import (
 	"context"
-	"math/big"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	gov "github.com/ethereum/go-ethereum/wemix/bind"
@@ -30,7 +27,7 @@ func TestBindFuncs(t *testing.T) {
 	}()
 	var deployed = new(gov.GovContracts)
 	t.Run("deploy", func(t *testing.T) {
-		deployed, _, err = gov.DeployGovContracts(opts, client.Backend, nil)
+		deployed, err = gov.DeployGovContracts(opts, client.Backend, nil)
 		require.NoError(t, err)
 		zeroAddress := common.Address{}
 		require.NotEqual(t, zeroAddress, deployed.Address().Registry)
@@ -72,61 +69,23 @@ func TestDeploy(t *testing.T) {
 			client.Commit()
 		}
 	}()
-	contracts, _, err := gov.DeployGovContracts(opts, client.Backend, nil)
+	contracts, err := gov.DeployGovContracts(opts, client.Backend, nil)
 	require.NoError(t, err)
-	t.Run("exec init", func(t *testing.T) {
-		txs := make([]*types.Transaction, 0)
-		tx, err := contracts.StakingImp.Init(opts, contracts.Address().Registry, []byte{})
-		require.NoError(t, err)
-		txs = append(txs, tx)
-
-		tx, err = contracts.BallotStorageImp.Initialize(opts, contracts.Address().Registry)
-		require.NoError(t, err)
-		txs = append(txs, tx)
-
-		envNames, envValues := makeEnvParams(
-			EnvConstants.BLOCKS_PER,
-			EnvConstants.BALLOT_DURATION_MIN,
-			EnvConstants.BALLOT_DURATION_MAX,
-			EnvConstants.STAKING_MIN,
-			EnvConstants.STAKING_MAX,
-			EnvConstants.MAX_IDLE_BLOCK_INTERVAL,
-			EnvConstants.BLOCK_CREATION_TIME,
-			EnvConstants.BLOCK_REWARD_AMOUNT,
-			EnvConstants.MAX_PRIORITY_FEE_PER_GAS,
-			EnvConstants.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER,
-			EnvConstants.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD,
-			EnvConstants.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM,
-			EnvConstants.BLOCK_REWARD_DISTRIBUTION_MAINTENANCE,
-			EnvConstants.MAX_BASE_FEE,
-			EnvConstants.BLOCK_GASLIMIT,
-			EnvConstants.BASE_FEE_MAX_CHANGE_RATE,
-			EnvConstants.GAS_TARGET_PERCENTAGE,
-		)
-		tx, err = contracts.EnvStorageImp.Initialize(opts, contracts.Address().Registry, envNames, envValues)
-		require.NoError(t, err)
-		txs = append(txs, tx)
-
-		opts.Value = LOCK_AMOUNT
-		tx, err = contracts.StakingImp.Deposit(opts)
-		require.NoError(t, err)
-		txs = append(txs, tx)
-		opts.Value = nil
-
-		tx, err = contracts.GovImp.Init(opts, contracts.Address().Registry, LOCK_AMOUNT,
-			[]byte("name"),
-			hexutil.MustDecode("0x6f8a80d14311c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-			[]byte("127.0.0.1"),
-			big.NewInt(8542),
-		)
-		require.NoError(t, err)
-		txs = append(txs, tx)
-		for _, tx := range txs {
-			receipt, err := bind.WaitMined(context.Background(), client.Backend, tx)
-			require.NoError(t, err)
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-		}
+	lockAmount := gov.DefaultInitEnvStorage.STAKING_MIN
+	gov.ExecuteInitialize(contracts, opts, client.Backend, lockAmount, gov.DefaultInitEnvStorage, gov.InitMembers{
+		{
+			Staker:  opts.From,
+			Voter:   opts.From,
+			Reward:  opts.From,
+			Name:    "name",
+			Enode:   "0x6f8a80d14311c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0",
+			Ip:      "127.0.0.1",
+			Port:    8542,
+			Deposit: lockAmount,
+		},
 	})
+
+	checkMainnetEnvStorageValues(t, new(bind.CallOpts), contracts.EnvStorageImp)
 }
 
 func TestCheckMainnetEnvStorageValues(t *testing.T) {
@@ -142,7 +101,10 @@ func TestCheckMainnetEnvStorageValues(t *testing.T) {
 	contracts, err := gov.GetGovContractsByOwner(callOpts, client, block.Coinbase())
 	require.NoError(t, err)
 
-	envStorage := contracts.EnvStorageImp
+	checkMainnetEnvStorageValues(t, callOpts, contracts.EnvStorageImp)
+}
+
+func checkMainnetEnvStorageValues(t *testing.T, callOpts *bind.CallOpts, envStorage *gov.EnvStorageImp) {
 	BLOCKS_PER, _ := envStorage.GetBlocksPer(callOpts)
 	t.Log("BLOCKS_PER:", BLOCKS_PER)
 
