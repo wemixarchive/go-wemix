@@ -21,20 +21,20 @@ jobs:
       run: USE_ROCKSDB=YES make gwemix.tar.gz
 
     - name: Move results to artifact (rocksdb)
-      run: mv build/gwemix.tar.gz gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-rocksdb.tar.gz
+      run: mv build/gwemix.tar.gz gwemix-${{ github.ref_name }}-linux-amd64-rocksdb.tar.gz
 
     - name: Build Go-WEMIX tarball (leveldb)
       run: USE_ROCKSDB=NO make gwemix.tar.gz
 
     - name: Move results to artifact (leveldb)
-      run: mv build/gwemix.tar.gz gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-leveldb.tar.gz
+      run: mv build/gwemix.tar.gz gwemix-${{ github.ref_name }}-linux-amd64-leveldb.tar.gz
 
     - name: GH Release
       uses: softprops/action-gh-release@v2.0.5
       with:
-        name: WEMIX3.0 Mainnet and Testnet Build (${{ github.sha }})
+        name: WEMIX3.0 Mainnet and Testnet Build (${{ github.ref_name }})
         draft: true
         prerelease: true
         files: |
-          gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-rocksdb.tar.gz
-          gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-leveldb.tar.gz
+          gwemix-${{ github.ref_name }}-linux-amd64-rocksdb.tar.gz
+          gwemix-${{ github.ref_name }}-linux-amd64-leveldb.tar.gz
