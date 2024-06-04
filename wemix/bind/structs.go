@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
 	"github.com/pkg/errors"
@@ -114,21 +115,24 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	contractAddresses := make(map[common.Hash]common.Address)
 	impAddress := make(map[string]common.Address)
 
+	logger := log.New("func", "DeployGovContracts")
+
 	// deploy registry
 	txs := make([]*types.Transaction, 0)
 	if address, tx, contract, err := DeployRegistry(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployRegistry")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying Registry at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
-		gov.Registry = contract
-		gov.address.Registry = address
+		gov.address.Registry, gov.Registry = address, contract
 	}
 
 	// deploy imps
 	if address, tx, _, err := DeployGovImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployGovImp")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying DeployGovImp at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		impAddress["GovImp"] = address
@@ -136,6 +140,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	if address, tx, _, err := DeployStakingImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployStakingImp")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying DeployStakingImp at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		impAddress["StakingImp"] = address
@@ -143,6 +148,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	if address, tx, _, err := DeployBallotStorageImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployBallotStorageImp")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying DeployBallotStorageImp at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		impAddress["BallotStorageImp"] = address
@@ -150,11 +156,13 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	if address, tx, _, err := DeployEnvStorageImp(opts, backend); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployEnvStorageImp")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying DeployEnvStorageImp at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
 		impAddress["EnvStorageImp"] = address
 	}
 	// check deployed contracts (registry + imps)
+	logger.Info("Waiting for receipts...")
 	for _, tx := range txs {
 		address, err := bind.WaitDeployed(context.TODO(), backend, tx)
 		if err != nil {
@@ -165,38 +173,40 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 		}
 	}
 
-	// deploy proxys
+	// deploy proxies
 	txs = make([]*types.Transaction, 0)
+	logger.Info("Deploying Gov...")
 	if address, tx, contract, err := DeployGov(opts, backend, impAddress["GovImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployGov")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying Gov at %s ...", address))
 		txs = append(txs, tx)
 		contractAddresses[tx.Hash()] = address
-		gov.Gov = contract
-		gov.address.Gov = address
+		gov.address.Gov, gov.Gov = address, contract
 	}
 	if address, tx, contract, err := DeployStaking(opts, backend, impAddress["StakingImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployStaking")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying Staking at %s ...", address))
 		contractAddresses[tx.Hash()] = address
-		gov.Staking = contract
-		gov.address.Staking = address
+		gov.address.Staking, gov.Staking = address, contract
 	}
 	if address, tx, contract, err := DeployBallotStorage(opts, backend, impAddress["BallotStorageImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployBallotStorage")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying BallotStorage at %s ...", address))
 		contractAddresses[tx.Hash()] = address
-		gov.BallotStorage = contract
-		gov.address.BallotStorage = address
+		gov.address.BallotStorage, gov.BallotStorage = address, contract
 	}
 	if address, tx, contract, err := DeployEnvStorage(opts, backend, impAddress["EnvStorageImp"]); err != nil {
 		return nil, nil, errors.Wrap(err, "DeployEnvStorage")
 	} else {
+		logger.Info(fmt.Sprintf("Deploying EnvStorage at %s ...", address))
 		contractAddresses[tx.Hash()] = address
-		gov.EnvStorage = contract
-		gov.address.EnvStorage = address
+		gov.address.EnvStorage, gov.EnvStorage = address, contract
 	}
 	// check deployed contracts (proxies)
+	logger.Info("Waiting for receipts...")
 	for _, tx := range txs {
 		address, err := bind.WaitDeployed(opts.Context, backend, tx)
 		if err != nil {
@@ -208,6 +218,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	}
 
 	// setup registry
+	logger.Info("Setting registry...")
 	txs = make([]*types.Transaction, 0)
 	if tx, err := gov.Registry.SetContractDomain(opts, metclient.ToBytes32("GovernanceContract"), gov.address.Gov); err != nil {
 		return nil, nil, errors.Wrap(err, "SetContractDomain(GovernanceContract)")
@@ -236,7 +247,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 			txs = append(txs, tx)
 		}
 	}
-	// check setup registry
+	logger.Info("Waiting for receipts...")
 	for _, tx := range txs {
 		receipt, err := bind.WaitMined(opts.Context, backend, tx)
 		if err != nil {
@@ -261,7 +272,11 @@ func DeployGovContracts(opts *bind.TransactOpts, backend IBackend, optionDomains
 	}
 }
 
-func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBackend, envConfig InitEnvStorage, members InitMembers) error {
+func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBackend, lockAmount *big.Int, envConfig InitEnvStorage, members InitMembers) error {
+	if lockAmount.Cmp(envConfig.STAKING_MIN) < 0 || lockAmount.Cmp(envConfig.STAKING_MAX) > 0 {
+		return fmt.Errorf("invalid lock amount, input:%v, min:%v, max:%v", lockAmount, envConfig.STAKING_MIN, envConfig.STAKING_MAX)
+	}
+
 	waitMined := func(txs ...*types.Transaction) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5e9)
 		defer cancel()
@@ -278,18 +293,22 @@ func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBack
 	}
 
 	registryAddress := gov.address.Registry
+	logger := log.New("func", "ExecuteInitialize")
 
 	txs := make([]*types.Transaction, 0)
+	logger.Info("Initializing Staking...")
 	if tx, err := gov.StakingImp.Init(opts, registryAddress, members.StakingInit()); err != nil {
 		return errors.Wrap(err, "StakingImp.Init")
 	} else {
 		txs = append(txs, tx)
 	}
+	logger.Info("Initializing BallotStorage...")
 	if tx, err := gov.BallotStorageImp.Initialize(opts, registryAddress); err != nil {
 		return errors.Wrap(err, "BallotStorageImp.Initialize")
 	} else {
 		txs = append(txs, tx)
 	}
+	logger.Info("Initializing EnvStorage...")
 	envNames, envValues := envConfig.Args()
 	if tx, err := gov.EnvStorageImp.Initialize(opts, registryAddress, envNames, envValues); err != nil {
 		return errors.Wrap(err, "EnvStorageImp.Initialize")
@@ -297,17 +316,20 @@ func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend IBack
 		txs = append(txs, tx)
 	}
 
+	logger.Info("Waiting for receipts...")
 	if err := waitMined(txs...); err != nil {
 		return err
 	}
 
+	logger.Info("Initializing Gov...")
 	if datas, err := members.GovInitOnce(); err != nil {
 		return errors.Wrap(err, "members.GovInitOnce")
-	} else if tx, err := gov.GovImp.InitOnce(opts, registryAddress, envConfig.STAKING_MIN, datas); err != nil {
+	} else if tx, err := gov.GovImp.InitOnce(opts, registryAddress, lockAmount, datas); err != nil {
 		return errors.Wrap(err, "GovImp.InitOnce")
 	} else if err := waitMined(tx); err != nil {
 		return err
 	} else {
+		logger.Info("good")
 		return nil
 	}
 }
@@ -438,7 +460,6 @@ type InitEnvStorage struct {
 	BLOCK_GASLIMIT                           *big.Int
 	BASE_FEE_MAX_CHANGE_RATE                 *big.Int
 	GAS_TARGET_PERCENTAGE                    *big.Int
-	Options                                  map[string]*big.Int
 }
 
 func (cfg InitEnvStorage) Args() (names [][32]byte, values []*big.Int) {
@@ -512,13 +533,6 @@ func (cfg InitEnvStorage) Args() (names [][32]byte, values []*big.Int) {
 		names = append(names, crypto.Keccak256Hash([]byte("gasTargetPercentage")))
 		values = append(values, value)
 	}
-	for key, value := range cfg.Options {
-		if value != nil && value.Sign() > 0 {
-			names = append(names, crypto.Keccak256Hash([]byte(key)))
-			values = append(values, value)
-		}
-	}
-
 	return
 }
 
@@ -527,20 +541,19 @@ var DefaultInitEnvStorage InitEnvStorage = InitEnvStorage{
 	BALLOT_DURATION_MIN:                      big.NewInt(86400),
 	BALLOT_DURATION_MAX:                      big.NewInt(604800),
 	STAKING_MIN:                              new(big.Int).Mul(big.NewInt(1500000), big.NewInt(params.Ether)),
-	STAKING_MAX:                              new(big.Int).Mul(big.NewInt(1500000), big.NewInt(params.Ether)),
+	STAKING_MAX:                              new(big.Int).Sub(new(big.Int).Lsh(common.Big1, 256), common.Big1), // type(uint256).max
 	MAX_IDLE_BLOCK_INTERVAL:                  big.NewInt(5),
 	BLOCK_CREATION_TIME:                      big.NewInt(1000),
 	BLOCK_REWARD_AMOUNT:                      new(big.Int).Mul(big.NewInt(1), big.NewInt(params.Ether)),
 	MAX_PRIORITY_FEE_PER_GAS:                 new(big.Int).Mul(big.NewInt(100), big.NewInt(params.GWei)),
-	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: big.NewInt(4000),
-	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: big.NewInt(1000),
+	BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER: big.NewInt(5000),
+	BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD: big.NewInt(0),
 	BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM:      big.NewInt(2500),
 	BLOCK_REWARD_DISTRIBUTION_MAINTENANCE:    big.NewInt(2500),
 	MAX_BASE_FEE:                             new(big.Int).Mul(big.NewInt(5000), big.NewInt(params.GWei)),
 	BLOCK_GASLIMIT:                           big.NewInt(1050000000),
 	BASE_FEE_MAX_CHANGE_RATE:                 big.NewInt(46),
 	GAS_TARGET_PERCENTAGE:                    big.NewInt(30),
-	Options:                                  make(map[string]*big.Int),
 }
 
 // /////////////////////////

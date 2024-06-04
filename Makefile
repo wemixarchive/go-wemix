@@ -31,16 +31,14 @@ endif
 
 gwemix.tar.gz: gwemix logrot
 	@[ -d build/conf ] || mkdir -p build/conf
-	@cp -p wemix/scripts/gwemix.sh wemix/scripts/solc.sh build/bin/
+	@cp -p wemix/scripts/gwemix.sh build/bin/
 	@cp -p wemix/scripts/config.json.example		\
 		wemix/scripts/genesis-template.json		\
-		wemix/contracts/WemixGovernance.js	\
-		wemix/scripts/deploy-governance.js		\
 		build/conf/
 	@(cd build; tar cfz gwemix.tar.gz bin conf)
 	@echo "Done building build/gwemix.tar.gz"
 
-gwemix: rocksdb wemix/governance_abi.go
+gwemix: rocksdb 
 ifeq ($(USE_ROCKSDB), NO)
 	$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/gwemix
 else
@@ -68,7 +66,7 @@ else
 		$(GORUN) build/ci.go install $(ROCKSDB_TAG) ./cmd/dbbench
 endif
 
-all: wemix/governance_abi.go
+all:
 	$(GORUN) build/ci.go install
 
 android:
@@ -89,12 +87,12 @@ test: all
 test-short: all
 	$(GORUN) build/ci.go test -short
 
-lint: wemix/governance_abi.go ## Run linters.
+lint: ## Run linters.
 	$(GORUN) build/ci.go lint
 
 clean:
 	env GO111MODULE=on go clean -cache
-	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf wemix/admin_abi.go wemix/governance_abi.go
+	rm -fr build/_workspace/pkg/ $(GOBIN)/* build/conf
 	@ROCKSDB_DIR=$(ROCKSDB_DIR);			\
 	if [ -e $${ROCKSDB_DIR}/Makefile ]; then	\
 		cd $${ROCKSDB_DIR};			\
@@ -131,71 +129,4 @@ else
 rocksdb:
 	@[ ! -e rocksdb/.git ] && git submodule update --init rocksdb;	\
 	cd $(ROCKSDB_DIR) && PORTABLE=1 make -j8 static_lib;
-endif
-
-AWK_CODE='								\
-BEGIN { print "package wemix"; bin = 0; name = ""; abi = ""; }	\
-/^{/ { bin = 1; abi = ""; name = ""; }					\
-/^}/ { bin = 0; abi = abi "}"; print "var " name "Abi = `" abi "`"; }	\
-{									\
-  if (bin == 1) {							\
-    abi = abi $$0;							\
-    if ($$1 == "\"contractName\":") {					\
-      name = $$2;							\
-      gsub(",|\"", "", name);						\
-    }									\
-  }									\
-}'
-
-wemix/admin_abi.go: wemix/contracts/WemixAdmin-template.sol build/bin/solc
-	@PATH=${PATH}:build/bin wemix/scripts/solc.sh -f abi $< /tmp/junk.$$$$; \
-	cat /tmp/junk.$$$$ | awk $(AWK_CODE) > $@;	\
-	rm -f /tmp/junk.$$$$;
-
-AWK_CODE_2='								     \
-BEGIN { print "package wemix\n"; }					     \
-/^var Registry_contract/ {						     \
-  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
-  n = "Registry";							     \
-  print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
-}									     \
-/^var StakingImp_contract/ {						     \
-  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
-  n = "Staking";							     \
-  print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
-}									     \
-/^var EnvStorageImp_contract/ {						     \
-  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
-  n = "EnvStorageImp";							     \
-  print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
-}									     \
-/^var GovImp_contract/ {							     \
-  sub("^var[^(]*\\(","",$$0); sub("\\);$$","",$$0);			     \
-  n = "Gov";								     \
-  print "var " n "Abi = `{ \"contractName\": \"" n "\", \"abi\": " $$0 "}`"; \
-}'
-
-wemix/governance_abi.go: wemix/contracts/WemixGovernance.js
-	@cat $< | awk $(AWK_CODE_2) > $@
-
-ifneq ($(shell uname), Linux)
-
-build/bin/solc:
-	@test 1
-
-else
-
-SOLC_URL=https://github.com/ethereum/solidity/releases/download/v0.4.24/solc-static-linux
-build/bin/solc:
-	@[ -d build/bin ] || mkdir -p build/bin;		\
-	if [ ! -x build/bin/solc ]; then			\
-		if which curl > /dev/null 2>&1; then		\
-			curl -Ls -o build/bin/solc $(SOLC_URL);	\
-			chmod +x build/bin/solc;		\
-		elif which wget > /dev/null 2>&1; then		\
-			wget -nv -o build/bin/solc $(SOLC_URL);	\
-			chmod +x build/bin/solc;		\
-		fi						\
-	fi
-
 endif
