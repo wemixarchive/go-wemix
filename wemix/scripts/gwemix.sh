@@ -67,7 +67,7 @@ DISCOVER=0" > $d/.rc
     wait
 }
 
-# void init_gov(String node, String config_json, String account_file, bool doInitOnce)
+# void init_gov(String node, String config_json, String account_file, Number gov_lock_amount (wei) )
 # account_file can be
 #   1. keystore file: "<path>"
 #   2. nano ledger: "ledger:"
