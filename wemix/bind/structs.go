@@ -36,12 +36,15 @@ type GovContracts struct {
 	BallotStorageImp *BallotStorageImp
 	EnvStorage       *EnvStorage
 	EnvStorageImp    *EnvStorageImp
+	NCPExit          *NCPExit
+	NCPExitImp       *NCPExitImp
 	address          struct {
 		Registry      common.Address
 		Gov           common.Address
 		Staking       common.Address
 		BallotStorage common.Address
 		EnvStorage    common.Address
+		NCPExit       common.Address
 	}
 }
 
@@ -73,6 +76,8 @@ func NewGovContracts(backend bind.ContractBackend, registry common.Address) (*Go
 		return nil, errors.Wrap(err, "BallotStorage")
 	} else if gov.address.EnvStorage, gov.EnvStorage, gov.EnvStorageImp, err = newUUPSContracts(cfg, "EnvStorage", NewEnvStorage, NewEnvStorageImp); err != nil {
 		return nil, errors.Wrap(err, "EnvStorage")
+	} else if gov.address.NCPExit, gov.NCPExit, gov.NCPExitImp, err = newUUPSContracts(cfg, "NCPExit", NewNCPExit, NewNCPExitImp); err != nil {
+		return nil, errors.Wrap(err, "NCPExit")
 	} else {
 		return gov, nil
 	}
@@ -101,6 +106,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 			Staking       common.Address
 			BallotStorage common.Address
 			EnvStorage    common.Address
+			NCPExit       common.Address
 		}{}
 	)
 
@@ -123,6 +129,8 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 		return nil, errors.Wrap(err, "DeployBallotStorageImp")
 	} else if impAddress.EnvStorage, err = deployLogic(txPool, DeployEnvStorageImp); err != nil {
 		return nil, errors.Wrap(err, "DeployEnvStorageImp")
+	} else if impAddress.NCPExit, err = deployLogic(txPool, DeployNCPExitImp); err != nil {
+		return nil, errors.Wrap(err, "DeployNCPExitImp")
 	} else if err = txPool.WaitMined(); err != nil {
 		return nil, err
 	}
@@ -137,6 +145,8 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 		return nil, errors.Wrap(err, "DeployBallotStorage")
 	} else if gov.address.EnvStorage, gov.EnvStorage, err = deployProxy(txPool, impAddress.EnvStorage, DeployEnvStorage); err != nil {
 		return nil, errors.Wrap(err, "DeployEnvStorage")
+	} else if gov.address.NCPExit, gov.NCPExit, err = deployProxy(txPool, impAddress.NCPExit, DeployNCPExit); err != nil {
+		return nil, errors.Wrap(err, "DeployNCPExit")
 	} else if err = txPool.WaitMined(); err != nil {
 		return nil, err
 	} else {
@@ -144,6 +154,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 		optionDomains["Staking"] = gov.address.Staking
 		optionDomains["BallotStorage"] = gov.address.BallotStorage
 		optionDomains["EnvStorage"] = gov.address.EnvStorage
+		optionDomains["NCPExit"] = gov.address.NCPExit
 	}
 
 	// setup registry
@@ -166,6 +177,8 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 		return nil, errors.Wrap(err, "NewBallotStorageImp")
 	} else if gov.EnvStorageImp, err = NewEnvStorageImp(gov.address.EnvStorage, backend); err != nil {
 		return nil, errors.Wrap(err, "NewEnvStorageImp")
+	} else if gov.NCPExitImp, err = NewNCPExitImp(gov.address.NCPExit, backend); err != nil {
+		return nil, errors.Wrap(err, "NewNCPExitImp")
 	} else {
 		return gov, nil
 	}
@@ -190,6 +203,11 @@ func ExecuteInitialize(gov *GovContracts, opts *bind.TransactOpts, backend iBack
 	logger.Info("Initializing BallotStorage...")
 	if err := txPool.AppendTx(gov.BallotStorageImp.Initialize(opts, registryAddress)); err != nil {
 		return errors.Wrap(err, "BallotStorageImp.Initialize")
+	}
+
+	logger.Info("Initializing NCPExit...")
+	if err := txPool.AppendTx(gov.NCPExitImp.Initialize(opts, registryAddress)); err != nil {
+		return errors.Wrap(err, "NCPExitImp.Initialize")
 	}
 
 	logger.Info("Initializing EnvStorage...")
@@ -217,67 +235,9 @@ func (gov *GovContracts) Address() struct {
 	Staking       common.Address
 	BallotStorage common.Address
 	EnvStorage    common.Address
+	NCPExit       common.Address
 } {
 	return gov.address
-}
-
-func (src *GovContracts) Copy(dst *GovContracts, backend bind.ContractBackend) error {
-	if dst == nil {
-		return errors.New("nil destination")
-	}
-	zeroAddress := common.Address{}
-	errZeroAddress := errors.New("invalid src address")
-
-	srcAddress := src.Address()
-	if address := srcAddress.Registry; address == zeroAddress {
-		return errors.Wrap(errZeroAddress, "Registry")
-	} else if contract, err := NewRegistry(address, backend); err != nil {
-		return errors.Wrap(err, "Registry")
-	} else {
-		dst.Registry, dst.address.Registry = contract, address
-	}
-
-	if address := srcAddress.Gov; address == zeroAddress {
-		return errors.Wrap(errZeroAddress, "Gov")
-	} else if proxy, err := NewGov(address, backend); err != nil {
-		return errors.Wrap(err, "Gov")
-	} else if imp, err := NewGovImp(address, backend); err != nil {
-		return errors.Wrap(err, "GovImp")
-	} else {
-		dst.Gov, dst.GovImp, dst.address.Gov = proxy, imp, address
-	}
-
-	if address := srcAddress.Staking; address == zeroAddress {
-		return errors.Wrap(errZeroAddress, "Staking")
-	} else if proxy, err := NewStaking(address, backend); err != nil {
-		return errors.Wrap(err, "Staking")
-	} else if imp, err := NewStakingImp(address, backend); err != nil {
-		return errors.Wrap(err, "StakingImp")
-	} else {
-		dst.Staking, dst.StakingImp, dst.address.Staking = proxy, imp, address
-	}
-
-	if address := srcAddress.BallotStorage; address == zeroAddress {
-		return errors.Wrap(errZeroAddress, "BallotStorage")
-	} else if proxy, err := NewBallotStorage(address, backend); err != nil {
-		return errors.Wrap(err, "BallotStorage")
-	} else if imp, err := NewBallotStorageImp(address, backend); err != nil {
-		return errors.Wrap(err, "BallotStorageImp")
-	} else {
-		dst.BallotStorage, dst.BallotStorageImp, dst.address.BallotStorage = proxy, imp, address
-	}
-
-	if address := srcAddress.EnvStorage; address == zeroAddress {
-		return errors.Wrap(errZeroAddress, "EnvStorage")
-	} else if proxy, err := NewEnvStorage(address, backend); err != nil {
-		return errors.Wrap(err, "EnvStorage")
-	} else if imp, err := NewEnvStorageImp(address, backend); err != nil {
-		return errors.Wrap(err, "EnvStorageImp")
-	} else {
-		dst.EnvStorage, dst.EnvStorageImp, dst.address.EnvStorage = proxy, imp, address
-	}
-
-	return nil
 }
 
 func (src *GovContracts) Equal(dst *GovContracts) bool {

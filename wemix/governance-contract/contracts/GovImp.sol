@@ -762,7 +762,7 @@ contract GovImp is
 
         (
             address oldStaker, // newStakerAddress
-            // newRewardAddress
+            // newVoterAddress
             ,
             ,
             ,
@@ -771,7 +771,7 @@ contract GovImp is
             ,
             ,
 
-        ) = // newVoterAddress
+        ) = // newRewardAddress
             // newNodeName
             // newNodeId
             // newNodeIp
