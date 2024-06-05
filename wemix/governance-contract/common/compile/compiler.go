@@ -31,7 +31,8 @@ func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract,
 		"--combined-json", "bin,bin-runtime,srcmap,srcmap-runtime,abi,userdoc,devdoc,metadata,hashes",
 		"--optimize",                // code optimizer switched on
 		"--allow-paths", ".,./,../", //default to support relative path： ./  ../  .
-		fmt.Sprintf("@openzeppelin/=%s/openzeppelin/", root),
+		fmt.Sprintf("@openzeppelin/contracts/=%s/openzeppelin/contracts/contracts/", root),
+		fmt.Sprintf("@openzeppelin/contracts-upgradeable/=%s/openzeppelin/contracts-upgradeable/contracts/", root),
 		"--",
 	}
 	// ~/.gsolc-select/artifacts/solc-0.8.14/0.8.14
