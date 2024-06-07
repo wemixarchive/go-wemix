@@ -134,7 +134,7 @@ func deployGovernance(cli Client, ownerOpts *bind.TransactOpts, lockAmount *big.
 	}
 
 	// deploy & set domains
-	contracts, impAddress, err := gov.DeployGovContracts(ownerOpts, cli, domains)
+	contracts, err := gov.DeployGovContracts(ownerOpts, cli, domains)
 	if err != nil {
 		return err
 	}
@@ -151,11 +151,10 @@ func deployGovernance(cli Client, ownerOpts *bind.TransactOpts, lockAmount *big.
   "STAKING_ADDRESS": "%s",
   "ENV_STORAGE_ADDRESS": "%s",
   "BALLOT_STORAGE_ADDRESS": "%s",
-  "GOV_ADDRESS": "%s",
-  "GOV_IMP_ADDRESS": "%s",
+  "GOV_ADDRESS": "%s"
 }
 `,
-		address.Registry, address.Staking, address.EnvStorage, address.BallotStorage, address.Gov, impAddress["GovImp"])
+		address.Registry, address.Staking, address.EnvStorage, address.BallotStorage, address.Gov)
 
 	return nil
 }

@@ -139,7 +139,7 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 		return nil, err
 	}
 
-	contracts, _, err := gov.DeployGovContracts(opts, ethClient, map[string]common.Address{
+	contracts, err := gov.DeployGovContracts(opts, ethClient, map[string]common.Address{
 		"StakingReward": opts.From,
 		"Ecosystem":     opts.From,
 		"Maintenance":   opts.From,
