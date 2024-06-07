@@ -156,14 +156,6 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 	)
 
 	// deploy registry
-	if address, tx, contract, err := DeployRegistry(opts, backend); err != nil {
-		return nil, errors.Wrap(err, "DeployRegistry")
-	} else {
-		logger.Info(fmt.Sprintf("Deploying Registry at %s...", address))
-		txPool.AppendTx(tx, nil)
-		gov.address.Registry, gov.Registry = address, contract
-	}
-
 	if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
 		gov.address.Registry, tx, gov.Registry, err = DeployRegistry(opts, backend)
 		logger.Info(fmt.Sprintf("Deploying Registry at %s...", gov.address.Registry))
@@ -500,7 +492,7 @@ func newUUPSContracts(
 ) error {
 	address, err := cfg.registry.GetContractAddress(cfg.callOpts, metclient.ToBytes32(name))
 	if err != nil {
-		return err
+		return errors.Wrap(err, name)
 	}
 	return callback(address)
 }
