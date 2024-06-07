@@ -42,17 +42,15 @@ type SimClient interface {
 	ethereum.TransactionReader
 	ethereum.TransactionSender
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error) // GasPricer1559
-	GovContracts() *gov.GovContracts
 	Commit()
 }
 
 var ChainID = params.AllEthashProtocolChanges.ChainID
 
 type wemixSimulatedBackend struct {
-	stack      *node.Node
-	eth        *eth.Ethereum
-	backend    *backends.SimulatedBackend
-	governance *gov.GovContracts
+	stack   *node.Node
+	eth     *eth.Ethereum
+	backend *backends.SimulatedBackend
 }
 
 func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.GenesisAlloc, options ...OptionFn) (SimClient, error) {
@@ -168,10 +166,9 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 	}
 
 	return &wemixSimulatedBackend{
-		stack:      stack,
-		eth:        backend,
-		backend:    backends.NewSimulatedBackendWithEthereum(backend),
-		governance: contracts,
+		stack:   stack,
+		eth:     backend,
+		backend: backends.NewSimulatedBackendWithEthereum(backend),
 	}, nil
 }
 
@@ -251,9 +248,6 @@ func (w *wemixSimulatedBackend) SendTransaction(ctx context.Context, tx *types.T
 }
 func (w *wemixSimulatedBackend) Commit() {
 	w.backend.Commit()
-}
-func (w *wemixSimulatedBackend) GovContracts() *gov.GovContracts {
-	return w.governance
 }
 
 func (w *wemixSimulatedBackend) PendingBalanceAt(ctx context.Context, account common.Address) (*big.Int, error) {

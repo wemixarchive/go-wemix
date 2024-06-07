@@ -32,32 +32,71 @@ func TestWemixBackends(t *testing.T) {
 		},
 		backends.SetLogLevel(2),
 	)
-	require.NoError(t, err)
+	if err != nil {
+		return
+	}
 	require.NotNil(t, b)
 
-	t.Log(wemix_miner.HasMiningTokenFunc())
-	t.Log(wemix_miner.SuggestGasPriceFunc())
-	t.Log(wemix_miner.GetCoinbaseFunc(common.Big0))
+	defaultEnv := gov.DefaultInitEnvStorage
+
+	require.True(t, defaultEnv.MAX_PRIORITY_FEE_PER_GAS.Cmp(wemix_miner.SuggestGasPrice()) == 0)
+	coinBase, err := wemix_miner.GetCoinbase(common.Big0)
+	require.NoError(t, err)
+	require.Equal(t, opts.From, coinBase)
 
 	callOpts := new(bind.CallOpts)
 	contracts, err := gov.GetGovContractsByOwner(callOpts, b, opts.From)
 	require.NoError(t, err)
-	t.Log(contracts.Address().Registry)
-	t.Log(contracts.EnvStorageImp.GetBallotDurationMax(callOpts))
-	t.Log(contracts.EnvStorageImp.GetBallotDurationMin(callOpts))
-	t.Log(contracts.EnvStorageImp.GetBallotDurationMinMax(callOpts))
-	t.Log(contracts.EnvStorageImp.GetBlockCreationTime(callOpts))
-	t.Log(contracts.EnvStorageImp.GetBlockRewardAmount(callOpts))
-	t.Log(contracts.EnvStorageImp.GetBlockRewardDistributionMethod(callOpts))
-	t.Log(contracts.EnvStorageImp.GetBlocksPer(callOpts))
-	t.Log(contracts.EnvStorageImp.GetGasLimitAndBaseFee(callOpts))
-	t.Log(contracts.EnvStorageImp.GetMaxBaseFee(callOpts))
-	t.Log(contracts.EnvStorageImp.GetMaxIdleBlockInterval(callOpts))
-	t.Log(contracts.EnvStorageImp.GetMaxPriorityFeePerGas(callOpts))
-	t.Log(contracts.EnvStorageImp.GetStakingMax(callOpts))
-	t.Log(contracts.EnvStorageImp.GetStakingMin(callOpts))
-	t.Log(contracts.EnvStorageImp.GetStakingMinMax(callOpts))
-	t.Log(contracts.EnvStorageImp.GASTARGETPERCENTAGENAME(callOpts))
+
+	GetBallotDurationMax, err := contracts.EnvStorageImp.GetBallotDurationMax(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.BALLOT_DURATION_MAX.Cmp(GetBallotDurationMax) == 0)
+
+	GetBallotDurationMin, err := contracts.EnvStorageImp.GetBallotDurationMin(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.BALLOT_DURATION_MIN.Cmp(GetBallotDurationMin) == 0)
+
+	GetBlockCreationTime, err := contracts.EnvStorageImp.GetBlockCreationTime(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.BLOCK_CREATION_TIME.Cmp(GetBlockCreationTime) == 0)
+
+	GetBlockRewardAmount, err := contracts.EnvStorageImp.GetBlockRewardAmount(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.BLOCK_REWARD_AMOUNT.Cmp(GetBlockRewardAmount) == 0)
+
+	blockRewardDistributionBlockProducer,
+		blockRewardDistributionStakingReward, blockRewardDistributionEcosystem,
+		blockRewardDistributionMaintenance,
+		err := contracts.EnvStorageImp.GetBlockRewardDistributionMethod(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER.Cmp(blockRewardDistributionBlockProducer) == 0)
+	require.True(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD.Cmp(blockRewardDistributionStakingReward) == 0)
+	require.True(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM.Cmp(blockRewardDistributionEcosystem) == 0)
+	require.True(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_MAINTENANCE.Cmp(blockRewardDistributionMaintenance) == 0)
+
+	GetBlocksPer, err := contracts.EnvStorageImp.GetBlocksPer(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.BLOCKS_PER.Cmp(GetBlocksPer) == 0)
+
+	GetMaxBaseFee, err := contracts.EnvStorageImp.GetMaxBaseFee(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.MAX_BASE_FEE.Cmp(GetMaxBaseFee) == 0)
+
+	GetMaxIdleBlockInterval, err := contracts.EnvStorageImp.GetMaxIdleBlockInterval(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.MAX_IDLE_BLOCK_INTERVAL.Cmp(GetMaxIdleBlockInterval) == 0)
+
+	GetMaxPriorityFeePerGas, err := contracts.EnvStorageImp.GetMaxPriorityFeePerGas(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.MAX_PRIORITY_FEE_PER_GAS.Cmp(GetMaxPriorityFeePerGas) == 0)
+
+	GetStakingMax, err := contracts.EnvStorageImp.GetStakingMax(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.STAKING_MAX.Cmp(GetStakingMax) == 0)
+
+	GetStakingMin, err := contracts.EnvStorageImp.GetStakingMin(callOpts)
+	require.NoError(t, err)
+	require.True(t, defaultEnv.STAKING_MIN.Cmp(GetStakingMin) == 0)
 
 	getNode, err := contracts.GovImp.GetNode(callOpts, common.Big1)
 	require.NoError(t, err)
@@ -67,7 +106,6 @@ func TestWemixBackends(t *testing.T) {
 		"\n Ip:", string(getNode.Ip),
 		"\n Port:", getNode.Port,
 	)
-	// /*
 	newVoterKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	newVoter := crypto.PubkeyToAddress(newVoterKey.PublicKey)
@@ -114,12 +152,18 @@ func TestWemixBackends(t *testing.T) {
 	require.NoError(t, err)
 
 	ticker := time.NewTicker(10e9)
+	var headNumber *big.Int = nil
 loop:
 	for {
 		b.Commit()
 		select {
 		case head := <-newHead:
-			t.Log("head.Number", head.Number)
+			if headNumber == nil {
+				headNumber = head.Number
+			} else {
+				require.Equal(t, new(big.Int).Add(headNumber, common.Big1), head.Number)
+				headNumber = head.Number
+			}
 			time.Sleep(0.2e9)
 		case err := <-sub.Err():
 			require.NoError(t, err)
