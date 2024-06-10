@@ -20,7 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -33,7 +34,7 @@ var (
 )
 
 func convertFileLockError(err error) error {
-	if errno, ok := err.(syscall.Errno); ok && datadirInUseErrnos[uint(errno)] {
+	if errno, ok := err.(unix.Errno); ok && datadirInUseErrnos[uint(errno)] {
 		return ErrDatadirUsed
 	}
 	return err

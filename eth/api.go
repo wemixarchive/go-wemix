@@ -683,12 +683,13 @@ type PublicWemixAPI struct {
 	e *Ethereum
 }
 
-func NewPublicWemixAPI(e *Ethereum) *PublicWemixAPI {
-	return &PublicWemixAPI{e}
-}
-
-func (api *PublicWemixAPI) BriocheConfig() *params.BriocheConfig {
-	return api.e.BlockChain().Config().Brioche
+type BriocheConfigResult struct {
+	BlockReward       *hexutil.Big   `json:"blockReward,omitempty"`
+	FirstHalvingBlock *hexutil.Big   `json:"firstHalvingBlock,omitempty"`
+	HalvingPeriod     *hexutil.Big   `json:"halvingPeriod,omitempty"`
+	FinishRewardBlock *hexutil.Big   `json:"finishRewardBlock,omitempty"`
+	HalvingTimes      hexutil.Uint64 `json:"halvingTimes,omitempty"`
+	HalvingRate       hexutil.Uint64 `json:"halvingRate,omitempty"`
 }
 
 type HalvingInfo struct {
@@ -698,8 +699,24 @@ type HalvingInfo struct {
 	BlockReward  *hexutil.Big   `json:"blockReward"`
 }
 
+func NewPublicWemixAPI(e *Ethereum) *PublicWemixAPI {
+	return &PublicWemixAPI{e}
+}
+
+func (api *PublicWemixAPI) BriocheConfig() BriocheConfigResult {
+	bc := api.e.BlockChain().Config().Brioche
+	return BriocheConfigResult{
+		BlockReward:       (*hexutil.Big)(bc.BlockReward),
+		FirstHalvingBlock: (*hexutil.Big)(bc.FirstHalvingBlock),
+		HalvingPeriod:     (*hexutil.Big)(bc.HalvingPeriod),
+		FinishRewardBlock: (*hexutil.Big)(bc.FinishRewardBlock),
+		HalvingTimes:      hexutil.Uint64(bc.HalvingTimes),
+		HalvingRate:       hexutil.Uint64(bc.HalvingRate),
+	}
+}
+
 func (api *PublicWemixAPI) HalvingSchedule() []*HalvingInfo {
-	bc := api.BriocheConfig()
+	bc := api.e.BlockChain().Config().Brioche
 	if bc.FirstHalvingBlock == nil || bc.HalvingPeriod == nil || bc.HalvingTimes == 0 {
 		return nil
 	}
@@ -712,7 +729,7 @@ func (api *PublicWemixAPI) HalvingSchedule() []*HalvingInfo {
 	result := make([]*HalvingInfo, 0)
 	for i := uint64(0); i < bc.HalvingTimes; i++ {
 		startBlock := new(big.Int).Add(bc.FirstHalvingBlock, new(big.Int).Mul(bc.HalvingPeriod, new(big.Int).SetUint64(i)))
-		if lastRewardBlock != nil && startBlock.Cmp(lastRewardBlock) == 1 {
+		if lastRewardBlock != nil && startBlock.Cmp(lastRewardBlock) > 0 {
 			break
 		}
 		result = append(result, &HalvingInfo{
@@ -730,13 +747,14 @@ func (api *PublicWemixAPI) HalvingSchedule() []*HalvingInfo {
 
 func (api *PublicWemixAPI) GetBriocheBlockReward(blockNumber rpc.BlockNumber) *hexutil.Big {
 	height := new(big.Int)
-	if blockNumber == rpc.LatestBlockNumber {
+	switch blockNumber {
+	case rpc.LatestBlockNumber:
 		height.Set(api.e.BlockChain().CurrentHeader().Number)
-	} else if blockNumber == rpc.FinalizedBlockNumber {
+	case rpc.FinalizedBlockNumber:
 		height.Set(api.e.BlockChain().CurrentHeader().Number)
-	} else if blockNumber == rpc.PendingBlockNumber {
+	case rpc.PendingBlockNumber:
 		height.Set(api.e.miner.PendingBlock().Header().Number)
-	} else {
+	default:
 		height.SetInt64(blockNumber.Int64())
 	}
 
