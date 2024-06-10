@@ -26,7 +26,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/elastic/gosigar"
@@ -45,6 +44,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/wemix"
+	"golang.org/x/sys/unix"
 
 	// Force-load the tracer engines to trigger registration
 	_ "github.com/ethereum/go-ethereum/eth/tracers/js"
@@ -514,8 +514,8 @@ func limitMaxRss(max int64) {
 	timer := time.NewTimer(interval)
 	for {
 		<-timer.C
-		rusage := syscall.Rusage{}
-		err := syscall.Getrusage(syscall.RUSAGE_SELF, &rusage)
+		rusage := unix.Rusage{}
+		err := unix.Getrusage(unix.RUSAGE_SELF, &rusage)
 		if err != nil {
 			log.Error("Getrusage() failed:", "reason", err)
 		} else {

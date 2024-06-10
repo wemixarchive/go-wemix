@@ -123,11 +123,12 @@ type rewardParameters struct {
 
 var (
 	// "Wemix Registry"
-	magic, _        = big.NewInt(0).SetString("0x57656d6978205265676973747279", 0)
-	etcdClusterName = "Wemix"
-	big0            = big.NewInt(0)
-	nilAddress      = common.Address{}
-	admin           *wemixAdmin
+	magic, _                  = new(big.Int).SetString("0x57656d6978205265676973747279", 0)
+	etcdClusterName           = "Wemix"
+	big0                      = big.NewInt(0)
+	nilAddress                = common.Address{}
+	defaultBriocheBlockReward = big.NewInt(1e18)
+	admin                     *wemixAdmin
 
 	ErrAlreadyRunning = errors.New("already running")
 	ErrExists         = errors.New("already exists")
@@ -1013,31 +1014,6 @@ type reward struct {
 	Reward *big.Int       `json:"reward"`
 }
 
-func (ma *wemixAdmin) verifyRewards(r1, r2 []byte) error {
-	var err error
-	var a, b []reward
-
-	if err = json.Unmarshal(r1, &a); err != nil {
-		return err
-	}
-	if err = json.Unmarshal(r2, &b); err != nil {
-		return err
-	}
-
-	err = fmt.Errorf("Incorrect Rewards")
-	if len(a) != len(b) {
-		return err
-	}
-	for i := 0; i < len(a); i++ {
-		if !bytes.Equal(a[i].Addr.Bytes(), b[i].Addr.Bytes()) ||
-			a[i].Reward != b[i].Reward {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // handles rewards in testnet block 94
 func handleBlock94Rewards(height *big.Int, rp *rewardParameters, fees *big.Int) []reward {
 	if height.Int64() != 94 || len(rp.members) != 0 ||
@@ -1051,7 +1027,7 @@ func handleBlock94Rewards(height *big.Int, rp *rewardParameters, fees *big.Int) 
 
 // distributeRewards divides the rewardAmount among members according to their
 // stakes, and allocates rewards to staker, ecoSystem, and maintenance accounts.
-func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]reward, error) {
+func distributeRewards(height *big.Int, rp *rewardParameters, blockReward *big.Int, fees *big.Int) ([]reward, error) {
 	dm := new(big.Int)
 	for i := 0; i < len(rp.distributionMethod); i++ {
 		dm.Add(dm, rp.distributionMethod[i])
@@ -1061,14 +1037,14 @@ func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]
 	}
 
 	v10000 := big.NewInt(10000)
-	minerAmount := new(big.Int).Set(rp.rewardAmount)
+	minerAmount := new(big.Int).Set(blockReward)
 	minerAmount.Div(minerAmount.Mul(minerAmount, rp.distributionMethod[0]), v10000)
-	stakerAmount := new(big.Int).Set(rp.rewardAmount)
+	stakerAmount := new(big.Int).Set(blockReward)
 	stakerAmount.Div(stakerAmount.Mul(stakerAmount, rp.distributionMethod[1]), v10000)
-	ecoSystemAmount := new(big.Int).Set(rp.rewardAmount)
+	ecoSystemAmount := new(big.Int).Set(blockReward)
 	ecoSystemAmount.Div(ecoSystemAmount.Mul(ecoSystemAmount, rp.distributionMethod[2]), v10000)
 	// the rest goes to maintenance
-	maintenanceAmount := new(big.Int).Set(rp.rewardAmount)
+	maintenanceAmount := new(big.Int).Set(blockReward)
 	maintenanceAmount.Sub(maintenanceAmount, minerAmount)
 	maintenanceAmount.Sub(maintenanceAmount, stakerAmount)
 	maintenanceAmount.Sub(maintenanceAmount, ecoSystemAmount)
@@ -1102,7 +1078,7 @@ func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]
 			}
 			d.Mul(d, vn)
 			b.Sub(b, d)
-			for i, ix := 0, height.Int64()%int64(n); b.Cmp(v0) > 0; i, ix = i+1, (ix+1)%int64(n) {
+			for ix := height.Int64() % int64(n); b.Cmp(v0) > 0; ix = (ix + 1) % int64(n) {
 				rewards[ix].Reward.Add(rewards[ix].Reward, v1)
 				b.Sub(b, v1)
 			}
@@ -1146,17 +1122,7 @@ func distributeRewards(height *big.Int, rp *rewardParameters, fees *big.Int) ([]
 	return rewards, nil
 }
 
-func (ma *wemixAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (coinbase *common.Address, rewards []byte, err error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	rp, err := ma.getRewardParams(ctx, big.NewInt(num.Int64()-1))
-	if err != nil {
-		// all goes to the coinbase
-		err = wemixminer.ErrNotInitialized
-		return
-	}
-
+func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters, num, fees *big.Int, addBalance func(common.Address, *big.Int)) (rewards []byte, err error) {
 	if (rp.staker == nil && rp.ecoSystem == nil && rp.maintenance == nil) || len(rp.members) == 0 {
 		// handle testnet block 94 rewards
 		if rewards94 := handleBlock94Rewards(num, rp, fees); rewards94 != nil {
@@ -1172,14 +1138,21 @@ func (ma *wemixAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalan
 		return
 	}
 
-	// determine coinbase
-	if len(rp.members) > 0 {
-		mix := int(num.Int64()/ma.blocksPer) % len(rp.members)
-		coinbase = &common.Address{}
-		coinbase.SetBytes(rp.members[mix].Reward.Bytes())
+	var blockReward *big.Int
+	if config.IsBrioche(num) {
+		blockReward = config.Brioche.GetBriocheBlockReward(defaultBriocheBlockReward, num)
+	} else {
+		// if the wemix chain is not on brioche hard fork, use the `rewardAmount` from gov contract
+		blockReward = new(big.Int).Set(rp.rewardAmount)
 	}
 
-	rr, errr := distributeRewards(num, rp, fees)
+	// block reward
+	// - not brioche chain: use `EnvStorageImp.getBlockRewardAmount()`
+	// - brioche chain
+	//   - config.Brioche.BlockReward != nil: config.Brioche.BlockReward
+	//   - config.Brioche.BlockReward == nil: 1e18
+	//   - apply halving for BlockReward
+	rr, errr := distributeRewards(num, rp, blockReward, fees)
 	if errr != nil {
 		err = errr
 		return
@@ -1195,13 +1168,17 @@ func (ma *wemixAdmin) calculateRewards(num, blockReward, fees *big.Int, addBalan
 	return
 }
 
-func calculateRewards(num, blockReward, fees *big.Int, addBalance func(common.Address, *big.Int)) (*common.Address, []byte, error) {
-	return admin.calculateRewards(num, blockReward, fees, addBalance)
-}
+func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-func verifyRewards(num *big.Int, rewards string) error {
-	return nil
-	//return admin.verifyRewards(num, rewards)
+	rp, err := admin.getRewardParams(ctx, big.NewInt(num.Int64()-1))
+	if err != nil {
+		// all goes to the coinbase
+		return nil, wemixminer.ErrNotInitialized
+	}
+
+	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
 }
 
 func getCoinbase(height *big.Int) (coinbase common.Address, err error) {
@@ -1546,24 +1523,25 @@ func Info() interface{} {
 		})
 
 		info := &map[string]interface{}{
-			"consensus":            params.ConsensusMethod,
-			"registry":             admin.registry.To,
-			"governance":           admin.gov.To,
-			"staking":              admin.staking.To,
-			"modifiedblock":        admin.modifiedBlock,
-			"blocksPer":            admin.blocksPer,
-			"blockInterval":        admin.blockInterval,
-			"blockReward":          admin.blockReward,
-			"maxPriorityFeePerGas": admin.maxPriorityFeePerGas,
-			"blockGasLimit":        admin.gasLimit,
-			"maxBaseFee":           admin.maxBaseFee,
-			"baseFeeMaxChangeRate": admin.baseFeeMaxChangeRate,
-			"gasTargetPercentage":  admin.gasTargetPercentage,
-			"self":                 self,
-			"nodes":                nodes,
-			"miners":               admin.miners(),
-			"etcd":                 admin.etcdInfo(),
-			"maxIdle":              params.MaxIdleBlockInterval,
+			"consensus":                 params.ConsensusMethod,
+			"registry":                  admin.registry.To,
+			"governance":                admin.gov.To,
+			"staking":                   admin.staking.To,
+			"modifiedblock":             admin.modifiedBlock,
+			"blocksPer":                 admin.blocksPer,
+			"blockInterval":             admin.blockInterval,
+			"blockReward":               admin.blockReward,
+			"maxPriorityFeePerGas":      admin.maxPriorityFeePerGas,
+			"blockGasLimit":             admin.gasLimit,
+			"maxBaseFee":                admin.maxBaseFee,
+			"baseFeeMaxChangeRate":      admin.baseFeeMaxChangeRate,
+			"gasTargetPercentage":       admin.gasTargetPercentage,
+			"self":                      self,
+			"nodes":                     nodes,
+			"miners":                    admin.miners(),
+			"etcd":                      admin.etcdInfo(),
+			"maxIdle":                   params.MaxIdleBlockInterval,
+			"defaultBriocheBlockReward": defaultBriocheBlockReward,
 		}
 		return info
 	}
@@ -1816,7 +1794,6 @@ func init() {
 	wemixminer.AmHubFunc = AmHub
 	wemixminer.SuggestGasPriceFunc = suggestGasPrice
 	wemixminer.CalculateRewardsFunc = calculateRewards
-	wemixminer.VerifyRewardsFunc = verifyRewards
 	wemixminer.GetCoinbaseFunc = getCoinbase
 	wemixminer.SignBlockFunc = signBlock
 	wemixminer.VerifyBlockSigFunc = verifyBlockSig
