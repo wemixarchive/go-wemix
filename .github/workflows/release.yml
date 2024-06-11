@@ -17,14 +17,25 @@ jobs:
       with:
         go-version: '1.19'
 
+    - name: Setup packages
+      run: |
+        sudo apt install -y libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev
+        sudo apt remove -y bzip2 libbz2-dev zlib1g-dev
+
     - name: Build Go-WEMIX tarball (rocksdb)
       run: USE_ROCKSDB=YES make gwemix.tar.gz
+
+    - name: Display ELF info (rocksdb)
+      run: readelf -dV build/bin/gwemix
 
     - name: Move results to artifact (rocksdb)
       run: mv build/gwemix.tar.gz gwemix-${{ github.ref_name }}-linux-amd64-rocksdb.tar.gz
 
     - name: Build Go-WEMIX tarball (leveldb)
       run: USE_ROCKSDB=NO make gwemix.tar.gz
+
+    - name: Display ELF info (leveldb)
+      run: readelf -dV build/bin/gwemix
 
     - name: Move results to artifact (leveldb)
       run: mv build/gwemix.tar.gz gwemix-${{ github.ref_name }}-linux-amd64-leveldb.tar.gz
@@ -34,7 +45,6 @@ jobs:
       with:
         name: WEMIX3.0 Mainnet and Testnet Build (${{ github.ref_name }})
         draft: true
-        prerelease: true
         files: |
           gwemix-${{ github.ref_name }}-linux-amd64-rocksdb.tar.gz
           gwemix-${{ github.ref_name }}-linux-amd64-leveldb.tar.gz

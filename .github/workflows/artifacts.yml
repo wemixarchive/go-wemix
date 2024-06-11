@@ -18,6 +18,11 @@ jobs:
       with:
         go-version: '1.19'
 
+    - name: Setup packages
+      run: |
+        sudo apt install -y libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev
+        sudo apt remove -y bzip2 libbz2-dev zlib1g-dev
+
     - name: Build Go-WEMIX tarball
       run: USE_ROCKSDB=YES make gwemix.tar.gz
 
