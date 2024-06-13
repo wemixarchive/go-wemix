@@ -1,10 +1,9 @@
-name: artifacts
+name: "Release a tag as draft"
 
 on:
   push:
-    branches:
-      - devnet
-      - master
+    tags:
+      - w*
 
 jobs:
 
@@ -23,7 +22,7 @@ jobs:
         sudo apt install -y libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev
         sudo apt remove -y bzip2 libbz2-dev zlib1g-dev
 
-    - name: Build Go-WEMIX tarball
+    - name: Build Go-WEMIX tarball (rocksdb)
       run: USE_ROCKSDB=YES make gwemix.tar.gz
 
     - name: Set version
@@ -34,14 +33,26 @@ jobs:
         echo "GWEMIX_META=$(echo $GWEMIX_VERSION_META | cut -d'-' -f2-)" >> "$GITHUB_ENV"
         echo "GWEMIX_COMMITHASH=$(echo ${{ github.sha }} | cut -c1-8)" >> "$GITHUB_ENV"
 
-    - name: Display ELF info
+    - name: Display ELF info (rocksdb)
       run: readelf -dV build/bin/gwemix
 
-    - name: Move results to artifact
+    - name: Move results to artifact (rocksdb)
       run: mv build/gwemix.tar.gz gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-rocksdb.tar.gz
 
-    - name: Upload Go-WEMIX
-      uses: actions/upload-artifact@v4
+    - name: Build Go-WEMIX tarball (leveldb)
+      run: USE_ROCKSDB=NO make gwemix.tar.gz
+
+    - name: Display ELF info (leveldb)
+      run: readelf -dV build/bin/gwemix
+
+    - name: Move results to artifact (leveldb)
+      run: mv build/gwemix.tar.gz gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-leveldb.tar.gz
+
+    - name: GH Release
+      uses: softprops/action-gh-release@v2.0.5
       with:
-        name: artifact-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}
-        path: gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-rocksdb.tar.gz
+        name: WEMIX3.0 Mainnet and Testnet Build (${{ env.GWEMIX_VERSION }})
+        draft: true
+        files: |
+          gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-rocksdb.tar.gz
+          gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-leveldb.tar.gz
