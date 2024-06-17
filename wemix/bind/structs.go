@@ -68,61 +68,16 @@ func NewGovContracts(backend bind.ContractBackend, registry common.Address) (*Go
 		}
 	)
 
-	if err = newUUPSContracts(cfg, "GovernanceContract", func(address common.Address) error {
-		if Gov, err := NewGov(address, backend); err != nil {
-			return err
-		} else if GovImp, err := NewGovImp(address, backend); err != nil {
-			return err
-		} else {
-			gov.address.Gov, gov.Gov, gov.GovImp = address, Gov, GovImp
-			return nil
-		}
-	}); err != nil {
-		return nil, err
-	} else if err = newUUPSContracts(cfg, "Staking", func(address common.Address) error {
-		if Staking, err := NewStaking(address, backend); err != nil {
-			return err
-		} else if StakingImp, err := NewStakingImp(address, backend); err != nil {
-			return err
-		} else {
-			gov.address.Staking, gov.Staking, gov.StakingImp = address, Staking, StakingImp
-			return nil
-		}
-	}); err != nil {
-		return nil, err
-	} else if err = newUUPSContracts(cfg, "BallotStorage", func(address common.Address) error {
-		if BallotStorage, err := NewBallotStorage(address, backend); err != nil {
-			return err
-		} else if BallotStorageImp, err := NewBallotStorageImp(address, backend); err != nil {
-			return err
-		} else {
-			gov.address.BallotStorage, gov.BallotStorage, gov.BallotStorageImp = address, BallotStorage, BallotStorageImp
-			return nil
-		}
-	}); err != nil {
-		return nil, err
-	} else if err = newUUPSContracts(cfg, "EnvStorage", func(address common.Address) error {
-		if EnvStorage, err := NewEnvStorage(address, backend); err != nil {
-			return err
-		} else if EnvStorageImp, err := NewEnvStorageImp(address, backend); err != nil {
-			return err
-		} else {
-			gov.address.EnvStorage, gov.EnvStorage, gov.EnvStorageImp = address, EnvStorage, EnvStorageImp
-			return nil
-		}
-	}); err != nil {
-		return nil, err
-	} else if err = newUUPSContracts(cfg, "NCPExit", func(address common.Address) error {
-		if NCPExit, err := NewNCPExit(address, backend); err != nil {
-			return err
-		} else if NCPExitImp, err := NewNCPExitImp(address, backend); err != nil {
-			return err
-		} else {
-			gov.address.NCPExit, gov.NCPExit, gov.NCPExitImp = address, NCPExit, NCPExitImp
-			return nil
-		}
-	}); err != nil {
-		return nil, err
+	if gov.address.Gov, gov.Gov, gov.GovImp, err = newUUPSContracts(cfg, "GovernanceContract", NewGov, NewGovImp); err != nil {
+		return nil, errors.Wrap(err, "GovernanceContract")
+	} else if gov.address.Staking, gov.Staking, gov.StakingImp, err = newUUPSContracts(cfg, "Staking", NewStaking, NewStakingImp); err != nil {
+		return nil, errors.Wrap(err, "Staking")
+	} else if gov.address.BallotStorage, gov.BallotStorage, gov.BallotStorageImp, err = newUUPSContracts(cfg, "BallotStorage", NewBallotStorage, NewBallotStorageImp); err != nil {
+		return nil, errors.Wrap(err, "BallotStorage")
+	} else if gov.address.EnvStorage, gov.EnvStorage, gov.EnvStorageImp, err = newUUPSContracts(cfg, "EnvStorage", NewEnvStorage, NewEnvStorageImp); err != nil {
+		return nil, errors.Wrap(err, "EnvStorage")
+	} else if gov.address.NCPExit, gov.NCPExit, gov.NCPExitImp, err = newUUPSContracts(cfg, "NCPExit", NewNCPExit, NewNCPExitImp); err != nil {
+		return nil, errors.Wrap(err, "NCPExit")
 	} else {
 		return gov, nil
 	}
@@ -156,40 +111,25 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 	)
 
 	// deploy registry
-	if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		gov.address.Registry, tx, gov.Registry, err = DeployRegistry(opts, backend)
-		logger.Info(fmt.Sprintf("Deploying Registry at %s...", gov.address.Registry))
-		return
-	}); err != nil {
+	if address, tx, contract, err := DeployRegistry(opts, backend); err != nil {
 		return nil, errors.Wrap(err, "DeployRegistry")
+	} else {
+		logger.Info(fmt.Sprintf("Deploying Registry at %s...", address))
+		txPool.AppendTx(tx, nil)
+		gov.address.Registry, gov.Registry = address, contract
 	}
 
 	// deploy imps
 	logger.Info("Deploy Logic Contracts...")
-	if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		impAddress.Gov, tx, _, err = DeployGovImp(opts, backend)
-		return
-	}); err != nil {
+	if impAddress.Gov, err = deployLogic(txPool, DeployGovImp); err != nil {
 		return nil, errors.Wrap(err, "DeployGovImp")
-	} else if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		impAddress.Staking, tx, _, err = DeployStakingImp(opts, backend)
-		return tx, err
-	}); err != nil {
+	} else if impAddress.Staking, err = deployLogic(txPool, DeployStakingImp); err != nil {
 		return nil, errors.Wrap(err, "DeployStakingImp")
-	} else if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		impAddress.BallotStorage, tx, _, err = DeployBallotStorageImp(opts, backend)
-		return tx, err
-	}); err != nil {
+	} else if impAddress.BallotStorage, err = deployLogic(txPool, DeployBallotStorageImp); err != nil {
 		return nil, errors.Wrap(err, "DeployBallotStorageImp")
-	} else if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		impAddress.EnvStorage, tx, _, err = DeployEnvStorageImp(opts, backend)
-		return tx, err
-	}); err != nil {
+	} else if impAddress.EnvStorage, err = deployLogic(txPool, DeployEnvStorageImp); err != nil {
 		return nil, errors.Wrap(err, "DeployEnvStorageImp")
-	} else if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		impAddress.NCPExit, tx, _, err = DeployNCPExitImp(opts, backend)
-		return tx, err
-	}); err != nil {
+	} else if impAddress.NCPExit, err = deployLogic(txPool, DeployNCPExitImp); err != nil {
 		return nil, errors.Wrap(err, "DeployNCPExitImp")
 	} else if err = txPool.WaitMined(); err != nil {
 		return nil, err
@@ -197,30 +137,15 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 
 	// deploy proxies
 	logger.Info("Deploy Governance Contracts...")
-	if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		gov.address.Gov, tx, gov.Gov, err = DeployGov(opts, backend, impAddress.Gov)
-		return
-	}); err != nil {
+	if gov.address.Gov, gov.Gov, err = deployProxy(txPool, impAddress.Gov, DeployGov); err != nil {
 		return nil, errors.Wrap(err, "DeployGov")
-	} else if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		gov.address.Staking, tx, gov.Staking, err = DeployStaking(opts, backend, impAddress.Staking)
-		return
-	}); err != nil {
+	} else if gov.address.Staking, gov.Staking, err = deployProxy(txPool, impAddress.Staking, DeployStaking); err != nil {
 		return nil, errors.Wrap(err, "DeployStaking")
-	} else if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		gov.address.BallotStorage, tx, gov.BallotStorage, err = DeployBallotStorage(opts, backend, impAddress.BallotStorage)
-		return
-	}); err != nil {
+	} else if gov.address.BallotStorage, gov.BallotStorage, err = deployProxy(txPool, impAddress.BallotStorage, DeployBallotStorage); err != nil {
 		return nil, errors.Wrap(err, "DeployBallotStorage")
-	} else if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		gov.address.EnvStorage, tx, gov.EnvStorage, err = DeployEnvStorage(opts, backend, impAddress.EnvStorage)
-		return
-	}); err != nil {
+	} else if gov.address.EnvStorage, gov.EnvStorage, err = deployProxy(txPool, impAddress.EnvStorage, DeployEnvStorage); err != nil {
 		return nil, errors.Wrap(err, "DeployEnvStorage")
-	} else if err := txPool.AppendDeployTx(func(opts *bind.TransactOpts, backend bind.ContractBackend) (tx *types.Transaction, err error) {
-		gov.address.NCPExit, tx, gov.NCPExit, err = DeployNCPExit(opts, backend, impAddress.NCPExit)
-		return
-	}); err != nil {
+	} else if gov.address.NCPExit, gov.NCPExit, err = deployProxy(txPool, impAddress.NCPExit, DeployNCPExit); err != nil {
 		return nil, errors.Wrap(err, "DeployNCPExit")
 	} else if err = txPool.WaitMined(); err != nil {
 		return nil, err
@@ -485,16 +410,21 @@ type uupsConfig struct {
 	registry *Registry
 }
 
-func newUUPSContracts(
+func newUUPSContracts[P, L any](
 	cfg *uupsConfig,
 	name string,
-	callback func(common.Address) error,
-) error {
-	address, err := cfg.registry.GetContractAddress(cfg.callOpts, metclient.ToBytes32(name))
-	if err != nil {
-		return errors.Wrap(err, name)
+	newProxy func(common.Address, bind.ContractBackend) (*P, error),
+	newLogic func(common.Address, bind.ContractBackend) (*L, error),
+) (common.Address, *P, *L, error) {
+	if address, err := cfg.registry.GetContractAddress(cfg.callOpts, metclient.ToBytes32(name)); err != nil {
+		return common.Address{}, nil, nil, errors.Wrap(err, "GetContractAddress")
+	} else if proxy, err := newProxy(address, cfg.backend); err != nil {
+		return common.Address{}, nil, nil, errors.Wrap(err, "newProxy")
+	} else if imp, err := newLogic(address, cfg.backend); err != nil {
+		return common.Address{}, nil, nil, errors.Wrap(err, "newLogic")
+	} else {
+		return address, proxy, imp, nil
 	}
-	return callback(address)
 }
 
 type iBackend interface {
@@ -534,6 +464,18 @@ func (pool *txPool) AppendTx(tx *types.Transaction, err error) error {
 	return err
 }
 
-func (pool *txPool) AppendDeployTx(deploy func(opts *bind.TransactOpts, backend bind.ContractBackend) (*types.Transaction, error)) error {
-	return pool.AppendTx(deploy(pool.opts, pool.backend))
+func deployProxy[T any](pool *txPool, logic common.Address, deploy func(*bind.TransactOpts, bind.ContractBackend, common.Address) (common.Address, *types.Transaction, *T, error)) (common.Address, *T, error) {
+	address, tx, proxy, err := deploy(pool.opts, pool.backend, logic)
+	if tx != nil {
+		pool.txs = append(pool.txs, tx)
+	}
+	return address, proxy, err
+}
+
+func deployLogic[T any](pool *txPool, deploy func(*bind.TransactOpts, bind.ContractBackend) (common.Address, *types.Transaction, *T, error)) (common.Address, error) {
+	address, tx, _, err := deploy(pool.opts, pool.backend)
+	if tx != nil {
+		pool.txs = append(pool.txs, tx)
+	}
+	return address, err
 }

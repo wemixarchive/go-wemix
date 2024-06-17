@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: [1.17, 1.18, 1.19]
+        version: [1.18, 1.19]
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v3
@@ -49,7 +49,8 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
-    - run: git submodule update --init wemix/
+    - name: Set up Wemix Submodules
+      run: git submodule update --init wemix/
 
     - name: Set up Go
       uses: actions/setup-go@v3
