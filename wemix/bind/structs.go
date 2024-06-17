@@ -101,7 +101,6 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 		logger     = log.New("func", "DeployGovContracts")
 		txPool     = &txPool{backend: backend, logger: logger, opts: opts, txs: make([]*types.Transaction, 0)}
 		impAddress = struct {
-			Registry      common.Address
 			Gov           common.Address
 			Staking       common.Address
 			BallotStorage common.Address
@@ -466,16 +465,10 @@ func (pool *txPool) AppendTx(tx *types.Transaction, err error) error {
 
 func deployProxy[T any](pool *txPool, logic common.Address, deploy func(*bind.TransactOpts, bind.ContractBackend, common.Address) (common.Address, *types.Transaction, *T, error)) (common.Address, *T, error) {
 	address, tx, proxy, err := deploy(pool.opts, pool.backend, logic)
-	if tx != nil {
-		pool.txs = append(pool.txs, tx)
-	}
-	return address, proxy, err
+	return address, proxy, pool.AppendTx(tx, err)
 }
 
 func deployLogic[T any](pool *txPool, deploy func(*bind.TransactOpts, bind.ContractBackend) (common.Address, *types.Transaction, *T, error)) (common.Address, error) {
 	address, tx, _, err := deploy(pool.opts, pool.backend)
-	if tx != nil {
-		pool.txs = append(pool.txs, tx)
-	}
-	return address, err
+	return address, pool.AppendTx(tx, err)
 }
