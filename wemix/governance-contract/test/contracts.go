@@ -49,8 +49,6 @@ func DeployGovernance(t *testing.T) *Governance {
 	gov.NCPExit.ExecuteOk(t, gov.client.Owner, "initialize", gov.Registry.Address)
 	gov.Staking.ExecuteOk(t, gov.client.Owner, "init", gov.Registry.Address, []byte{})
 	gov.BallotStorage.ExecuteOk(t, gov.client.Owner, "initialize", gov.Registry.Address)
-
-	// [EnvStorage] env 의 기본값 설정 데이터
 	envNames, envValues := makeEnvParams(
 		EnvConstants.BLOCKS_PER,
 		EnvConstants.BALLOT_DURATION_MIN,
@@ -70,9 +68,7 @@ func DeployGovernance(t *testing.T) *Governance {
 		EnvConstants.BASE_FEE_MAX_CHANGE_RATE,
 		EnvConstants.GAS_TARGET_PERCENTAGE,
 	)
-
 	gov.EnvStorage.ExecuteOk(t, gov.client.Owner, "initialize", gov.Registry.Address, envNames, envValues)
-
 	gov.Staking.ExecuteWithETHOk(t, gov.client.Owner, LOCK_AMOUNT, "deposit")
 	node := nodeInfo{
 		[]byte("name"),
@@ -144,10 +140,8 @@ func (c *Compiled) Compile(root string) {
 }
 
 func (c *Compiled) Copy(g *Governance) *Governance {
-	// 같은 이름의 field가 있으면 카피
 	typ := reflect.TypeOf(c).Elem()
 	for i := 0; i < typ.NumField(); i++ {
-		// 없으면 스킵.
 		if v := reflect.ValueOf(g).Elem().FieldByName(typ.Field(i).Name); v.IsValid() {
 			v.Set(reflect.ValueOf(c).Elem().Field(i))
 		}
