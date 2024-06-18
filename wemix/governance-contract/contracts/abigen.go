@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/compiler"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/compile"
 )
 
@@ -76,6 +77,17 @@ func bindContracts(contracts map[string]*compiler.Contract, fname string, cnames
 		return err
 	}
 
+	var (
+		filename = filepath.Join(outDir, fmt.Sprintf("%s.go", fname))
+		filedata = []byte(str)
+	)
+
+	if read, err := os.ReadFile(filename); err == nil {
+		if crypto.Keccak256Hash(read) == crypto.Keccak256Hash(filedata) {
+			return nil
+		}
+	}
+
 	if _, err := os.Stat(outDir); err != nil {
 		if !os.IsNotExist(err) {
 			return err
@@ -84,7 +96,8 @@ func bindContracts(contracts map[string]*compiler.Contract, fname string, cnames
 			return err
 		}
 	}
-	return os.WriteFile(filepath.Join(outDir, fmt.Sprintf("%s.go", fname)), []byte(str), 0644)
+
+	return os.WriteFile(filename, filedata, 0644)
 }
 
 func abiToString(definition interface{}) string {
