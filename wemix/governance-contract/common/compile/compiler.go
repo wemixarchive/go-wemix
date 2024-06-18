@@ -102,6 +102,7 @@ func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...stri
 		types     = make([]string, length)
 		abis      = make([]string, length)
 		bytecodes = make([]string, length)
+		sigs      = make([]map[string]string, length)
 	)
 
 	var err error
@@ -111,13 +112,14 @@ func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...stri
 			return fmt.Errorf("not found contract : %v", name)
 		}
 		types[i] = name
-		bytecodes[i] = contract.Code
 		if abis[i], err = abiToString(contract); err != nil {
 			return errors.Wrap(err, name)
 		}
+		bytecodes[i] = contract.Code
+		sigs[i] = contract.Hashes
 	}
 
-	str, err := bind.Bind(types, abis, bytecodes, nil, pkg, bind.LangGo, nil, nil)
+	str, err := bind.Bind(types, abis, bytecodes, sigs, pkg, bind.LangGo, nil, nil)
 	if err != nil {
 		return err
 	}
