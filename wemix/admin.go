@@ -203,7 +203,6 @@ func (ma *wemixAdmin) getGenesisInfo() (string, common.Address, error) {
 	return nodeId, block.Coinbase, nil
 }
 
-// TODO: error handling
 func (ma *wemixAdmin) getRegGovEnvContracts(ctx context.Context, height *big.Int) (*gov.GovContracts, error) {
 	if ctx == nil {
 		var cancel func()
@@ -542,7 +541,6 @@ func StartAdmin(stack *node.Node, datadir string) {
 		stack:       stack,
 		lock:        &sync.Mutex{},
 		Updates:     make(chan bool, 10),
-		contracts:   new(gov.GovContracts),
 		rpcCli:      rpcCli,
 		cli:         cli,
 		blocksPer:   100,
@@ -554,7 +552,6 @@ func StartAdmin(stack *node.Node, datadir string) {
 	if err != nil {
 		return
 	}
-	admin.contracts, _ = admin.getRegGovEnvContracts(nil, nil)
 
 	go admin.run()
 	go admin.handleNewBlocks()
