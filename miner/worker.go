@@ -599,8 +599,10 @@ func (w *worker) mainLoop() {
 			// In wemix, costly interrupt / resubmit is disabled
 			if wemixminer.IsPoW() {
 				w.commitWork(req.interrupt, req.noempty, req.timestamp)
-			} else {
+			} else if wemixminer.AmPartner() {
 				w.commitWork(nil, req.noempty, req.timestamp)
+			} else {
+				w.refreshPending(true)
 			}
 
 		case req := <-w.getWorkCh:
