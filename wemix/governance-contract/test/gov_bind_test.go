@@ -6,28 +6,29 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	gov "github.com/ethereum/go-ethereum/wemix/bind"
-	sim "github.com/ethereum/go-ethereum/wemix/governance-contract/common/simulated-backend"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDeploy(t *testing.T) {
-	client := sim.NewClient(t)
-	opts, err := bind.NewKeyedTransactorWithChainID(sim.EOAKey[sim.GetOrNewEOA("owner")], client.ChainID)
-	require.NoError(t, err)
+	client, opts := func() (*backends.SimulatedBackend, *bind.TransactOpts) {
+		g := NewGovernance(t)
+		return g.backend, g.owner
+	}()
 	go func() {
 		for {
 			time.Sleep(1e9)
 			client.Commit()
 		}
 	}()
-	contracts, err := gov.DeployGovContracts(opts, client.Backend, nil)
+	contracts, err := gov.DeployGovContracts(opts, client, nil)
 	require.NoError(t, err)
 	lockAmount := gov.DefaultInitEnvStorage.STAKING_MIN
-	gov.ExecuteInitialize(contracts, opts, client.Backend, lockAmount, gov.DefaultInitEnvStorage, gov.InitMembers{
+	gov.ExecuteInitialize(contracts, opts, client, lockAmount, gov.DefaultInitEnvStorage, gov.InitMembers{
 		{
 			Staker:  opts.From,
 			Voter:   opts.From,
