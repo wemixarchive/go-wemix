@@ -125,10 +125,7 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 	}
 	log.Warn("Wait Genesis Block Mined", "elapsed", time.Since(now).Seconds())
 
-	rpcClient, err := stack.Attach()
-	if err != nil {
-		return nil, err
-	}
+	rpcClient, _ := stack.Attach()
 	ethClient := ethclient.NewClient(rpcClient)
 
 	opts, err := bind.NewKeyedTransactorWithChainID(pk, ethConfig.Genesis.Config.ChainID)

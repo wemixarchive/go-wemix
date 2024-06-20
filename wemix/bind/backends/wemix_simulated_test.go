@@ -48,55 +48,55 @@ func TestWemixBackends(t *testing.T) {
 	contracts, err := gov.GetGovContractsByOwner(callOpts, b, opts.From)
 	require.NoError(t, err)
 
-	GetBallotDurationMax, err := contracts.EnvStorageImp.GetBallotDurationMax(callOpts)
+	got, err := contracts.EnvStorageImp.GetBallotDurationMax(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.BALLOT_DURATION_MAX.Cmp(GetBallotDurationMax) == 0)
+	require.Truef(t, defaultEnv.BALLOT_DURATION_MAX.Cmp(got) == 0, "mismatch BALLOT_DURATION_MAX, got: %v, want: %v", got, defaultEnv.BALLOT_DURATION_MAX)
 
-	GetBallotDurationMin, err := contracts.EnvStorageImp.GetBallotDurationMin(callOpts)
+	got, err = contracts.EnvStorageImp.GetBallotDurationMin(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.BALLOT_DURATION_MIN.Cmp(GetBallotDurationMin) == 0)
+	require.Truef(t, defaultEnv.BALLOT_DURATION_MIN.Cmp(got) == 0, "mismatch BALLOT_DURATION_MIN, got: %v, want: %v", got, defaultEnv.BALLOT_DURATION_MIN)
 
-	GetBlockCreationTime, err := contracts.EnvStorageImp.GetBlockCreationTime(callOpts)
+	got, err = contracts.EnvStorageImp.GetBlockCreationTime(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.BLOCK_CREATION_TIME.Cmp(GetBlockCreationTime) == 0)
+	require.Truef(t, defaultEnv.BLOCK_CREATION_TIME.Cmp(got) == 0, "mismatch BLOCK_CREATION_TIME, got: %v, want: %v", got, defaultEnv.BLOCK_CREATION_TIME)
 
-	GetBlockRewardAmount, err := contracts.EnvStorageImp.GetBlockRewardAmount(callOpts)
+	got, err = contracts.EnvStorageImp.GetBlockRewardAmount(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.BLOCK_REWARD_AMOUNT.Cmp(GetBlockRewardAmount) == 0)
+	require.Truef(t, defaultEnv.BLOCK_REWARD_AMOUNT.Cmp(got) == 0, "mismatch BLOCK_REWARD_AMOUNT, got: %v, want: %v", got, defaultEnv.BLOCK_REWARD_AMOUNT)
 
 	blockRewardDistributionBlockProducer,
 		blockRewardDistributionStakingReward, blockRewardDistributionEcosystem,
 		blockRewardDistributionMaintenance,
 		err := contracts.EnvStorageImp.GetBlockRewardDistributionMethod(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER.Cmp(blockRewardDistributionBlockProducer) == 0)
-	require.True(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD.Cmp(blockRewardDistributionStakingReward) == 0)
-	require.True(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM.Cmp(blockRewardDistributionEcosystem) == 0)
-	require.True(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_MAINTENANCE.Cmp(blockRewardDistributionMaintenance) == 0)
+	require.Truef(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER.Cmp(blockRewardDistributionBlockProducer) == 0, "mismatch BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER, got: %v, want: %v", blockRewardDistributionBlockProducer, defaultEnv.BLOCK_REWARD_DISTRIBUTION_BLOCK_PRODUCER)
+	require.Truef(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD.Cmp(blockRewardDistributionStakingReward) == 0, "mismatch BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD, got: %v, want: %v", blockRewardDistributionStakingReward, defaultEnv.BLOCK_REWARD_DISTRIBUTION_STAKING_REWARD)
+	require.Truef(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM.Cmp(blockRewardDistributionEcosystem) == 0, "mismatch BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM, got: %v, want: %v", blockRewardDistributionEcosystem, defaultEnv.BLOCK_REWARD_DISTRIBUTION_ECOSYSTEM)
+	require.Truef(t, defaultEnv.BLOCK_REWARD_DISTRIBUTION_MAINTENANCE.Cmp(blockRewardDistributionMaintenance) == 0, "mismatch BLOCK_REWARD_DISTRIBUTION_MAINTENANCE, got: %v, want: %v", blockRewardDistributionMaintenance, defaultEnv.BLOCK_REWARD_DISTRIBUTION_MAINTENANCE)
 
-	GetBlocksPer, err := contracts.EnvStorageImp.GetBlocksPer(callOpts)
+	got, err = contracts.EnvStorageImp.GetBlocksPer(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.BLOCKS_PER.Cmp(GetBlocksPer) == 0)
+	require.Truef(t, defaultEnv.BLOCKS_PER.Cmp(got) == 0, "mismatch BLOCKS_PER, got: %v, want: %v", got, defaultEnv.BLOCKS_PER)
 
-	GetMaxBaseFee, err := contracts.EnvStorageImp.GetMaxBaseFee(callOpts)
+	got, err = contracts.EnvStorageImp.GetMaxBaseFee(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.MAX_BASE_FEE.Cmp(GetMaxBaseFee) == 0)
+	require.Truef(t, defaultEnv.MAX_BASE_FEE.Cmp(got) == 0, "mismatch MAX_BASE_FEE, got: %v, want: %v", got, defaultEnv.MAX_BASE_FEE)
 
-	GetMaxIdleBlockInterval, err := contracts.EnvStorageImp.GetMaxIdleBlockInterval(callOpts)
+	got, err = contracts.EnvStorageImp.GetMaxIdleBlockInterval(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.MAX_IDLE_BLOCK_INTERVAL.Cmp(GetMaxIdleBlockInterval) == 0)
+	require.Truef(t, defaultEnv.MAX_IDLE_BLOCK_INTERVAL.Cmp(got) == 0, "mismatch MAX_IDLE_BLOCK_INTERVAL, got: %v, want: %v", got, defaultEnv.MAX_IDLE_BLOCK_INTERVAL)
 
-	GetMaxPriorityFeePerGas, err := contracts.EnvStorageImp.GetMaxPriorityFeePerGas(callOpts)
+	got, err = contracts.EnvStorageImp.GetMaxPriorityFeePerGas(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.MAX_PRIORITY_FEE_PER_GAS.Cmp(GetMaxPriorityFeePerGas) == 0)
+	require.Truef(t, defaultEnv.MAX_PRIORITY_FEE_PER_GAS.Cmp(got) == 0, "mismatch MAX_PRIORITY_FEE_PER_GAS, got: %v, want: %v", got, defaultEnv.MAX_PRIORITY_FEE_PER_GAS)
 
-	GetStakingMax, err := contracts.EnvStorageImp.GetStakingMax(callOpts)
+	got, err = contracts.EnvStorageImp.GetStakingMax(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.STAKING_MAX.Cmp(GetStakingMax) == 0)
+	require.Truef(t, defaultEnv.STAKING_MAX.Cmp(got) == 0, "mismatch STAKING_MAX, got: %v, want: %v", got, defaultEnv.STAKING_MAX)
 
-	GetStakingMin, err := contracts.EnvStorageImp.GetStakingMin(callOpts)
+	got, err = contracts.EnvStorageImp.GetStakingMin(callOpts)
 	require.NoError(t, err)
-	require.True(t, defaultEnv.STAKING_MIN.Cmp(GetStakingMin) == 0)
+	require.Truef(t, defaultEnv.STAKING_MIN.Cmp(got) == 0, "mismatch STAKING_MIN, got: %v, want: %v", got, defaultEnv.STAKING_MIN)
 
 	getNode, err := contracts.GovImp.GetNode(callOpts, common.Big1)
 	require.NoError(t, err)
@@ -150,6 +150,7 @@ func TestWemixBackends(t *testing.T) {
 	newHead := make(chan *types.Header)
 	sub, err := b.SubscribeNewHead(context.Background(), newHead)
 	require.NoError(t, err)
+	defer sub.Unsubscribe()
 
 	ticker := time.NewTicker(10e9)
 	var headNumber *big.Int = nil
@@ -164,7 +165,6 @@ loop:
 				require.Equal(t, new(big.Int).Add(headNumber, common.Big1), head.Number)
 				headNumber = head.Number
 			}
-			time.Sleep(0.2e9)
 		case err := <-sub.Err():
 			require.NoError(t, err)
 		case <-ticker.C:

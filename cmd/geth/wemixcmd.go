@@ -591,7 +591,7 @@ func deployContract(ctx *cli.Context) error {
 	gasPrice := ctx.Int64(gasPriceFlag.Name)
 
 	if len(url) == 0 || len(ctx.Args()) != 3 {
-		return fmt.Errorf("invalid Arguments")
+		return fmt.Errorf("invalid arguments")
 	}
 
 	accountFile, contractName, contractFile := ctx.Args()[0], ctx.Args()[1], ctx.Args()[2]

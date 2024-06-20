@@ -110,9 +110,13 @@ func ExpectedRevert(t *testing.T, err error, args ...interface{}) {
 }
 
 func ToBytes32(str string) [32]byte {
-	dest := [32]byte{}
-	copy(dest[:], []byte(str))
-	return dest
+	bytes := []byte(str)
+	if len(bytes) > 32 {
+		bytes = bytes[:32]
+	}
+	var copied = [32]byte{}
+	copy(copied[:], bytes)
+	return copied
 }
 
 var eoas = make(map[string]*bind.TransactOpts)
