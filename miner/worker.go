@@ -536,7 +536,7 @@ func (w *worker) newWorkLoopEx(recommit time.Duration) {
 
 	// commitSimple just starts a new commitNewWork
 	commitSimple := func() {
-		if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
+		if wemixminer.AmPartner() && atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
 			w.newWorkCh <- &newWorkReq{interrupt: nil, noempty: false, timestamp: time.Now().Unix()}
 			atomic.StoreInt32(&w.newTxs, 0)
 			atomic.StoreInt32(&busyMining, 0)
@@ -599,10 +599,8 @@ func (w *worker) mainLoop() {
 			// In wemix, costly interrupt / resubmit is disabled
 			if wemixminer.IsPoW() {
 				w.commitWork(req.interrupt, req.noempty, req.timestamp)
-			} else if wemixminer.AmPartner() {
-				w.commitWork(nil, req.noempty, req.timestamp)
 			} else {
-				w.refreshPending(true)
+				w.commitWork(nil, req.noempty, req.timestamp)
 			}
 
 		case req := <-w.getWorkCh:
@@ -1773,6 +1771,7 @@ func (w *worker) commitEx(env *environment, interval func(), update bool, start 
 
 				if update {
 					w.updateSnapshot(env)
+					update = false
 				}
 				time.Sleep(time.Until(*env.till))
 
