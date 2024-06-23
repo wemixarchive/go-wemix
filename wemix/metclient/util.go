@@ -423,7 +423,7 @@ func ToBytes32(b string) [32]byte {
 
 // packNum packs the given number (using the reflect value) and will cast it to appropriate number representation
 func PackNum(value reflect.Value) []byte {
-	switch kind := value.Kind(); kind {
+	switch value.Kind() {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		return math.U256Bytes(new(big.Int).SetUint64(value.Uint()))
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:

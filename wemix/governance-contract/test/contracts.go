@@ -209,14 +209,14 @@ func newBindContract(contract *compiler.Contract) (*bindContract, error) {
 		return nil, errors.New("nil contracts")
 	}
 
-	if aBI, err := parseABI(contract.Info.AbiDefinition); err != nil {
+	if parsedAbi, err := parseABI(contract.Info.AbiDefinition); err != nil {
 		return nil, err
 	} else {
 		code := contract.Code
 		if !strings.HasPrefix(code, "0x") {
 			code = "0x" + code
 		}
-		return &bindContract{Bin: hexutil.MustDecode(code), Abi: *aBI}, err
+		return &bindContract{Bin: hexutil.MustDecode(code), Abi: *parsedAbi}, err
 	}
 }
 
