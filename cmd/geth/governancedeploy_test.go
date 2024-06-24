@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"math"
 	"math/big"
@@ -34,16 +35,32 @@ func TestDeployGoverananceContracts(t *testing.T) {
 		params.MaxGasLimit,
 	)
 
-	// make temp config.json
-	configJSFile := filepath.Join(t.TempDir(), "config.json")
-	require.NoError(t, os.WriteFile(configJSFile, []byte(configStr), 0775))
+	nonce, err := backend.NonceAt(context.Background(), opts.From, nil)
+	require.NoError(t, err)
+
+	fin := make(chan struct{})
+	defer close(fin)
 
 	go func() {
+		ticker := time.NewTicker(0.1e9)
+		defer ticker.Stop()
 		for {
-			time.Sleep(0.5e9)
-			backend.Commit()
+			select {
+			case <-ticker.C:
+				pending, err := backend.PendingNonceAt(context.Background(), opts.From)
+				require.NoError(t, err)
+				if nonce != pending {
+					nonce = pending
+					backend.Commit()
+				}
+			case <-fin:
+				return
+			}
 		}
 	}()
+
+	configJSFile := filepath.Join(t.TempDir(), "config.json")
+	require.NoError(t, os.WriteFile(configJSFile, []byte(configStr), 0775))
 
 	domains, env, members, err := getInitialGovernanceInitDatas(configJSFile)
 	require.NoError(t, err)
@@ -55,6 +72,7 @@ func TestDeployGoverananceContracts(t *testing.T) {
 	for i, member := range members {
 		t.Log(i, member)
 	}
+
 	require.NoError(t, deployGovernance(backend, opts, gov.DefaultInitEnvStorage.STAKING_MIN, configJSFile))
 }
 
