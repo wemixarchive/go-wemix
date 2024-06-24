@@ -119,6 +119,7 @@ func (env *environment) copy() *environment {
 		coinbase:  env.coinbase,
 		header:    types.CopyHeader(env.header),
 		receipts:  copyReceipts(env.receipts),
+		till:      env.till,
 	}
 	if env.gasPool != nil {
 		gasPool := *env.gasPool
@@ -535,7 +536,7 @@ func (w *worker) newWorkLoopEx(recommit time.Duration) {
 
 	// commitSimple just starts a new commitNewWork
 	commitSimple := func() {
-		if atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
+		if wemixminer.AmPartner() && atomic.CompareAndSwapInt32(&busyMining, 0, 1) {
 			w.newWorkCh <- &newWorkReq{interrupt: nil, noempty: false, timestamp: time.Now().Unix()}
 			atomic.StoreInt32(&w.newTxs, 0)
 			atomic.StoreInt32(&busyMining, 0)
@@ -1268,8 +1269,6 @@ func (w *worker) commitTransactionsEx(env *environment, interrupt *int32, tstart
 
 	}
 
-	time.Sleep(time.Until(*env.till))
-
 	log.Debug("Block", "number", env.header.Number.Int64(), "elapsed", common.PrettyDuration(time.Since(tstart)), "txs", len(committedTxs))
 
 	return false
@@ -1769,6 +1768,13 @@ func (w *worker) commitEx(env *environment, interval func(), update bool, start 
 					}
 					logs = append(logs, receipt.Logs...)
 				}
+
+				if update {
+					w.updateSnapshot(env)
+					update = false
+				}
+				time.Sleep(time.Until(*env.till))
+
 				if !wemixminer.IsPoW() {
 					if err = wemixminer.ReleaseMiningToken(sealedBlock.Number(), sealedBlock.Hash(), sealedBlock.ParentHash()); err != nil {
 						return err
