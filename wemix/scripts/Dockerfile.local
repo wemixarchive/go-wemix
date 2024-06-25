@@ -86,16 +86,17 @@ RUN wget -nv -O /usr/local/bin/solc https://github.com/ethereum/solidity/release
 WORKDIR /usr/local/wemix
 
 # Copy config.json & key file
-COPY config.json /usr/local/wemix/conf/config.json
-COPY keystore/ /usr/local/wemix/
-COPY nodekey/ /usr/local/wemix/
+COPY config.json ./conf/config.json
+COPY keystore/ ./keystore/
+COPY nodekey/ ./nodekey/
 
 # Define variables to be used at build time
 ARG NODE_NUM
 ENV NODE_NUM=${NODE_NUM}
 
 # Run set-nodekey.sh
-RUN ./bin/set-nodekey.sh -a ${NODE_NUM}
+RUN chmod a+x bin/set-nodekey.sh && \
+    ./bin/set-nodekey.sh -a ${NODE_NUM}
 
 # Download genesis.json
 RUN bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out genesis.json
