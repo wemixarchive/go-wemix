@@ -98,10 +98,12 @@ function init_gov ()
 	return 1
     fi
 
-    if [ ! -f "$PASSWORD" ]; then
-    exec ${GWEMIX} wemix deploy-governance --url="$d/gwemix.ipc" ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    if [ -z "$PASSWORD" ]; then
+    exec ${GWEMIX} wemix deploy-governance --url "$d/gwemix.ipc" ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    elif [ -f "$PASSWORD" ]; then
+    exec ${GWEMIX} wemix deploy-governance --url "$d/gwemix.ipc" --password ${PASSWORD} ${CONFIG} ${ACCT} ${LOCKAMOUNT}
     else
-    exec ${GWEMIX} wemix deploy-governance --url="$d/gwemix.ipc" --password="${PASSWORD}" ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    exec ${GWEMIX} wemix deploy-governance --url "$d/gwemix.ipc" --password <(echo ${PASSWORD}) ${CONFIG} ${ACCT} ${LOCKAMOUNT}
     fi
 }
 
