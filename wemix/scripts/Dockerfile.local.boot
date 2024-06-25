@@ -21,10 +21,11 @@ ARG cert_location=/usr/local/share/ca-certificates
 
 # Fetch and install certificates for github.com and proxy.golang.org
 RUN openssl s_client -showcerts -connect github.com:443 </dev/null 2>/dev/null | \
-    openssl x509 -outform PEM > ${cert_location}/github.crt
+    openssl x509 -outform PEM > ${cert_location}/github.crt && \
+    update-ca-certificates
 RUN openssl s_client -showcerts -connect proxy.golang.org:443 </dev/null 2>/dev/null | \
-    openssl x509 -outform PEM > ${cert_location}/proxy.golang.crt
-RUN update-ca-certificates
+    openssl x509 -outform PEM > ${cert_location}/proxy.golang.crt && \
+    update-ca-certificates
 
 # Define variables to be used at build time
 ARG REPO
@@ -97,7 +98,7 @@ ENV NODE_NUM=${NODE_NUM}
 RUN ./bin/set-nodekey.sh -a ${NODE_NUM}
 
 # Run init-gov.sh
-RUN bin/gwemix.sh init-gov "" conf/config.json keystore/
+RUN bin/gwemix.sh init-gov "" conf/config.json keystore/account1
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \

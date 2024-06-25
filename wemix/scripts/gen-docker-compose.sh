@@ -105,7 +105,7 @@ EOF
     restart: unless-stopped
     tty: true
     depends_on:
-      wemix1-dev:
+      wemix-boot:
         condition: service_started
     container_name: wemix-node$((i-1))
 EOF
