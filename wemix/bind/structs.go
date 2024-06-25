@@ -68,16 +68,16 @@ func NewGovContracts(backend bind.ContractBackend, registry common.Address) (*Go
 		}
 	)
 
-	if gov.address.Gov, gov.Gov, gov.GovImp, err = newUUPSContracts(cfg, "GovernanceContract", NewGov, NewGovImp); err != nil {
-		return nil, errors.Wrap(err, "GovernanceContract")
-	} else if gov.address.Staking, gov.Staking, gov.StakingImp, err = newUUPSContracts(cfg, "Staking", NewStaking, NewStakingImp); err != nil {
-		return nil, errors.Wrap(err, "Staking")
-	} else if gov.address.BallotStorage, gov.BallotStorage, gov.BallotStorageImp, err = newUUPSContracts(cfg, "BallotStorage", NewBallotStorage, NewBallotStorageImp); err != nil {
-		return nil, errors.Wrap(err, "BallotStorage")
-	} else if gov.address.EnvStorage, gov.EnvStorage, gov.EnvStorageImp, err = newUUPSContracts(cfg, "EnvStorage", NewEnvStorage, NewEnvStorageImp); err != nil {
-		return nil, errors.Wrap(err, "EnvStorage")
-	} else if gov.address.NCPExit, gov.NCPExit, gov.NCPExitImp, err = newUUPSContracts(cfg, "NCPExit", NewNCPExit, NewNCPExitImp); err != nil {
-		return nil, errors.Wrap(err, "NCPExit")
+	if gov.address.Gov, gov.Gov, gov.GovImp, err = newUUPSContracts(cfg, DOMAIN_Gov, NewGov, NewGovImp); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_Gov)
+	} else if gov.address.Staking, gov.Staking, gov.StakingImp, err = newUUPSContracts(cfg, DOMAIN_Staking, NewStaking, NewStakingImp); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_Staking)
+	} else if gov.address.BallotStorage, gov.BallotStorage, gov.BallotStorageImp, err = newUUPSContracts(cfg, DOMAIN_BallotStorage, NewBallotStorage, NewBallotStorageImp); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_BallotStorage)
+	} else if gov.address.EnvStorage, gov.EnvStorage, gov.EnvStorageImp, err = newUUPSContracts(cfg, DOMAIN_EnvStorage, NewEnvStorage, NewEnvStorageImp); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_EnvStorage)
+	} else if gov.address.NCPExit, gov.NCPExit, gov.NCPExitImp, err = newUUPSContracts(cfg, DOMAIN_NCPExit, NewNCPExit, NewNCPExitImp); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_NCPExit)
 	} else {
 		return gov, nil
 	}
@@ -111,7 +111,7 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 
 	// deploy registry
 	if address, tx, contract, err := DeployRegistry(opts, backend); err != nil {
-		return nil, errors.Wrap(err, "DeployRegistry")
+		return nil, errors.Wrap(err, CNAME_Registry)
 	} else {
 		logger.Info(fmt.Sprintf("Deploying Registry at %s...", address))
 		txPool.AppendTx(tx, nil)
@@ -121,15 +121,15 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 	// deploy imps
 	logger.Info("Deploy Logic Contracts...")
 	if impAddress.Gov, err = deployLogic(txPool, DeployGovImp); err != nil {
-		return nil, errors.Wrap(err, "DeployGovImp")
+		return nil, errors.Wrap(err, CNAME_GovImp)
 	} else if impAddress.Staking, err = deployLogic(txPool, DeployStakingImp); err != nil {
-		return nil, errors.Wrap(err, "DeployStakingImp")
+		return nil, errors.Wrap(err, CNAME_StakingImp)
 	} else if impAddress.BallotStorage, err = deployLogic(txPool, DeployBallotStorageImp); err != nil {
-		return nil, errors.Wrap(err, "DeployBallotStorageImp")
+		return nil, errors.Wrap(err, CNAME_BallotStorageImp)
 	} else if impAddress.EnvStorage, err = deployLogic(txPool, DeployEnvStorageImp); err != nil {
-		return nil, errors.Wrap(err, "DeployEnvStorageImp")
+		return nil, errors.Wrap(err, CNAME_EnvStorageImp)
 	} else if impAddress.NCPExit, err = deployLogic(txPool, DeployNCPExitImp); err != nil {
-		return nil, errors.Wrap(err, "DeployNCPExitImp")
+		return nil, errors.Wrap(err, CNAME_NCPExitImp)
 	} else if err = txPool.WaitMined(); err != nil {
 		return nil, err
 	}
@@ -137,23 +137,23 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 	// deploy proxies
 	logger.Info("Deploy Governance Contracts...")
 	if gov.address.Gov, gov.Gov, err = deployProxy(txPool, impAddress.Gov, DeployGov); err != nil {
-		return nil, errors.Wrap(err, "DeployGov")
+		return nil, errors.Wrap(err, CNAME_Gov)
 	} else if gov.address.Staking, gov.Staking, err = deployProxy(txPool, impAddress.Staking, DeployStaking); err != nil {
-		return nil, errors.Wrap(err, "DeployStaking")
+		return nil, errors.Wrap(err, CNAME_Staking)
 	} else if gov.address.BallotStorage, gov.BallotStorage, err = deployProxy(txPool, impAddress.BallotStorage, DeployBallotStorage); err != nil {
-		return nil, errors.Wrap(err, "DeployBallotStorage")
+		return nil, errors.Wrap(err, CNAME_BallotStorage)
 	} else if gov.address.EnvStorage, gov.EnvStorage, err = deployProxy(txPool, impAddress.EnvStorage, DeployEnvStorage); err != nil {
-		return nil, errors.Wrap(err, "DeployEnvStorage")
+		return nil, errors.Wrap(err, CNAME_EnvStorage)
 	} else if gov.address.NCPExit, gov.NCPExit, err = deployProxy(txPool, impAddress.NCPExit, DeployNCPExit); err != nil {
-		return nil, errors.Wrap(err, "DeployNCPExit")
+		return nil, errors.Wrap(err, CNAME_NCPExit)
 	} else if err = txPool.WaitMined(); err != nil {
 		return nil, err
 	} else {
-		optionDomains["GovernanceContract"] = gov.address.Gov
-		optionDomains["Staking"] = gov.address.Staking
-		optionDomains["BallotStorage"] = gov.address.BallotStorage
-		optionDomains["EnvStorage"] = gov.address.EnvStorage
-		optionDomains["NCPExit"] = gov.address.NCPExit
+		optionDomains[DOMAIN_Gov] = gov.address.Gov
+		optionDomains[DOMAIN_Staking] = gov.address.Staking
+		optionDomains[DOMAIN_BallotStorage] = gov.address.BallotStorage
+		optionDomains[DOMAIN_EnvStorage] = gov.address.EnvStorage
+		optionDomains[DOMAIN_NCPExit] = gov.address.NCPExit
 	}
 
 	// setup registry
@@ -169,15 +169,15 @@ func DeployGovContracts(opts *bind.TransactOpts, backend iBackend, optionDomains
 
 	// init impContracts
 	if gov.GovImp, err = NewGovImp(gov.address.Gov, backend); err != nil {
-		return nil, errors.Wrap(err, "NewGovImp")
+		return nil, errors.Wrap(err, CNAME_GovImp)
 	} else if gov.StakingImp, err = NewStakingImp(gov.address.Staking, backend); err != nil {
-		return nil, errors.Wrap(err, "NewStakingImp")
+		return nil, errors.Wrap(err, CNAME_StakingImp)
 	} else if gov.BallotStorageImp, err = NewBallotStorageImp(gov.address.BallotStorage, backend); err != nil {
-		return nil, errors.Wrap(err, "NewBallotStorageImp")
+		return nil, errors.Wrap(err, CNAME_BallotStorageImp)
 	} else if gov.EnvStorageImp, err = NewEnvStorageImp(gov.address.EnvStorage, backend); err != nil {
-		return nil, errors.Wrap(err, "NewEnvStorageImp")
+		return nil, errors.Wrap(err, CNAME_EnvStorageImp)
 	} else if gov.NCPExitImp, err = NewNCPExitImp(gov.address.NCPExit, backend); err != nil {
-		return nil, errors.Wrap(err, "NewNCPExitImp")
+		return nil, errors.Wrap(err, CNAME_NCPExitImp)
 	} else {
 		return gov, nil
 	}
@@ -259,7 +259,7 @@ func GetRegistryByOwner(opts *bind.CallOpts, backend bind.ContractBackend, owner
 			return address, registry, nil
 		}
 	}
-	return common.Address{}, nil, errors.Wrap(ethereum.NotFound, "Registry")
+	return common.Address{}, nil, errors.Wrap(ethereum.NotFound, CNAME_Registry)
 }
 
 func GetRegistryByAddress(opts *bind.CallOpts, backend bind.ContractBackend, address common.Address) (*Registry, error) {

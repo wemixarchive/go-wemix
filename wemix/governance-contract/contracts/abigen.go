@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	compile "github.com/ethereum/go-ethereum/wemix/governance-contract"
 )
 
@@ -32,17 +33,17 @@ func main() {
 		filepath.Join(root, "storage", "EnvStorageImp.sol"),
 	); err != nil {
 		panic(err)
-	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "registry.go"), "Registry"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_registry_abi.go"), gov.CNAME_Registry); err != nil {
 		panic(err)
-	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gov.go"), "Gov", "GovImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_gov_abi.go"), gov.CNAME_Gov, gov.CNAME_GovImp); err != nil {
 		panic(err)
-	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "ncpExit.go"), "NCPExit", "NCPExitImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_ncpExit_abi.go"), gov.CNAME_NCPExit, gov.CNAME_NCPExitImp); err != nil {
 		panic(err)
-	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "staking.go"), "Staking", "StakingImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_staking_abi.go"), gov.CNAME_Staking, gov.CNAME_StakingImp); err != nil {
 		panic(err)
-	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "ballotStorage.go"), "BallotStorage", "BallotStorageImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_ballotStorage_abi.go"), gov.CNAME_BallotStorage, gov.CNAME_BallotStorageImp); err != nil {
 		panic(err)
-	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "envStorage.go"), "EnvStorage", "EnvStorageImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_envStorage_abi.go"), gov.CNAME_EnvStorage, gov.CNAME_EnvStorageImp); err != nil {
 		panic(err)
 	} else {
 		fmt.Println("success!")
