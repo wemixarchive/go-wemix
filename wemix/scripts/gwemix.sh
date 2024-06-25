@@ -235,7 +235,7 @@ case "$1" in
     if [ $# -lt 4 ]; then
 	usage;
     else
-	init_gov "$2" "$3" "$4" "$5"
+	init_gov "$2" "$3" "$4" "$5" "$6"
     fi
     ;;
 
