@@ -77,7 +77,8 @@ function init_gov ()
     NODE="$1"
     CONFIG="$2"
     ACCT="$3"
-    LOCKAMOUNT="$4"
+    PASSWORD="$4"
+    LOCKAMOUNT="$5"
 
     if [ ! -f "$CONFIG" ]; then
 	echo "Cannot find config file: $CONFIG"
@@ -97,7 +98,11 @@ function init_gov ()
 	return 1
     fi
 
+    if [ ! -f "$PASSWORD" ]; then
     exec ${GWEMIX} wemix deploy-governance --url="$d/gwemix.ipc" ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    else
+    exec ${GWEMIX} wemix deploy-governance --url="$d/gwemix.ipc" --password="${PASSWORD}" ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    fi
 }
 
 function wipe ()
