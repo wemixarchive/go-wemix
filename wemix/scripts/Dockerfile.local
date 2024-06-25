@@ -87,8 +87,8 @@ WORKDIR /usr/local/wemix
 
 # Copy config.json & key file
 COPY config.json ./conf/config.json
-COPY keystore/ ./keystore/
-COPY nodekey/ ./nodekey/
+COPY keystore/ ./
+COPY nodekey/ ./
 
 # Define variables to be used at build time
 ARG NODE_NUM

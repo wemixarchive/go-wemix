@@ -24,6 +24,6 @@ if [ -z "$ACCOUNT_NUM" ]; then
   exit 1
 fi
 
-mkdir ../geth
-chmod 0700 ../nodekey
-cp ../nodekey/nodekey"$ACCOUNT_NUM" ../geth/nodekey
+mkdir geth
+chmod 0700 nodekey
+cp nodekey/nodekey"$ACCOUNT_NUM" geth/nodekey
