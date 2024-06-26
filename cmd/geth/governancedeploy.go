@@ -40,16 +40,16 @@ func getInitialGovernanceInitDatas(configJsFile string) (
 	domains = make(map[string]common.Address)
 	zeroAddress := common.Address{}
 	if cfg.StakingReward != zeroAddress {
-		domains["StakingReward"] = cfg.StakingReward
+		domains[gov.DOMAIN_StakingReward] = cfg.StakingReward
 	}
 	if cfg.Ecosystem != zeroAddress {
-		domains["Ecosystem"] = cfg.Ecosystem
+		domains[gov.DOMAIN_Ecosystem] = cfg.Ecosystem
 	}
 	if cfg.Maintenance != zeroAddress {
-		domains["Maintenance"] = cfg.Maintenance
+		domains[gov.DOMAIN_Maintenance] = cfg.Maintenance
 	}
 	if cfg.FeeCollector != zeroAddress {
-		domains["FeeCollector"] = cfg.FeeCollector
+		domains[gov.DOMAIN_FeeCollector] = cfg.FeeCollector
 	}
 
 	env = cfg.Env.ToInitData()
