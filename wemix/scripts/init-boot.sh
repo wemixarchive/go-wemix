@@ -6,8 +6,8 @@ bin/gwemix.sh start &
 
 # gwemix 서비스가 정상적으로 시작되었는지 확인
 check_gwemix_started() {
-    local log_file="/path/to/gwemix/log/file.log" # gwemix 로그 파일 경로
-    local success_message="Service started successfully" # 성공 메시지
+    local log_file="logs/log" # gwemix 로그 파일 경로
+    local success_message="HTTP server started"
     local max_retries=30
     local retries=0
     local found=0
