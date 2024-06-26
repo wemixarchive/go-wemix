@@ -4,32 +4,35 @@ chmod a+x bin/gwemix.sh
 bin/gwemix.sh init "" conf/config.json
 bin/gwemix.sh start &
 
-wait_for_port() {
-    local port="$1"
-    local retry_interval=1
+# gwemix 서비스가 정상적으로 시작되었는지 확인
+check_gwemix_started() {
+    local log_file="/path/to/gwemix/log/file.log" # gwemix 로그 파일 경로
+    local success_message="Service started successfully" # 성공 메시지
     local max_retries=30
     local retries=0
+    local found=0
 
-    while :; do
-        # wget을 사용하여 localhost의 특정 포트에 HTTP 요청을 시도합니다.
-        # -T 옵션은 타임아웃을 설정합니다. -O -는 출력을 무시합니다.
-        if wget --spider -T 10 -O - http://localhost:"$port" >/dev/null 2>&1; then
-            echo "Port $port is open."
+    echo "Checking if gwemix has started..."
+
+    while [ $retries -lt $max_retries ]; do
+        if grep -q "$success_message" "$log_file"; then
+            echo "gwemix has started successfully."
+            found=1
             break
         else
-            echo "Waiting for port $port to open. Attempt $((retries+1))/$max_retries."
-            sleep "$retry_interval"
+            echo "Waiting for gwemix to start... Attempt $((retries+1))"
+            sleep 1
         fi
-
         retries=$((retries+1))
-        if [ "$retries" -ge "$max_retries" ]; then
-            echo "Failed to connect to port $port after $max_retries attempts."
-            exit 1
-        fi
     done
+
+    if [ $found -eq 0 ]; then
+        echo "Failed to confirm gwemix start after $max_retries attempts."
+        exit 1
+    fi
 }
 
-# 포트가 열릴 때까지 기다림
-wait_for_port 8588
+# gwemix 서비스가 정상적으로 시작되었는지 확인
+check_gwemix_started
 
 bin/gwemix.sh init-gov "" conf/config.json keystore/account1 test
