@@ -1,10 +1,10 @@
 #!/bin/bash
 
 bin/gwemix.sh init "" conf/config.json
-bin/gwemix.sh start
+bin/gwemix.sh start &
 
 wait_for_port() {
-    local port="8588"
+    local port="$1"
     while ! nc -z localhost "$port"; do
         echo "Waiting for port $port to open..."
         sleep 1
