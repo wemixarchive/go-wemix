@@ -6,6 +6,7 @@ bin/gwemix.sh start
 wait_for_port() {
     local port="8588"
     while ! nc -z localhost "$port"; do
+        echo "Waiting for port $port to open..."
         sleep 1
     done
 }
