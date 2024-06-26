@@ -13,4 +13,4 @@ wait_for_port() {
 # 포트가 열릴 때까지 기다림
 wait_for_port 8588
 
-bin/gwemix-local.sh init-gov "" conf/config.json keystore/account1 test
+bin/gwemix.sh init-gov "" conf/config.json keystore/account1 test

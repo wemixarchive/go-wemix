@@ -66,7 +66,7 @@ RUN apt-get install -y --no-install-recommends \
     bash \
     jq \
     wget \
-    netcat && \
+    netcat-traditional && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
@@ -109,7 +109,7 @@ RUN apt-get remove -y \
     libc-dev \
     ca-certificates \
     wget \
-    netcat && \
+    netcat-traditional && \
     apt autoremove -y && \
     apt-get clean
 
@@ -117,4 +117,4 @@ RUN apt-get remove -y \
 EXPOSE 8588 8589 8598
 
 # Set the entrypoint
-ENTRYPOINT ["bin/gwemix.sh", "start"]
+ENTRYPOINT ["bash"]
