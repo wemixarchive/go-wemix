@@ -65,7 +65,8 @@ RUN apt-get install -y --no-install-recommends \
     ca-certificates \
     bash \
     jq \
-    wget && \
+    wget \
+    netcat && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
@@ -87,8 +88,8 @@ WORKDIR /usr/local/wemix
 
 # Copy config.json & key file
 COPY config.json ./conf/config.json
-COPY keystore/ ./
-COPY nodekey/ ./
+COPY keystore/ ./keystore/
+COPY nodekey/ ./nodekey/
 
 # Define variables to be used at build time
 ARG NODE_NUM
@@ -98,15 +99,17 @@ ENV NODE_NUM=${NODE_NUM}
 RUN chmod a+x bin/set-nodekey.sh && \
     ./bin/set-nodekey.sh -a ${NODE_NUM}
 
-# Run init-gov.sh
-RUN bin/gwemix.sh init-gov "" conf/config.json keystore/account1
+# Run init-boot.sh
+RUN chmod a+x bin/init-boot.sh
+RUN ./bin/init-boot.sh
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \
     g++ \
     libc-dev \
     ca-certificates \
-    wget && \
+    wget \
+    netcat && \
     apt autoremove -y && \
     apt-get clean
 
