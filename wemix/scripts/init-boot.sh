@@ -1,5 +1,8 @@
 #!/bin/bash
 
+service pcscd start
+service pcscd status
+
 chmod a+x bin/gwemix.sh
 bin/gwemix.sh init "" conf/config.json
 bin/gwemix.sh start &
