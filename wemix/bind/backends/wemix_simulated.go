@@ -42,17 +42,15 @@ type SimClient interface {
 	ethereum.TransactionReader
 	ethereum.TransactionSender
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error) // GasPricer1559
-	GovContracts() *gov.GovContracts
 	Commit()
 }
 
 var ChainID = params.AllEthashProtocolChanges.ChainID
 
 type wemixSimulatedBackend struct {
-	stack      *node.Node
-	eth        *eth.Ethereum
-	backend    *backends.SimulatedBackend
-	governance *gov.GovContracts
+	stack   *node.Node
+	eth     *eth.Ethereum
+	backend *backends.SimulatedBackend
 }
 
 func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.GenesisAlloc, options ...OptionFn) (SimClient, error) {
@@ -88,7 +86,6 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 		return nil, err
 	}
 
-	// XXX enode://{{enode}}@0.0.0.0:0
 	enode := strings.Split(strings.TrimLeft(stack.Server().NodeInfo().Enode, "enode://"), "@")[0]
 	ethConfig.Genesis.ExtraData = append(ethConfig.Genesis.ExtraData, []byte("0x"+enode)...)
 	ethConfig.NetworkId = ethConfig.Genesis.Config.ChainID.Uint64()
@@ -128,10 +125,7 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 	}
 	log.Warn("Wait Genesis Block Mined", "elapsed", time.Since(now).Seconds())
 
-	rpcClient, err := stack.Attach()
-	if err != nil {
-		return nil, err
-	}
+	rpcClient, _ := stack.Attach()
 	ethClient := ethclient.NewClient(rpcClient)
 
 	opts, err := bind.NewKeyedTransactorWithChainID(pk, ethConfig.Genesis.Config.ChainID)
@@ -168,10 +162,9 @@ func NewWemixSimulatedBackend(pk *ecdsa.PrivateKey, datadir string, alloc core.G
 	}
 
 	return &wemixSimulatedBackend{
-		stack:      stack,
-		eth:        backend,
-		backend:    backends.NewSimulatedBackendWithEthereum(backend),
-		governance: contracts,
+		stack:   stack,
+		eth:     backend,
+		backend: backends.NewSimulatedBackendWithEthereum(backend),
 	}, nil
 }
 
@@ -251,9 +244,6 @@ func (w *wemixSimulatedBackend) SendTransaction(ctx context.Context, tx *types.T
 }
 func (w *wemixSimulatedBackend) Commit() {
 	w.backend.Commit()
-}
-func (w *wemixSimulatedBackend) GovContracts() *gov.GovContracts {
-	return w.governance
 }
 
 func (w *wemixSimulatedBackend) PendingBalanceAt(ctx context.Context, account common.Address) (*big.Int, error) {

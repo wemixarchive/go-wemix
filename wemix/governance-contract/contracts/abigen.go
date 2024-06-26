@@ -1,29 +1,24 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"os"
 	"path/filepath"
 
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common/compiler"
-	"github.com/ethereum/go-ethereum/wemix/governance-contract/common/compile"
-)
-
-var (
-	rootFlag = flag.String("root", "../contracts", "")
-	outDir   string
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
+	compile "github.com/ethereum/go-ethereum/wemix/governance-contract"
 )
 
 const pkg string = "gov"
 
+var (
+	rootFlag = flag.String("root", "../contracts", "")
+)
+
 func main() {
 	flag.Parse()
 	root := *rootFlag
-	outDir = filepath.Join(root, "../../bind")
+	outDir := filepath.Join(root, "../../bind")
 	if contracts, err := compile.Compile(root,
 		filepath.Join(root, "Registry.sol"),
 		filepath.Join(root, "Gov.sol"),
@@ -38,59 +33,19 @@ func main() {
 		filepath.Join(root, "storage", "EnvStorageImp.sol"),
 	); err != nil {
 		panic(err)
-	} else if err := bindContracts(contracts, "registry", "Registry"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_registry_abi.go"), gov.CNAME_Registry); err != nil {
 		panic(err)
-	} else if err := bindContracts(contracts, "gov", "Gov", "GovImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_gov_abi.go"), gov.CNAME_Gov, gov.CNAME_GovImp); err != nil {
 		panic(err)
-	} else if err := bindContracts(contracts, "ncpExit", "NCPExit", "NCPExitImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_ncpExit_abi.go"), gov.CNAME_NCPExit, gov.CNAME_NCPExitImp); err != nil {
 		panic(err)
-	} else if err := bindContracts(contracts, "staking", "Staking", "StakingImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_staking_abi.go"), gov.CNAME_Staking, gov.CNAME_StakingImp); err != nil {
 		panic(err)
-	} else if err := bindContracts(contracts, "ballotStorage", "BallotStorage", "BallotStorageImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_ballotStorage_abi.go"), gov.CNAME_BallotStorage, gov.CNAME_BallotStorageImp); err != nil {
 		panic(err)
-	} else if err := bindContracts(contracts, "envStorage", "EnvStorage", "EnvStorageImp"); err != nil {
+	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_envStorage_abi.go"), gov.CNAME_EnvStorage, gov.CNAME_EnvStorageImp); err != nil {
 		panic(err)
 	} else {
 		fmt.Println("success!")
 	}
-}
-
-func bindContracts(contracts map[string]*compiler.Contract, fname string, cnames ...string) error {
-	length := len(cnames)
-	types := make([]string, length)
-	abis := make([]string, length)
-	bytecodes := make([]string, length)
-
-	for i, name := range cnames {
-		contract, ok := contracts[name]
-		if !ok {
-			return ethereum.NotFound
-		}
-		types[i] = name
-		abis[i] = abiToString(contract.Info.AbiDefinition)
-		bytecodes[i] = contract.Code
-	}
-
-	str, err := bind.Bind(types, abis, bytecodes, nil, pkg, bind.LangGo, nil, nil)
-	if err != nil {
-		return err
-	}
-
-	if _, err := os.Stat(outDir); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		if err = os.MkdirAll(outDir, 0755); err != nil {
-			return err
-		}
-	}
-	return os.WriteFile(filepath.Join(outDir, fmt.Sprintf("%s.go", fname)), []byte(str), 0644)
-}
-
-func abiToString(definition interface{}) string {
-	if str, ok := definition.(string); ok {
-		return str
-	}
-	bytes, _ := json.Marshal(definition)
-	return string(bytes)
 }

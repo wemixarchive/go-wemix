@@ -5,14 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/compiler"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fabelx/go-solc-select/pkg/config"
 	"github.com/fabelx/go-solc-select/pkg/installer"
 	"github.com/fabelx/go-solc-select/pkg/versions"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -20,7 +24,7 @@ var (
 	solcCmd     string = fmt.Sprintf("solc-%s", solcVersion)
 )
 
-func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract, error) {
+func Compile(root string, sourceFiles ...string) (compiledTy, error) {
 	if err := installSolc(); err != nil {
 		return nil, err
 	}
@@ -54,7 +58,7 @@ func Compile(root string, sourceFiles ...string) (map[string]*compiler.Contract,
 	} else if contracts, err := compiler.ParseCombinedJSON(stdout.Bytes(), "", "", compilerVersion.Version, strings.Join(args, " ")); err != nil {
 		return nil, err
 	} else {
-		out := make(map[string]*compiler.Contract)
+		out := make(compiledTy)
 		for name, v := range contracts {
 			n := strings.Split(name, ":")[1]
 			if _, ok := out[n]; ok {
@@ -88,4 +92,69 @@ func installSolc() error {
 		}
 	}
 	return fmt.Errorf("failed to install version %s", solcVersion)
+}
+
+type compiledTy map[string]*compiler.Contract
+
+func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...string) error {
+	var (
+		length    = len(contracts)
+		types     = make([]string, length)
+		abis      = make([]string, length)
+		bytecodes = make([]string, length)
+		sigs      = make([]map[string]string, length)
+	)
+
+	var err error
+	for i, name := range contracts {
+		contract, ok := compiled[name]
+		if !ok {
+			return fmt.Errorf("not found contract : %v", name)
+		}
+		types[i] = name
+		if abis[i], err = abiToString(contract); err != nil {
+			return errors.Wrap(err, name)
+		}
+		bytecodes[i] = contract.Code
+		sigs[i] = contract.Hashes
+	}
+
+	str, err := bind.Bind(types, abis, bytecodes, sigs, pkg, bind.LangGo, nil, nil)
+	if err != nil {
+		return err
+	}
+
+	filedata := []byte(str)
+	if read, err := os.ReadFile(filename); err == nil {
+		// if out file is already exists, compare the file contents
+		if crypto.Keccak256Hash(read) == crypto.Keccak256Hash(filedata) {
+			return nil
+		}
+	} else {
+		// check dir is exist
+		outDir := filepath.Dir(filename)
+		if _, err := os.Stat(outDir); err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			if err = os.MkdirAll(outDir, 0755); err != nil {
+				return err
+			}
+		}
+	}
+
+	return os.WriteFile(filename, filedata, 0644)
+}
+
+func abiToString(contract *compiler.Contract) (abi string, err error) {
+	switch v := contract.Info.AbiDefinition.(type) {
+	case string:
+		abi = v
+	default:
+		var bytes []byte
+		if bytes, err = json.Marshal(v); err == nil {
+			abi = string(bytes)
+		}
+	}
+	return
 }

@@ -91,15 +91,20 @@ func makeEnvParams(envs ...env) (names [][32]byte, values []*big.Int) {
 	return
 }
 
-type MemberInfo struct {
-	Staker     common.Address `json:"staker"`
-	Voter      common.Address `json:"voter"`
-	Reward     common.Address `json:"reward"`
-	Name       []byte         `json:"name"`
-	Enode      []byte         `json:"enode"`
-	Ip         []byte         `json:"ip"`
-	Port       *big.Int       `json:"port"`
-	LockAmount *big.Int       `json:"lockAmount"`
-	Memo       []byte         `json:"memo"`
-	Duration   *big.Int       `json:"duration"`
-}
+var EnvTypes = struct {
+	Invalid *big.Int
+	Int     *big.Int
+	Uint    *big.Int
+	Address *big.Int
+	Bytes32 *big.Int
+	Bytes   *big.Int
+	String  *big.Int
+}{big.NewInt(0), big.NewInt(1), big.NewInt(2), big.NewInt(3), big.NewInt(4), big.NewInt(5), big.NewInt(6)}
+
+var BallotStates = struct {
+	Invalid    *big.Int
+	Ready      *big.Int
+	InProgress *big.Int
+	Accepted   *big.Int
+	Rejected   *big.Int
+}{big.NewInt(0), big.NewInt(1), big.NewInt(2), big.NewInt(3), big.NewInt(4)}

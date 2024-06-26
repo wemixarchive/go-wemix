@@ -67,7 +67,7 @@ DISCOVER=0" > $d/.rc
     wait
 }
 
-# void init_gov(String node, String config_json, String account_file, bool doInitOnce)
+# void init_gov(String node, String config_json, String account_file, Number gov_lock_amount (wei) )
 # account_file can be
 #   1. keystore file: "<path>"
 #   2. nano ledger: "ledger:"
@@ -77,7 +77,8 @@ function init_gov ()
     NODE="$1"
     CONFIG="$2"
     ACCT="$3"
-    LOCKAMOUNT="$4"
+    PASSWORD="$4"
+    LOCKAMOUNT="$5"
 
     if [ ! -f "$CONFIG" ]; then
 	echo "Cannot find config file: $CONFIG"
@@ -97,7 +98,13 @@ function init_gov ()
 	return 1
     fi
 
-    exec ${GWEMIX} wemix deploy-governance --url="$d/gwemix.ipc" ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    if [ -z "$PASSWORD" ]; then
+    exec ${GWEMIX} wemix deploy-governance --url "$d/gwemix.ipc" ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    elif [ -f "$PASSWORD" ]; then
+    exec ${GWEMIX} wemix deploy-governance --url "$d/gwemix.ipc" --password ${PASSWORD} ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    else
+    exec ${GWEMIX} wemix deploy-governance --url "$d/gwemix.ipc" --password <(echo ${PASSWORD}) ${CONFIG} ${ACCT} ${LOCKAMOUNT}
+    fi
 }
 
 function wipe ()
@@ -230,7 +237,7 @@ case "$1" in
     if [ $# -lt 4 ]; then
 	usage;
     else
-	init_gov "$2" "$3" "$4" "$5"
+	init_gov "$2" "$3" "$4" "$5" "$6"
     fi
     ;;
 

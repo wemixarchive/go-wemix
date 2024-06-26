@@ -7,28 +7,50 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-	sim "github.com/ethereum/go-ethereum/wemix/governance-contract/common/simulated-backend"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGov(t *testing.T) {
 	// for mute chain log
 	log.Root().SetHandler(log.LvlFilterHandler(log.Lvl(0), log.StreamHandler(os.Stdout, log.TerminalFormat(true))))
+	callOpts := new(bind.CallOpts)
+
+	node1 := nodeInfo{
+		name:  []byte("name1"),
+		enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
+		ip:    []byte("127.0.0.2"),
+		port:  big.NewInt(8542),
+	}
+
+	node2 := nodeInfo{
+		name:  []byte("name2"),
+		enode: hexutil.MustDecode("0x888777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a1"),
+		ip:    []byte("127.0.0.3"),
+		port:  big.NewInt(8542),
+	}
 
 	t.Run("Staker is voter", func(t *testing.T) {
 		t.Run("has enode and locked staking", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			locked := gov.Staking.Call1(t, "lockedBalanceOf", gov.client.Owner).(*big.Int)
+			gov := NewGovernance(t).DeployContracts(t)
+			var (
+				locked          *big.Int
+				idx             *big.Int
+				name, enode, ip []uint8
+				port            *big.Int
+			)
+
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&locked}, "lockedBalanceOf", gov.owner.From))
 			require.Equal(t, LOCK_AMOUNT, locked)
-			idx := gov.Gov.Call1(t, "getNodeIdxFromMember", gov.client.Owner).(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&idx}, "getNodeIdxFromMember", gov.owner.From))
 			require.True(t, idx.Sign() != 0)
-			getNode := gov.Gov.Call(t, "getNode", idx)
-			name, enode, ip, port := getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
+			result := []interface{}{}
+			require.NoError(t, gov.GovImp.Call(callOpts, &result, "getNode", idx))
+			name, enode, ip, port = result[0].([]byte), result[1].([]byte), result[2].([]byte), result[3].(*big.Int)
 			nodeinfo := gov.nodeInfos[0]
 			require.Equal(t, nodeinfo.name, name)
 			require.Equal(t, nodeinfo.enode, enode)
@@ -36,85 +58,83 @@ func TestGov(t *testing.T) {
 			require.Equal(t, nodeinfo.port, port)
 		})
 		t.Run("cannot init twice", func(t *testing.T) {
-			gov := DeployGovernance(t)
+			gov := NewGovernance(t).DeployContracts(t)
 			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "init", gov.Registry.Address, LOCK_AMOUNT, node.name, node.enode, node.ip, node.port),
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "init", gov.registry, LOCK_AMOUNT, node.name, node.enode, node.ip, node.port)),
 				"Initializable: contract is already initialized",
 			)
 		})
 		t.Run("cannot addProposal to add member self", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			member := gov.client.Owner
+			gov := NewGovernance(t).DeployContracts(t)
 			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToAddMember",
-					MemberInfo{
-						Staker:     member,
-						Voter:      member,
-						Reward:     member,
-						Name:       node.name,
-						Enode:      node.enode,
-						Ip:         node.ip,
-						Port:       node.port,
-						LockAmount: LOCK_AMOUNT,
-						Memo:       []byte("memo1"),
-						Duration:   big.NewInt(86400),
-					},
-				), "Already member",
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     gov.owner.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info)),
+				"Already member",
 			)
 		})
 		t.Run("cannot addProposal to add member with different voter", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			member := gov.client.Owner
-			voter := sim.GetOrNewEOA("voter")
+			gov := NewGovernance(t).DeployContracts(t)
+			member := gov.owner.From
 			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToAddMember",
-					MemberInfo{
-						Staker:     member,
-						Voter:      voter,
-						Reward:     member,
-						Name:       node.name,
-						Enode:      node.enode,
-						Ip:         node.ip,
-						Port:       node.port,
-						LockAmount: LOCK_AMOUNT,
-						Memo:       []byte("memo1"),
-						Duration:   big.NewInt(86400),
-					},
-				), "Already member",
+			info := MemberInfo{
+				Staker:     member,
+				Voter:      common.Address{1},
+				Reward:     member,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info)),
+				"Already member",
 			)
 		})
 		t.Run("cannot addProposal to add member with different reward", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			member := gov.client.Owner
-			rewarder := sim.GetOrNewEOA("rewarder")
+			gov := NewGovernance(t).DeployContracts(t)
+			member := gov.owner.From
 			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToAddMember",
-					MemberInfo{
-						Staker:     member,
-						Voter:      member,
-						Reward:     rewarder,
-						Name:       node.name,
-						Enode:      node.enode,
-						Ip:         node.ip,
-						Port:       node.port,
-						LockAmount: LOCK_AMOUNT,
-						Memo:       []byte("memo1"),
-						Duration:   big.NewInt(86400),
-					},
-				), "Already member",
+			info := MemberInfo{
+				Staker:     member,
+				Voter:      member,
+				Reward:     common.Address{1},
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info)),
+				"Already member",
 			)
 		})
 		t.Run("can addProposal to add member", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			govMem1 := sim.GetOrNewEOA("govMem1")
+			gov := NewGovernance(t).DeployContracts(t)
+			govMem1 := getTxOpt(t, "govMem1")
 			// staking first
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
 			// proposal
 			node1 := nodeInfo{
 				name:  []byte("name1"),
@@ -123,78 +143,78 @@ func TestGov(t *testing.T) {
 				port:  big.NewInt(8542),
 			}
 			gov.nodeInfos = append(gov.nodeInfos, node1)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info))
 			// check proposal
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			var (
+				length           *big.Int
+				creator          common.Address
+				memo             []byte
+				newStakerAddress common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big1, length)
 
-			ballot := gov.BallotStorage.Call(t, "getBallotBasic", length)
-			ballotDetail := gov.BallotStorage.Call(t, "getBallotMember", length)
-			require.Equal(t, gov.client.Owner, ballot[3])
-			require.Equal(t, []byte("memo1"), ballot[4])
-			require.Equal(t, ballotDetail[1], govMem1)
+			ballot, ballotDetail := []interface{}{}, []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &ballot, "getBallotBasic", length))
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &ballotDetail, "getBallotMember", length))
+			creator, memo = ballot[3].(common.Address), ballot[4].([]byte)
+			newStakerAddress = ballotDetail[1].(common.Address)
+			require.Equal(t, gov.owner.From, creator)
+			require.Equal(t, []byte("memo1"), memo)
+			require.Equal(t, govMem1.From, newStakerAddress)
 
 			// govMem1 is not member yet
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo2"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			require.Equal(t, common.Big2, gov.Gov.Call1(t, "ballotLength").(*big.Int))
+			info.Memo = []byte("memo2")
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
 		})
 		t.Run("cannot addProposal to remove non-member", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			govMem1 := sim.AliasToAddress["govMem1"]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToRemoveMember", govMem1, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)),
+			gov := NewGovernance(t).DeployContracts(t)
+			govMem1 := getTxOpt(t, "govMem1").From
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToRemoveMember", govMem1, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))),
 				"Non-member",
 			)
 		})
 		t.Run("cannot addProposal to remove a sole member", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToRemoveMember", gov.client.Owner, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)),
+			gov := NewGovernance(t).DeployContracts(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToRemoveMember", gov.owner.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))),
 				"Cannot remove a sole member",
 			)
 		})
 		t.Run("can addProposal to change member's other addresses self without voting", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			oldMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldMember)
-			oldVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldVoter)
-			oldReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldReward)
-			node := gov.nodeInfos[0]
-			voter1 := sim.GetOrNewEOA("voter1")
-			user1 := sim.GetOrNewEOA("user1")
+			gov := NewGovernance(t).DeployContracts(t)
+			var (
+				oldMember, oldVoter, oldReward common.Address
+				length                         *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldReward}, "getReward", common.Big1))
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      voter1,
-				Reward:     user1,
+			require.Equal(t, gov.owner.From, oldReward)
+			node := gov.nodeInfos[0]
+			voter1 := getTxOpt(t, "voter1")
+			user1 := getTxOpt(t, "user1")
+
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      voter1.From,
+				Reward:     user1.From,
 				Name:       node.name,
 				Enode:      node.enode,
 				Ip:         node.ip,
@@ -202,24 +222,30 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big1, length)
 		})
 		t.Run("can addProposal to change member's other addresses self without voting twice about node name", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			oldMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldMember)
-			oldVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldVoter)
-			oldReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldReward)
+			gov := NewGovernance(t).DeployContracts(t)
+			var (
+				oldMember, oldVoter, oldReward common.Address
+				length                         *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldReward}, "getReward", common.Big1))
+
+			require.Equal(t, gov.owner.From, oldMember)
+			require.Equal(t, gov.owner.From, oldVoter)
+			require.Equal(t, gov.owner.From, oldReward)
 			node := gov.nodeInfos[0]
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     gov.owner.From,
 				Name:       []byte("name1"), // change
 				Enode:      node.enode,
 				Ip:         node.ip,
@@ -227,71 +253,74 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big1, length)
 
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			stat := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, stat[1].(*big.Int))
-			require.True(t, stat[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			newMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newReward)
+			var (
+				newMember, newVoter, newReward common.Address
+			)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
-				Name:       node.name, // change
-				Enode:      node.enode,
-				Ip:         node.ip,
-				Port:       node.port,
-				LockAmount: LOCK_AMOUNT,
-				Memo:       []byte("memo1"),
-				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length = gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, gov.owner.From, newVoter)
+			require.Equal(t, gov.owner.From, newReward)
+
+			info.Name = node.name
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big2, length)
 
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			stat = gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, stat[1].(*big.Int))
-			require.True(t, stat[2].(bool))
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			newMember = gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter = gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward = gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newReward)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, gov.owner.From, newVoter)
+			require.Equal(t, gov.owner.From, newReward)
 		})
 		t.Run("can addProposal to change member's other addresses self without voting twice about enode", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			oldMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldMember)
-			oldVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldVoter)
-			oldReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldReward)
-			node := gov.nodeInfos[0]
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
+			gov := NewGovernance(t).DeployContracts(t)
+			var (
+				oldMember, oldVoter, oldReward common.Address
+				length                         *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldReward}, "getReward", common.Big1))
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
+			require.Equal(t, gov.owner.From, oldMember)
+			require.Equal(t, gov.owner.From, oldVoter)
+			require.Equal(t, gov.owner.From, oldReward)
+			node := gov.nodeInfos[0]
+
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     gov.owner.From,
 				Name:       []byte("name1"),
 				Enode:      node1.enode, // change
 				Ip:         node.ip,
@@ -299,71 +328,74 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big1, length)
 
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			stat := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, stat[1].(*big.Int))
-			require.True(t, stat[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			newMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newReward)
+			var (
+				newMember, newVoter, newReward common.Address
+			)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
-				Name:       node.name,
-				Enode:      node.enode, // change
-				Ip:         node.ip,
-				Port:       node.port,
-				LockAmount: LOCK_AMOUNT,
-				Memo:       []byte("memo1"),
-				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length = gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, gov.owner.From, newVoter)
+			require.Equal(t, gov.owner.From, newReward)
+
+			info.Enode = node.enode
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big2, length)
 
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			stat = gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, stat[1].(*big.Int))
-			require.True(t, stat[2].(bool))
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			newMember = gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter = gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward = gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newReward)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, gov.owner.From, newVoter)
+			require.Equal(t, gov.owner.From, newReward)
 		})
 		t.Run("can addProposal to change member's other addresses self without voting twice about ipport", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			oldMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldMember)
-			oldVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldVoter)
-			oldReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldReward)
-			node := gov.nodeInfos[0]
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
+			gov := NewGovernance(t).DeployContracts(t)
+			var (
+				oldMember, oldVoter, oldReward common.Address
+				length                         *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldReward}, "getReward", common.Big1))
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
+			require.Equal(t, gov.owner.From, oldMember)
+			require.Equal(t, gov.owner.From, oldVoter)
+			require.Equal(t, gov.owner.From, oldReward)
+			node := gov.nodeInfos[0]
+
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     gov.owner.From,
 				Name:       []byte("name1"),
 				Enode:      node.enode,
 				Ip:         node1.ip, // change
@@ -371,71 +403,74 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big1, length)
 
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			stat := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, stat[1].(*big.Int))
-			require.True(t, stat[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			newMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newReward)
+			var (
+				newMember, newVoter, newReward common.Address
+			)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
-				Name:       node.name,
-				Enode:      node.enode,
-				Ip:         node.ip, // change
-				Port:       node.port,
-				LockAmount: LOCK_AMOUNT,
-				Memo:       []byte("memo1"),
-				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length = gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, gov.owner.From, newVoter)
+			require.Equal(t, gov.owner.From, newReward)
+
+			info.Ip = node.ip
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big2, length)
 
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			stat = gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, stat[1].(*big.Int))
-			require.True(t, stat[2].(bool))
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			newMember = gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter = gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward = gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newReward)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, gov.owner.From, newVoter)
+			require.Equal(t, gov.owner.From, newReward)
 		})
 		t.Run("can addProposal to change member's other addresses self without voting twice about import2", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			oldMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldMember)
-			oldVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldVoter)
-			oldReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldReward)
-			node := gov.nodeInfos[0]
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
+			gov := NewGovernance(t).DeployContracts(t)
+			var (
+				oldMember, oldVoter, oldReward common.Address
+				length                         *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldReward}, "getReward", common.Big1))
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
+			require.Equal(t, gov.owner.From, oldMember)
+			require.Equal(t, gov.owner.From, oldVoter)
+			require.Equal(t, gov.owner.From, oldReward)
+			node := gov.nodeInfos[0]
+
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     gov.owner.From,
 				Name:       []byte("name1"),
 				Enode:      node.enode,
 				Ip:         node.ip,
@@ -443,350 +478,144 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big1, length)
 
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			stat := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, stat[1].(*big.Int))
-			require.True(t, stat[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			newMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newReward)
+			var (
+				newMember, newVoter, newReward common.Address
+			)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, gov.owner.From, newVoter)
+			require.Equal(t, gov.owner.From, newReward)
+
+			info.Port = node.port
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, gov.owner.From, newVoter)
+			require.Equal(t, gov.owner.From, newReward)
+		})
+		t.Run("cannot addProposal to change non-member", func(t *testing.T) {
+			gov := NewGovernance(t).DeployContracts(t)
+			govMem1, govMem2 := getTxOpt(t, "govMem1"), getTxOpt(t, "govMem2")
+			node := gov.nodeInfos[0]
+
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node.name,
 				Enode:      node.enode,
 				Ip:         node.ip,
-				Port:       node.port, // change
+				Port:       node.port,
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length = gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			require.Equal(t, common.Big2, length)
-
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			stat = gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, stat[1].(*big.Int))
-			require.True(t, stat[2].(bool))
-
-			newMember = gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter = gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward = gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newReward)
-		})
-		t.Run("cannot addProposal to change non-member", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			govMem1, govMem2 := sim.GetOrNewEOA("govMem1"), sim.GetOrNewEOA("govMem2")
-			node := gov.nodeInfos[0]
-
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node.name,
-					Enode:      node.enode,
-					Ip:         node.ip,
-					Port:       node.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				}, govMem2, common.Big0, common.Big0),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, govMem2.From, common.Big0, common.Big0)),
 				"Non-member",
 			)
 		})
 		t.Run("can addProposal to change governance", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			newGovImp := compiled.Copy(new(Governance)).GovImp
-			newGovImp.Deploy(t, gov.client)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeGov", newGovImp.Address, []byte("memo"), big.NewInt(86400))
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			gov := NewGovernance(t).DeployContracts(t)
+			newGovImp, _, err := gov.Deploy(compiled.GovImp.Deploy(gov.backend, gov.owner))
+			require.NoError(t, err)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeGov", newGovImp, []byte("memo"), big.NewInt(86400)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big1, length)
 		})
 		t.Run("can not addProposal to change governance using EOA", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToChangeGov", sim.GetOrNewEOA("govMem1"), []byte("memo"), big.NewInt(86400)),
-				"", "function call to a non-contract account", // TODO check
+			gov := NewGovernance(t).DeployContracts(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeGov", getTxOpt(t, "govMem1").From, []byte("memo"), big.NewInt(86400))),
+				"",
 			)
 		})
 		t.Run("can not addProposal to change governance using non-UUPS", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToChangeGov", gov.Registry.Address, []byte("memo"), big.NewInt(86400)),
+			gov := NewGovernance(t).DeployContracts(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeGov", gov.registry, []byte("memo"), big.NewInt(86400))),
 				"ERC1967Upgrade: new implementation is not UUPS",
 			)
 		})
 		t.Run("cannot addProposal to change governance with same address", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToChangeGov", gov.GovImp.Address, []byte("memo"), big.NewInt(86400)),
+			gov := NewGovernance(t).DeployContracts(t)
+			var govImp common.Address
+			require.NoError(t, gov.Gov.Call(callOpts, &[]interface{}{&govImp}, "implementation"))
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeGov", govImp, []byte("memo"), big.NewInt(86400))),
 				"Same contract address",
 			)
 		})
 		t.Run("cannot addProposal to change governance with zero address", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToChangeGov", common.Address{}, []byte("memo"), big.NewInt(86400)),
+			gov := NewGovernance(t).DeployContracts(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeGov", common.Address{}, []byte("memo"), big.NewInt(86400))),
 				"Implementation cannot be zero",
 			)
 		})
 		t.Run("can addProposal to change environment", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeEnv", sim.StringToBytes32("key"), EnvTypes.Bytes32, []byte("value"), []byte("memo"), big.NewInt(86400))
-			length := gov.Gov.Call1(t, "ballotLength")
+			gov := NewGovernance(t).DeployContracts(t)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv", ToBytes32("key"), EnvTypes.Bytes32, []byte("value"), []byte("memo"), big.NewInt(86400)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big1, length)
 		})
 		t.Run("cannot addProposal to change environment with wrong type", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToChangeEnv", sim.StringToBytes32("key"), EnvTypes.Invalid, []byte("value"), []byte("memo"), big.NewInt(86400)),
+			gov := NewGovernance(t).DeployContracts(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv", ToBytes32("key"), EnvTypes.Invalid, []byte("value"), []byte("memo"), big.NewInt(86400))),
 				"Invalid type",
 			)
 		})
 		t.Run("can vote approval to add member", func(t *testing.T) {
-			gov := DeployGovernance(t)
+			gov := NewGovernance(t).DeployContracts(t)
 
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Accepted, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big2, memberLen)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
-			require.Equal(t, memberLen, nodeLen)
-			lock := gov.Staking.Call1(t, "lockedBalanceOf", govMem1)
-			require.Equal(t, LOCK_AMOUNT, lock)
-
-			newMember := gov.Gov.Call1(t, "getMember", memberLen).(common.Address)
-			require.Equal(t, govMem1, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", memberLen).(common.Address)
-			require.Equal(t, govMem1, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", memberLen).(common.Address)
-			require.Equal(t, govMem1, newReward)
-		})
-		t.Run("cannot vote approval to add member with insufficient staking", func(t *testing.T) {
-			gov := DeployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, new(big.Int).Div(LOCK_AMOUNT, common.Big2), "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Rejected, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big1, memberLen)
-		})
-		t.Run("can vote disapproval to deny adding member", func(t *testing.T) {
-			gov := DeployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, false)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Rejected, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-		})
-		t.Run("can vote approval to change member totally", func(t *testing.T) {
-			gov := DeployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Accepted, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-
-			govMem2 := sim.GetOrNewEOA("govMem2")
-			_, receipt = gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
-
-			preDeployerAvail := gov.Staking.Call1(t, "availableBalanceOf", govMem1).(*big.Int)
-			preGovmem1Avail := gov.Staking.Call1(t, "availableBalanceOf", govMem2).(*big.Int)
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember",
-				MemberInfo{
-					Staker:     govMem2,
-					Voter:      govMem2,
-					Reward:     govMem2,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo2"),
-					Duration:   big.NewInt(86400),
-				}, govMem1, LOCK_AMOUNT, common.Big0,
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big2, true)
-			gov.Gov.ExecuteOk(t, govMem1, "vote", common.Big2, true)
-			length = gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, big.NewInt(3), length)
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state = gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Accepted, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big2, memberLen)
-			memberAddr := gov.Gov.Call1(t, "getMember", common.Big2).(common.Address)
-			require.Equal(t, govMem2, memberAddr)
-			getNode := gov.Gov.Call(t, "getNode", common.Big2)
-			name, enode, ip, port := getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
-			require.Equal(t, node1.name, name)
-			require.Equal(t, node1.enode, enode)
-			require.Equal(t, node1.ip, ip)
-			require.Equal(t, node1.port, port)
-
-			nodeIdxFromDeployer := gov.Gov.Call1(t, "getNodeIdxFromMember", govMem1).(*big.Int)
-			require.True(t, nodeIdxFromDeployer.Sign() == 0)
-			nodeIdxFromGovMem1 := gov.Gov.Call1(t, "getNodeIdxFromMember", govMem2).(*big.Int)
-			require.Equal(t, common.Big2, nodeIdxFromGovMem1)
-
-			postDeployerAvail := gov.Staking.Call1(t, "availableBalanceOf", govMem1).(*big.Int)
-			postGovmem1Avail := gov.Staking.Call1(t, "availableBalanceOf", govMem2).(*big.Int)
-			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(postDeployerAvail, preDeployerAvail))
-			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(preGovmem1Avail, postGovmem1Avail))
-		})
-		t.Run("can vote approval to change enode only without voting", func(t *testing.T) {
-			gov := DeployGovernance(t)
-
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -794,44 +623,305 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.True(t, length.Sign() == 0)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
 
-			memberLen := gov.Gov.Call1(t, ("getMemberLength")).(*big.Int)
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen, nodeLen, lock       *big.Int
+				newMember, newVoter, newReward common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&lock}, "lockedBalanceOf", govMem1.From))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", memberLen))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", memberLen))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", memberLen))
+			require.Equal(t, common.Big2, memberLen)
+			require.Equal(t, memberLen, nodeLen)
+			require.Equal(t, LOCK_AMOUNT, lock)
+			require.Equal(t, govMem1.From, newMember)
+			require.Equal(t, govMem1.From, newVoter)
+			require.Equal(t, govMem1.From, newReward)
+		})
+		t.Run("cannot vote approval to add member with insufficient staking", func(t *testing.T) {
+			gov := NewGovernance(t).DeployContracts(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = new(big.Int).Div(LOCK_AMOUNT, common.Big2)
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
+
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+				memberLen   *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
 			require.Equal(t, common.Big1, memberLen)
-			memberAddr := gov.Gov.Call1(t, "getMember", common.Big1)
-			require.Equal(t, gov.client.Owner, memberAddr)
-			getNode := gov.Gov.Call(t, "getNode", common.Big1)
-			name, enode, ip, port := getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
+		})
+		t.Run("can vote disapproval to deny adding member", func(t *testing.T) {
+			gov := NewGovernance(t).DeployContracts(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
+
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, false))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+				memberLen   *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.Equal(t, common.Big1, length)
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.Equal(t, common.Big1, memberLen)
+		})
+		t.Run("can vote approval to change member totally", func(t *testing.T) {
+			gov := NewGovernance(t).DeployContracts(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
+
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.Equal(t, common.Big1, length)
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			govMem2 := getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem2.From))
+			govMem2.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem2, "deposit"))
+			govMem2.Value = nil
+
+			var (
+				preDeployerAvail, preGovmem1Avail *big.Int
+			)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&preDeployerAvail}, "availableBalanceOf", govMem1.From))
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&preGovmem1Avail}, "availableBalanceOf", govMem2.From))
+
+			info = MemberInfo{
+				Staker:     govMem2.From,
+				Voter:      govMem2.From,
+				Reward:     govMem2.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo2"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, govMem1.From, LOCK_AMOUNT, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big2, true))
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", common.Big2, true))
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, big.NewInt(3), length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen       *big.Int
+				memberAddr      common.Address
+				name, enode, ip []byte
+				port            *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberAddr}, "getMember", common.Big2))
+			getNode := []interface{}{}
+			require.NoError(t, gov.GovImp.Call(callOpts, &getNode, "getNode", common.Big2))
+			require.Equal(t, common.Big2, memberLen)
+			require.Equal(t, govMem2.From, memberAddr)
+			name, enode, ip, port = getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
+			require.Equal(t, node1.name, name)
+			require.Equal(t, node1.enode, enode)
+			require.Equal(t, node1.ip, ip)
+			require.Equal(t, node1.port, port)
+
+			var (
+				nodeIdxFromDeployer, nodeIdxFromGovMem1 *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdxFromDeployer}, "getNodeIdxFromMember", govMem1.From))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdxFromGovMem1}, "getNodeIdxFromMember", govMem2.From))
+			require.True(t, nodeIdxFromDeployer.Sign() == 0)
+			require.Equal(t, common.Big2, nodeIdxFromGovMem1)
+
+			var (
+				postDeployerAvail, postGovmem1Avail *big.Int
+			)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&postDeployerAvail}, "availableBalanceOf", govMem1.From))
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&postGovmem1Avail}, "availableBalanceOf", govMem2.From))
+			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(postDeployerAvail, preDeployerAvail))
+			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(preGovmem1Avail, postGovmem1Avail))
+		})
+		t.Run("can vote approval to change enode only without voting", func(t *testing.T) {
+			gov := NewGovernance(t).DeployContracts(t)
+
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     gov.owner.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.True(t, length.Sign() == 0)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen       *big.Int
+				memberAddr      common.Address
+				name, enode, ip []byte
+				port            *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberAddr}, "getMember", common.Big1))
+			getNode := []interface{}{}
+			require.NoError(t, gov.GovImp.Call(callOpts, &getNode, "getNode", common.Big1))
+			require.Equal(t, common.Big1, memberLen)
+			require.Equal(t, gov.owner.From, memberAddr)
+			name, enode, ip, port = getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
 			require.Equal(t, node1.name, name)
 			require.Equal(t, node1.enode, enode)
 			require.Equal(t, node1.ip, ip)
 			require.Equal(t, node1.port, port)
 		})
 		t.Run("cannot vote approval to change member with insufficient staking", func(t *testing.T) {
-			gov := DeployGovernance(t)
+			gov := NewGovernance(t).DeployContracts(t)
 
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000)), "deposit")
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000))
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -839,89 +929,122 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
 			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Rejected, state[1])
-			require.True(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
 		})
 		t.Run("can vote approval to change governance", func(t *testing.T) {
-			gov := DeployGovernance(t)
+			gov := NewGovernance(t).DeployContracts(t)
 
-			result := gov.EnvStorage.Call(t, "getGasLimitAndBaseFee")
-			MBF := gov.EnvStorage.Call1(t, "getMaxBaseFee").(*big.Int)
+			var (
+				getGasLimitAndBaseFee []interface{}
+				MBF                   *big.Int
+			)
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &getGasLimitAndBaseFee, "getGasLimitAndBaseFee"))
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&MBF}, "getMaxBaseFee"))
 
-			newGovImp := compiled.Copy(new(Governance)).GovImp
-			newGovImp.Deploy(t, gov.client)
+			newGovImp, _, err := gov.Deploy(compiled.GovImp.Deploy(gov.backend, gov.owner))
+			require.NoError(t, err)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeGov", newGovImp.Address, []byte("memo"), big.NewInt(86400))
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeGov", newGovImp, []byte("memo"), big.NewInt(86400)))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
 
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
 			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			imp := gov.Gov.Call1(t, "implementation").(common.Address)
-			require.Equal(t, newGovImp.Address, imp)
+			var imp common.Address
+			require.NoError(t, gov.Gov.Call(callOpts, &[]interface{}{&imp}, "implementation"))
+			require.Equal(t, newGovImp, imp)
 
-			newResult := gov.EnvStorage.Call(t, "getGasLimitAndBaseFee")
-			require.Equal(t, result[0], newResult[0])
-			require.Equal(t, result[1], newResult[1])
-			require.Equal(t, result[2], newResult[2])
-			newMBF := gov.EnvStorage.Call1(t, "getMaxBaseFee").(*big.Int)
-			require.Equal(t, MBF, newMBF)
+			var (
+				newGetGasLimitAndBaseFee []interface{}
+				NEW_MBF                  *big.Int
+			)
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &newGetGasLimitAndBaseFee, "getGasLimitAndBaseFee"))
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&NEW_MBF}, "getMaxBaseFee"))
+			require.Equal(t, getGasLimitAndBaseFee[0], newGetGasLimitAndBaseFee[0])
+			require.Equal(t, getGasLimitAndBaseFee[1], newGetGasLimitAndBaseFee[1])
+			require.Equal(t, getGasLimitAndBaseFee[2], newGetGasLimitAndBaseFee[2])
+			require.Equal(t, MBF, NEW_MBF)
 		})
 		t.Run("can vote approval to change environment", func(t *testing.T) {
-			gov := DeployGovernance(t)
-
-			blocksPer := gov.EnvStorage.Call1(t, "getBlocksPer").(*big.Int)
+			gov := NewGovernance(t).DeployContracts(t)
+			var (
+				blocksPer *big.Int
+			)
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&blocksPer}, "getBlocksPer"))
 			require.NotEqual(t, big.NewInt(100), blocksPer)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeEnv",
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv",
 				crypto.Keccak256Hash([]byte("blocksPer")),
 				EnvTypes.Uint,
 				hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 				[]byte("memo"),
 				big.NewInt(86400),
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
 
-			blocksPer = gov.EnvStorage.Call1(t, "getBlocksPer").(*big.Int)
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&blocksPer}, "getBlocksPer"))
 			require.Equal(t, big.NewInt(100), blocksPer)
 		})
 		t.Run("cannot vote for a ballot already done", func(t *testing.T) {
-			gov := DeployGovernance(t)
+			gov := NewGovernance(t).DeployContracts(t)
 
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000)), "deposit")
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000))
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -929,898 +1052,58 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "vote", common.Big1, true),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true)),
 				"Expired",
 			)
 		})
 		t.Run("cannot add proposal during period time", func(t *testing.T) {
-			gov := DeployGovernance(t)
+			gov := NewGovernance(t).DeployContracts(t)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeEnv",
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv",
 				crypto.Keccak256Hash([]byte("blocksPer")),
 				EnvTypes.Uint,
 				hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 				[]byte("memo"),
 				big.NewInt(86400),
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeEnv",
+			))
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv",
 				crypto.Keccak256Hash([]byte("blocksPer")),
 				EnvTypes.Uint,
 				hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 				[]byte("memo"),
 				big.NewInt(86400),
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "setProposalTimePeriod", big.NewInt(60))
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToChangeEnv",
+			))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "setProposalTimePeriod", big.NewInt(60)))
+
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv",
 					crypto.Keccak256Hash([]byte("blocksPer")),
 					EnvTypes.Uint,
 					hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 					[]byte("memo"),
 					big.NewInt(86400),
-				), "Cannot add proposal too early",
+				)), "Cannot add proposal too early",
 			)
 		})
 		t.Run("cannot addProposal to add member which is already reward", func(t *testing.T) {
-			gov := DeployGovernance(t)
+			gov := NewGovernance(t).DeployContracts(t)
 
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
+
 			gov.nodeInfos = append(gov.nodeInfos, node1)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			ballotLength := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			require.Equal(t, common.Big1, ballotLength)
-
-			memberLength := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			node := gov.nodeInfos[0]
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember",
-				MemberInfo{
-					Staker:     gov.client.Owner,
-					Voter:      gov.client.Owner,
-					Reward:     govMem1,
-					Name:       node.name,
-					Enode:      node.enode,
-					Ip:         node.ip,
-					Port:       node.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo"),
-					Duration:   big.NewInt(86400),
-				}, gov.client.Owner, common.Big0, common.Big0,
-			)
-
-			ballotLength = gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			require.Equal(t, common.Big2, ballotLength)
-
-			newMember := gov.Gov.Call1(t, "getMember", memberLength).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", memberLength).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", memberLength).(common.Address)
-			require.Equal(t, govMem1, newReward)
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Rejected, state[1])
-			require.True(t, state[2].(bool))
-
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big1, memberLen)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
-			require.Equal(t, memberLen, nodeLen)
-
-			lock := gov.Staking.Call1(t, "lockedBalanceOf", govMem1).(*big.Int)
-			require.True(t, lock.Sign() == 0)
-			bal := gov.Staking.Call1(t, "balanceOf", govMem1).(*big.Int)
-			require.Equal(t, LOCK_AMOUNT, bal)
-		})
-		t.Run("cannot addProposal to change member which is already reward", func(t *testing.T) {
-			gov := DeployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node := gov.nodeInfos[0]
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
-				Name:       node.name,
-				Enode:      node.enode,
-				Ip:         node.ip,
-				Port:       node.port,
-				LockAmount: LOCK_AMOUNT,
-				Memo:       []byte("memo"),
-				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     govMem1,
-				Name:       node.name,
-				Enode:      node.enode,
-				Ip:         node.ip,
-				Port:       node.port,
-				LockAmount: LOCK_AMOUNT,
-				Memo:       []byte("memo"),
-				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-
-			newMember := gov.Gov.Call1(t, "getMember", memberLen).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", memberLen).(common.Address)
-			require.Equal(t, gov.client.Owner, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", memberLen).(common.Address)
-			require.Equal(t, govMem1, newReward)
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big1)
-			require.Equal(t, BallotStates.Rejected, state[1])
-			require.True(t, state[2].(bool))
-
-			memberLen = gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big1, memberLen)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
-			require.Equal(t, memberLen, nodeLen)
-			lock := gov.Staking.Call1(t, "lockedBalanceOf", govMem1).(*big.Int)
-			require.True(t, lock.Sign() == 0)
-			bal := gov.Staking.Call1(t, "balanceOf", govMem1).(*big.Int)
-			require.Equal(t, LOCK_AMOUNT, bal)
-		})
-	})
-	t.Run("Staker is not a voter", func(t *testing.T) {
-		deployGovernance := func(t *testing.T) (gov *Governance, voter common.Address) {
-			gov = DeployGovernance(t)
-			voter = sim.GetOrNewEOA("voter")
-			user1 := sim.GetOrNewEOA("user1")
-			balance, err := gov.client.Backend.BalanceAt(context.TODO(), gov.client.Owner, nil)
-			require.NoError(t, err)
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, voter, new(big.Int).Div(balance, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-
-			node := gov.nodeInfos[0]
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      voter,
-				Reward:     user1,
-				Name:       node.name,
-				Enode:      node.enode,
-				Ip:         node.ip,
-				Port:       node.port,
-				LockAmount: LOCK_AMOUNT,
-				Memo:       []byte("memo1"),
-				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			return
-		}
-		t.Run("cannot addProposal to add member self", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			node := gov.nodeInfos[0]
-
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToAddMember",
-					MemberInfo{
-						Staker:     gov.client.Owner,
-						Voter:      gov.client.Owner,
-						Reward:     gov.client.Owner,
-						Name:       node.name,
-						Enode:      node.enode,
-						Ip:         node.ip,
-						Port:       node.port,
-						LockAmount: LOCK_AMOUNT,
-						Memo:       []byte("memo"),
-						Duration:   big.NewInt(86400),
-					},
-				), "Already member",
-			)
-		})
-		t.Run("cannot addProposal to add member with different voter", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			node := gov.nodeInfos[0]
-
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToAddMember",
-					MemberInfo{
-						Staker:     gov.client.Owner,
-						Voter:      voter,
-						Reward:     gov.client.Owner,
-						Name:       node.name,
-						Enode:      node.enode,
-						Ip:         node.ip,
-						Port:       node.port,
-						LockAmount: LOCK_AMOUNT,
-						Memo:       []byte("memo"),
-						Duration:   big.NewInt(86400),
-					},
-				), "Already member",
-			)
-		})
-		t.Run("cannot addProposal to add member with same voter", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			node := gov.nodeInfos[0]
-
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToAddMember",
-					MemberInfo{
-						Staker:     voter,
-						Voter:      voter,
-						Reward:     voter,
-						Name:       node.name,
-						Enode:      node.enode,
-						Ip:         node.ip,
-						Port:       node.port,
-						LockAmount: LOCK_AMOUNT,
-						Memo:       []byte("memo"),
-						Duration:   big.NewInt(86400),
-					},
-				), "Already member",
-			)
-		})
-		t.Run("cannot addProposal to add member with same reward", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			user1 := sim.GetOrNewEOA("user1")
-			node := gov.nodeInfos[0]
-
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToAddMember",
-					MemberInfo{
-						Staker:     user1,
-						Voter:      user1,
-						Reward:     user1,
-						Name:       node.name,
-						Enode:      node.enode,
-						Ip:         node.ip,
-						Port:       node.port,
-						LockAmount: LOCK_AMOUNT,
-						Memo:       []byte("memo"),
-						Duration:   big.NewInt(86400),
-					},
-				), "Already member",
-			)
-		})
-		t.Run("can addProposal to add member", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			govMem1 := sim.GetOrNewEOA("govMem1")
-
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, voter, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			require.Equal(t, common.Big2, length)
-			ballot := gov.BallotStorage.Call(t, "getBallotBasic", length)
-			ballotDetail := gov.BallotStorage.Call(t, "getBallotMember", length)
-			require.Equal(t, voter, ballot[3])
-			require.Equal(t, []byte("memo"), ballot[4])
-			require.Equal(t, ballotDetail[1], govMem1)
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-
-			length = gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			require.Equal(t, big.NewInt(3), length)
-		})
-		t.Run("cannot addProposal to remove non-member", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			govMem1 := sim.AliasToAddress["govMem1"]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToRemoveMember", govMem1, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)),
-				"Non-member",
-			)
-		})
-		t.Run("cannot addProposal to remove a sole member", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToRemoveMember", gov.client.Owner, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)),
-				"Cannot remove a sole member",
-			)
-		})
-		t.Run("can addProposal to change member's other addresses self without voting", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			oldMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, oldMember)
-			oldVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, voter, oldVoter)
-			oldReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, sim.GetOrNewEOA("user1"), oldReward)
-			node := gov.nodeInfos[0]
-			voter1 := sim.GetOrNewEOA("voter1")
-			user1 := sim.GetOrNewEOA("user1")
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      voter1,
-				Reward:     user1,
-				Name:       node.name,
-				Enode:      node.enode,
-				Ip:         node.ip,
-				Port:       node.port,
-				LockAmount: LOCK_AMOUNT,
-				Memo:       []byte("memo"),
-				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			require.Equal(t, common.Big2, length)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
-
-			newMember := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, voter1, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, user1, newReward)
-		})
-		t.Run("cannot addProposal to change member's other addresses which is already member", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Accepted, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big2, memberLen)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
-			require.Equal(t, memberLen, nodeLen)
-			lock := gov.Staking.Call1(t, "lockedBalanceOf", govMem1)
-			require.Equal(t, LOCK_AMOUNT, lock)
-
-			newMember := gov.Gov.Call1(t, "getMember", memberLen).(common.Address)
-			require.Equal(t, govMem1, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", memberLen).(common.Address)
-			require.Equal(t, govMem1, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", memberLen).(common.Address)
-			require.Equal(t, govMem1, newReward)
-
-			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToChangeMember", MemberInfo{
-					Staker:     gov.client.Owner,
-					Voter:      govMem1,
-					Reward:     sim.GetOrNewEOA("user1"),
-					Name:       node.name,
-					Enode:      node.enode,
-					Ip:         node.ip,
-					Port:       node.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				}, gov.client.Owner, common.Big0, common.Big0),
-				"Already a member",
-			)
-		})
-		t.Run("cannot addProposal to add member which is already voter", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-
-			node := gov.nodeInfos[0]
-			user1 := sim.GetOrNewEOA("user1")
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      govMem1,
-				Reward:     user1,
-				Name:       node.name,
-				Enode:      node.enode,
-				Ip:         node.ip,
-				Port:       node.port,
-				LockAmount: LOCK_AMOUNT,
-				Memo:       []byte("memo"),
-				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-
-			newMember := gov.Gov.Call1(t, "getMember", memberLen).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", memberLen).(common.Address)
-			require.Equal(t, govMem1, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", memberLen).(common.Address)
-			require.Equal(t, user1, newReward)
-
-			gov.Gov.ExecuteOk(t, govMem1, "vote", common.Big2, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Rejected, state[1])
-			require.True(t, state[2].(bool))
-
-			memberLen = gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big1, memberLen)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
-			require.Equal(t, memberLen, nodeLen)
-			lock := gov.Staking.Call1(t, "lockedBalanceOf", govMem1).(*big.Int)
-			require.True(t, lock.Sign() == 0)
-			bal := gov.Staking.Call1(t, "balanceOf", govMem1)
-			require.Equal(t, LOCK_AMOUNT, bal)
-		})
-		t.Run("cannot addProposal to change member which is already voter", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-
-			node := gov.nodeInfos[0]
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node.name,
-					Enode:      node.enode,
-					Ip:         node.ip,
-					Port:       node.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				}, gov.client.Owner, common.Big0, common.Big0,
-			)
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			user1 := sim.GetOrNewEOA("user1")
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember",
-				MemberInfo{
-					Staker:     gov.client.Owner,
-					Voter:      govMem1,
-					Reward:     user1,
-					Name:       node.name,
-					Enode:      node.enode,
-					Ip:         node.ip,
-					Port:       node.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				}, gov.client.Owner, common.Big0, common.Big0,
-			)
-
-			newMember := gov.Gov.Call1(t, "getMember", memberLen).(common.Address)
-			require.Equal(t, gov.client.Owner, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", memberLen).(common.Address)
-			require.Equal(t, govMem1, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", memberLen).(common.Address)
-			require.Equal(t, user1, newReward)
-
-			gov.Gov.ExecuteOk(t, govMem1, "vote", common.Big2, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Rejected, state[1])
-			require.True(t, state[2].(bool))
-
-			memberLen = gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big1, memberLen)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
-			require.Equal(t, memberLen, nodeLen)
-			lock := gov.Staking.Call1(t, "lockedBalanceOf", govMem1).(*big.Int)
-			require.True(t, lock.Sign() == 0)
-			bal := gov.Staking.Call1(t, "balanceOf", govMem1)
-			require.Equal(t, LOCK_AMOUNT, bal)
-		})
-		t.Run("cannot addProposal to change non-member", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			node := gov.nodeInfos[0]
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToChangeMember",
-					MemberInfo{
-						Staker:     govMem1,
-						Voter:      govMem1,
-						Reward:     govMem1,
-						Name:       node.name,
-						Enode:      node.enode,
-						Ip:         node.ip,
-						Port:       node.port,
-						LockAmount: LOCK_AMOUNT,
-						Memo:       []byte("memo1"),
-						Duration:   big.NewInt(86400),
-					}, sim.GetOrNewEOA("govMem2"), common.Big0, common.Big0,
-				),
-				"Non-member",
-			)
-		})
-		t.Run("can addProposal to change governance", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			newGovImp := compiled.Copy(new(Governance)).GovImp
-			newGovImp.Deploy(t, gov.client)
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeGov", newGovImp.Address, []byte("memo"), big.NewInt(86400))
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			require.Equal(t, common.Big2, length)
-		})
-		t.Run("can not addProposal to change governance using EOA", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToChangeGov", sim.GetOrNewEOA("govMem1"), []byte("memo"), big.NewInt(86400)),
-				"", "function call to a non-contract account", // TODO check
-			)
-		})
-		t.Run("can not addProposal to change governance using non-UUPS", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToChangeGov", gov.Registry.Address, []byte("memo"), big.NewInt(86400)),
-				"ERC1967Upgrade: new implementation is not UUPS",
-			)
-		})
-		t.Run("cannot addProposal to change governance with same address", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToChangeGov", gov.GovImp.Address, []byte("memo"), big.NewInt(86400)),
-				"Same contract address",
-			)
-		})
-		t.Run("cannot addProposal to change governance with zero address", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToChangeGov", common.Address{}, []byte("memo"), big.NewInt(86400)),
-				"Implementation cannot be zero",
-			)
-		})
-		t.Run("can addProposal to change environment", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeEnv", sim.StringToBytes32("key"), EnvTypes.Bytes32, []byte("value"), []byte("memo"), big.NewInt(86400))
-			length := gov.Gov.Call1(t, "ballotLength")
-			require.Equal(t, common.Big2, length)
-		})
-		t.Run("cannot addProposal to change environment with wrong type", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToChangeEnv", sim.StringToBytes32("key"), EnvTypes.Invalid, []byte("value"), []byte("memo"), big.NewInt(86400)),
-				"Invalid type",
-			)
-		})
-		t.Run("can vote approval to add member", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Accepted, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big2, memberLen)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
-			require.Equal(t, memberLen, nodeLen)
-			lock := gov.Staking.Call1(t, "lockedBalanceOf", govMem1)
-			require.Equal(t, LOCK_AMOUNT, lock)
-
-			newMember := gov.Gov.Call1(t, "getMember", memberLen).(common.Address)
-			require.Equal(t, govMem1, newMember)
-			newVoter := gov.Gov.Call1(t, "getVoter", memberLen).(common.Address)
-			require.Equal(t, govMem1, newVoter)
-			newReward := gov.Gov.Call1(t, "getReward", memberLen).(common.Address)
-			require.Equal(t, govMem1, newReward)
-		})
-		t.Run("cannot vote approval to add member with insufficient staking", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, new(big.Int).Div(LOCK_AMOUNT, common.Big2), "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Rejected, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big1, memberLen)
-		})
-		t.Run("can vote disapproval to deny adding member", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, false)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Rejected, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-		})
-		t.Run("can vote approval to change member totally", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToAddMember",
-				MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo1"),
-					Duration:   big.NewInt(86400),
-				},
-			)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Accepted, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-
-			govMem2 := sim.GetOrNewEOA("govMem2")
-			_, receipt = gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
-
-			preDeployerAvail := gov.Staking.Call1(t, "availableBalanceOf", govMem1).(*big.Int)
-			preGovmem1Avail := gov.Staking.Call1(t, "availableBalanceOf", govMem2).(*big.Int)
-
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeMember",
-				MemberInfo{
-					Staker:     govMem2,
-					Voter:      govMem2,
-					Reward:     govMem2,
-					Name:       node1.name,
-					Enode:      node1.enode,
-					Ip:         node1.ip,
-					Port:       node1.port,
-					LockAmount: LOCK_AMOUNT,
-					Memo:       []byte("memo2"),
-					Duration:   big.NewInt(86400),
-				}, govMem1, LOCK_AMOUNT, common.Big0,
-			)
-			gov.Gov.ExecuteOk(t, voter, "vote", big.NewInt(3), true)
-			gov.Gov.ExecuteOk(t, govMem1, "vote", big.NewInt(3), true)
-			length = gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, big.NewInt(3), length)
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state = gov.BallotStorage.Call(t, "getBallotState", big.NewInt(3))
-			require.Equal(t, BallotStates.Accepted, state[1].(*big.Int))
-			require.True(t, state[2].(bool))
-
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
-			require.Equal(t, common.Big2, memberLen)
-			memberAddr := gov.Gov.Call1(t, "getMember", common.Big2).(common.Address)
-			require.Equal(t, govMem2, memberAddr)
-			getNode := gov.Gov.Call(t, "getNode", common.Big2)
-			name, enode, ip, port := getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
-			require.Equal(t, node1.name, name)
-			require.Equal(t, node1.enode, enode)
-			require.Equal(t, node1.ip, ip)
-			require.Equal(t, node1.port, port)
-
-			nodeIdxFromDeployer := gov.Gov.Call1(t, "getNodeIdxFromMember", govMem1).(*big.Int)
-			require.True(t, nodeIdxFromDeployer.Sign() == 0)
-			nodeIdxFromGovMem1 := gov.Gov.Call1(t, "getNodeIdxFromMember", govMem2).(*big.Int)
-			require.Equal(t, common.Big2, nodeIdxFromGovMem1)
-
-			postDeployerAvail := gov.Staking.Call1(t, "availableBalanceOf", govMem1).(*big.Int)
-			postGovmem1Avail := gov.Staking.Call1(t, "availableBalanceOf", govMem2).(*big.Int)
-			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(postDeployerAvail, preDeployerAvail))
-			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(preGovmem1Avail, postGovmem1Avail))
-		})
-		t.Run("can vote approval to change enode only without voting", func(t *testing.T) {
-			gov, voter := deployGovernance(t)
-
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      gov.client.Owner,
-				Reward:     gov.client.Owner,
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -1828,23 +1111,992 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info))
+			var (
+				ballotLength *big.Int
+				memberLength *big.Int
+			)
+			gov.GovImp.Call(callOpts, &[]interface{}{&ballotLength}, "ballotLength")
+			require.Equal(t, common.Big1, ballotLength)
 
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
+			gov.GovImp.Call(callOpts, &[]interface{}{&memberLength}, "getMemberLength")
+			node := gov.nodeInfos[0]
+			info = MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     govMem1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+
+			gov.GovImp.Call(callOpts, &[]interface{}{&ballotLength}, "ballotLength")
+			require.Equal(t, common.Big2, ballotLength)
+
+			var (
+				newMember, newVoter, newReward common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", memberLength))
+			require.Equal(t, gov.owner.From, newMember)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", memberLength))
+			require.Equal(t, gov.owner.From, newVoter)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", memberLength))
+			require.Equal(t, govMem1.From, newReward)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
 			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
 
-			memberLen := gov.Gov.Call1(t, ("getMemberLength")).(*big.Int)
+			var (
+				memberLen, nodeLen *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
 			require.Equal(t, common.Big1, memberLen)
-			memberAddr := gov.Gov.Call1(t, "getMember", common.Big1)
-			require.Equal(t, gov.client.Owner, memberAddr)
-			getNode := gov.Gov.Call(t, "getNode", common.Big1)
-			name, enode, ip, port := getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
+			require.Equal(t, memberLen, nodeLen)
+
+			var (
+				lock, bal *big.Int
+			)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&lock}, "lockedBalanceOf", govMem1.From))
+			require.True(t, lock.Sign() == 0)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&bal}, "balanceOf", govMem1.From))
+			require.Equal(t, LOCK_AMOUNT, bal)
+		})
+		t.Run("cannot addProposal to change member which is already reward", func(t *testing.T) {
+			gov := NewGovernance(t).DeployContracts(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
+
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+
+			var memberLen *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			info = MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     govMem1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+
+			var (
+				newMember, newVoter, newReward common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", memberLen))
+			require.Equal(t, gov.owner.From, newMember)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", memberLen))
+			require.Equal(t, gov.owner.From, newVoter)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", memberLen))
+			require.Equal(t, govMem1.From, newReward)
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
+
+			var (
+				/* memberLen */ nodeLen, lock, bal *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.Equal(t, common.Big1, memberLen)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
+			require.Equal(t, memberLen, nodeLen)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&lock}, "lockedBalanceOf", govMem1.From))
+			require.True(t, lock.Sign() == 0)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&bal}, "balanceOf", govMem1.From))
+			require.Equal(t, LOCK_AMOUNT, bal)
+		})
+	})
+	t.Run("Staker is not a voter", func(t *testing.T) {
+		deployGovernance := func(t *testing.T) (gov *Governance, voter *bind.TransactOpts) {
+			gov = NewGovernance(t).DeployContracts(t)
+			voter = getTxOpt(t, "voter")
+			user1 := getTxOpt(t, "user1")
+			balance, err := gov.backend.BalanceAt(context.TODO(), gov.owner.From, nil)
+			require.NoError(t, err)
+
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Div(balance, common.Big2), &voter.From))
+
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      voter.From,
+				Reward:     user1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			return
+		}
+		t.Run("cannot addProposal to add member self", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     gov.owner.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToAddMember", info)),
+				"Already member",
+			)
+		})
+		t.Run("cannot addProposal to add member with different voter", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      voter.From,
+				Reward:     gov.owner.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToAddMember", info)),
+				"Already member",
+			)
+		})
+		t.Run("cannot addProposal to add member with same voter", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     voter.From,
+				Voter:      voter.From,
+				Reward:     voter.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToAddMember", info)),
+				"Already member",
+			)
+		})
+		t.Run("cannot addProposal to add member with same reward", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			user1 := getTxOpt(t, "user1")
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     user1.From,
+				Voter:      user1.From,
+				Reward:     user1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToAddMember", info)),
+				"Already member",
+			)
+		})
+		t.Run("can addProposal to add member", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			govMem1 := getTxOpt(t, "govMem1")
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToAddMember", info))
+
+			var (
+				length           *big.Int
+				creator          common.Address
+				memo             []byte
+				newStakerAddress common.Address
+			)
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+			ballot, ballotDetail := []interface{}{}, []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &ballot, "getBallotBasic", length))
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &ballotDetail, "getBallotMember", length))
+			creator, memo, newStakerAddress = ballot[3].(common.Address), ballot[4].([]byte), ballotDetail[1].(common.Address)
+			require.Equal(t, voter.From, creator)
+			require.Equal(t, []byte("memo"), memo)
+			require.Equal(t, govMem1.From, newStakerAddress)
+
+			info = MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToAddMember", info))
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, big.NewInt(3), length)
+		})
+		t.Run("cannot addProposal to remove non-member", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			govMem1 := getTxOpt(t, "govMem1")
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToRemoveMember", govMem1.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))),
+				"Non-member",
+			)
+		})
+		t.Run("cannot addProposal to remove a sole member", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToRemoveMember", gov.owner.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))),
+				"Cannot remove a sole member",
+			)
+		})
+		t.Run("can addProposal to change member's other addresses self without voting", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+
+			voter1 := getTxOpt(t, "voter1")
+			user1 := getTxOpt(t, "user1")
+			var (
+				oldMember, oldVoter, oldReward common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&oldReward}, "getReward", common.Big1))
+			require.Equal(t, user1.From, oldReward)
+
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      voter1.From,
+				Reward:     user1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				newMember, newVoter, newReward common.Address
+			)
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", common.Big1))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, newMember)
+			require.Equal(t, voter1.From, newVoter)
+			require.Equal(t, user1.From, newReward)
+		})
+		t.Run("cannot addProposal to change member's other addresses which is already member", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
+
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen, nodeLen, lock       *big.Int
+				newMember, newVoter, newReward common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&lock}, "lockedBalanceOf", govMem1.From))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", memberLen))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", memberLen))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", memberLen))
+			require.Equal(t, govMem1.From, newMember)
+			require.Equal(t, govMem1.From, newVoter)
+			require.Equal(t, govMem1.From, newReward)
+
+			node := gov.nodeInfos[0]
+			info = MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      govMem1.From,
+				Reward:     getTxOpt(t, "user1").From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0)),
+				"Already a member",
+			)
+		})
+		t.Run("cannot addProposal to add member which is already voter", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToAddMember", info))
+			var memberLen *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+
+			node := gov.nodeInfos[0]
+			user1 := getTxOpt(t, "user1")
+			info = MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      govMem1.From,
+				Reward:     user1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+
+			var (
+				newMember, newVoter, newReward common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", memberLen))
+			require.Equal(t, gov.owner.From, newMember)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", memberLen))
+			require.Equal(t, govMem1.From, newVoter)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", memberLen))
+			require.Equal(t, user1.From, newReward)
+
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", common.Big2, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				/*memberLen*/ nodeLen, lock, bal *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.Equal(t, common.Big1, memberLen)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
+			require.Equal(t, memberLen, nodeLen)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&lock}, "lockedBalanceOf", govMem1.From))
+			require.True(t, lock.Sign() == 0)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&bal}, "balanceOf", govMem1.From))
+			require.Equal(t, LOCK_AMOUNT, bal)
+		})
+		t.Run("cannot addProposal to change member which is already voter", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
+
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+
+			var memberLen *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+
+			user1 := getTxOpt(t, "user1")
+			info = MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      govMem1.From,
+				Reward:     user1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+
+			var (
+				newMember, newVoter, newReward common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", memberLen))
+			require.Equal(t, gov.owner.From, newMember)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", memberLen))
+			require.Equal(t, govMem1.From, newVoter)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", memberLen))
+			require.Equal(t, user1.From, newReward)
+
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", common.Big2, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
+
+			var (
+				/*memberLen*/ nodeLen, lock, bal *big.Int
+			)
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.Equal(t, common.Big1, memberLen)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
+			require.Equal(t, memberLen, nodeLen)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&lock}, "lockedBalanceOf", govMem1.From))
+			require.True(t, lock.Sign() == 0)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&bal}, "balanceOf", govMem1.From))
+			require.Equal(t, LOCK_AMOUNT, bal)
+		})
+		t.Run("cannot addProposal to change non-member", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			govMem1, govMem2 := getTxOpt(t, "govMem1"), getTxOpt(t, "govMem2")
+
+			node := gov.nodeInfos[0]
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node.name,
+				Enode:      node.enode,
+				Ip:         node.ip,
+				Port:       node.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, govMem2.From, common.Big0, common.Big0)),
+				"Non-member",
+			)
+		})
+		t.Run("can addProposal to change governance", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			newGovImp, _, err := gov.Deploy(compiled.GovImp.Deploy(gov.backend, gov.owner))
+			require.NoError(t, err)
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeGov", newGovImp, []byte("memo"), big.NewInt(86400)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+		})
+		t.Run("can not addProposal to change governance using EOA", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToChangeGov", getTxOpt(t, "govMem1").From, []byte("memo"), big.NewInt(86400))),
+				"",
+			)
+		})
+		t.Run("can not addProposal to change governance using non-UUPS", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToChangeGov", gov.registry, []byte("memo"), big.NewInt(86400))),
+				"ERC1967Upgrade: new implementation is not UUPS",
+			)
+		})
+		t.Run("cannot addProposal to change governance with same address", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			var govImp common.Address
+			require.NoError(t, gov.Gov.Call(callOpts, &[]interface{}{&govImp}, "implementation"))
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToChangeGov", govImp, []byte("memo"), big.NewInt(86400))),
+				"Same contract address",
+			)
+		})
+		t.Run("cannot addProposal to change governance with zero address", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToChangeGov", common.Address{}, []byte("memo"), big.NewInt(86400))),
+				"Implementation cannot be zero",
+			)
+		})
+		t.Run("can addProposal to change environment", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeEnv", ToBytes32("key"), EnvTypes.Bytes32, []byte("value"), []byte("memo"), big.NewInt(86400)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+		})
+		t.Run("cannot addProposal to change environment with wrong type", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToChangeEnv", ToBytes32("key"), EnvTypes.Invalid, []byte("value"), []byte("memo"), big.NewInt(86400))),
+				"Invalid type",
+			)
+		})
+		t.Run("can vote approval to add member", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen, nodeLen, lock       *big.Int
+				newMember, newVoter, newReward common.Address
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&lock}, "lockedBalanceOf", govMem1.From))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newMember}, "getMember", memberLen))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newVoter}, "getVoter", memberLen))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&newReward}, "getReward", memberLen))
+			require.Equal(t, common.Big2, memberLen)
+			require.Equal(t, memberLen, nodeLen)
+			require.Equal(t, LOCK_AMOUNT, lock)
+			require.Equal(t, govMem1.From, newMember)
+			require.Equal(t, govMem1.From, newVoter)
+			require.Equal(t, govMem1.From, newReward)
+		})
+		t.Run("cannot vote approval to add member with insufficient staking", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = new(big.Int).Div(LOCK_AMOUNT, common.Big2)
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+
+				memberLen *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.Equal(t, common.Big1, memberLen)
+		})
+		t.Run("can vote disapproval to deny adding member", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, false))
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
+		})
+		t.Run("can vote approval to change member totally", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
+
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.Equal(t, common.Big1, length)
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			govMem2 := getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem2.From))
+			govMem2.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem2, "deposit"))
+			govMem2.Value = nil
+
+			var (
+				preDeployerAvail, preGovmem1Avail *big.Int
+			)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&preDeployerAvail}, "availableBalanceOf", govMem1.From))
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&preGovmem1Avail}, "availableBalanceOf", govMem2.From))
+
+			info = MemberInfo{
+				Staker:     govMem2.From,
+				Voter:      govMem2.From,
+				Reward:     govMem2.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo2"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, govMem1.From, LOCK_AMOUNT, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big3, true))
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", common.Big3, true))
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, big.NewInt(3), length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big3))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen       *big.Int
+				memberAddr      common.Address
+				name, enode, ip []byte
+				port            *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberAddr}, "getMember", common.Big2))
+			getNode := []interface{}{}
+			require.NoError(t, gov.GovImp.Call(callOpts, &getNode, "getNode", common.Big2))
+			require.Equal(t, common.Big2, memberLen)
+			require.Equal(t, govMem2.From, memberAddr)
+			name, enode, ip, port = getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
+			require.Equal(t, node1.name, name)
+			require.Equal(t, node1.enode, enode)
+			require.Equal(t, node1.ip, ip)
+			require.Equal(t, node1.port, port)
+
+			var (
+				nodeIdxFromDeployer, nodeIdxFromGovMem1 *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdxFromDeployer}, "getNodeIdxFromMember", govMem1.From))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdxFromGovMem1}, "getNodeIdxFromMember", govMem2.From))
+			require.True(t, nodeIdxFromDeployer.Sign() == 0)
+			require.Equal(t, common.Big2, nodeIdxFromGovMem1)
+
+			var (
+				postDeployerAvail, postGovmem1Avail *big.Int
+			)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&postDeployerAvail}, "availableBalanceOf", govMem1.From))
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&postGovmem1Avail}, "availableBalanceOf", govMem2.From))
+			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(postDeployerAvail, preDeployerAvail))
+			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(preGovmem1Avail, postGovmem1Avail))
+		})
+		t.Run("can vote approval to change enode only without voting", func(t *testing.T) {
+			gov, voter := deployGovernance(t)
+
+			info := MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      gov.owner.From,
+				Reward:     gov.owner.From,
+				Name:       node1.name,
+				Enode:      node1.enode,
+				Ip:         node1.ip,
+				Port:       node1.port,
+				LockAmount: LOCK_AMOUNT,
+				Memo:       []byte("memo1"),
+				Duration:   big.NewInt(86400),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big2, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen       *big.Int
+				memberAddr      common.Address
+				name, enode, ip []byte
+				port            *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberAddr}, "getMember", common.Big1))
+			getNode := []interface{}{}
+			require.NoError(t, gov.GovImp.Call(callOpts, &getNode, "getNode", common.Big1))
+			require.Equal(t, common.Big1, memberLen)
+			require.Equal(t, gov.owner.From, memberAddr)
+			name, enode, ip, port = getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
 			require.Equal(t, node1.name, name)
 			require.Equal(t, node1.enode, enode)
 			require.Equal(t, node1.ip, ip)
@@ -1853,21 +2105,16 @@ func TestGov(t *testing.T) {
 		t.Run("cannot vote approval to change member with insufficient staking", func(t *testing.T) {
 			gov, voter := deployGovernance(t)
 
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000)), "deposit")
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000))
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -1875,79 +2122,122 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
 			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Rejected, state[1])
-			require.True(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
 		})
 		t.Run("can vote approval to change governance", func(t *testing.T) {
 			gov, voter := deployGovernance(t)
 
-			newGovImp := compiled.Copy(new(Governance)).GovImp
-			newGovImp.Deploy(t, gov.client)
+			var (
+				getGasLimitAndBaseFee []interface{}
+				MBF                   *big.Int
+			)
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &getGasLimitAndBaseFee, "getGasLimitAndBaseFee"))
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&MBF}, "getMaxBaseFee"))
 
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeGov", newGovImp.Address, []byte("memo"), big.NewInt(86400))
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
+			newGovImp, _, err := gov.Deploy(compiled.GovImp.Deploy(gov.backend, gov.owner))
+			require.NoError(t, err)
 
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeGov", newGovImp, []byte("memo"), big.NewInt(86400)))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
 			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
-			imp := gov.Gov.Call1(t, "implementation").(common.Address)
-			require.Equal(t, newGovImp.Address, imp)
+			var imp common.Address
+			require.NoError(t, gov.Gov.Call(callOpts, &[]interface{}{&imp}, "implementation"))
+			require.Equal(t, newGovImp, imp)
+
+			var (
+				newGetGasLimitAndBaseFee []interface{}
+				NEW_MBF                  *big.Int
+			)
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &newGetGasLimitAndBaseFee, "getGasLimitAndBaseFee"))
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&NEW_MBF}, "getMaxBaseFee"))
+			require.Equal(t, getGasLimitAndBaseFee[0], newGetGasLimitAndBaseFee[0])
+			require.Equal(t, getGasLimitAndBaseFee[1], newGetGasLimitAndBaseFee[1])
+			require.Equal(t, getGasLimitAndBaseFee[2], newGetGasLimitAndBaseFee[2])
+			require.Equal(t, MBF, NEW_MBF)
 		})
 		t.Run("can vote approval to change environment", func(t *testing.T) {
 			gov, voter := deployGovernance(t)
-
-			blocksPer := gov.EnvStorage.Call1(t, "getBlocksPer").(*big.Int)
+			var (
+				blocksPer *big.Int
+			)
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&blocksPer}, "getBlocksPer"))
 			require.NotEqual(t, big.NewInt(100), blocksPer)
 
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeEnv",
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeEnv",
 				crypto.Keccak256Hash([]byte("blocksPer")),
 				EnvTypes.Uint,
 				hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 				[]byte("memo"),
 				big.NewInt(86400),
-			)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
-			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
 
-			blocksPer = gov.EnvStorage.Call1(t, "getBlocksPer").(*big.Int)
+			var (
+				length      *big.Int
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+			require.Equal(t, common.Big1, length)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&blocksPer}, "getBlocksPer"))
 			require.Equal(t, big.NewInt(100), blocksPer)
 		})
 		t.Run("cannot vote for a ballot already done", func(t *testing.T) {
 			gov, voter := deployGovernance(t)
 
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000)), "deposit")
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem1.From))
+			govMem1.Value = new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000))
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -1955,31 +2245,26 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "vote", common.Big2, true),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "vote", common.Big2, true)),
 				"Expired",
 			)
 		})
 		t.Run("cannot vote for a ballot already staker done", func(t *testing.T) {
 			gov, voter := deployGovernance(t)
 
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000)), "deposit")
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000))
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -1987,31 +2272,26 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big2, true)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "vote", common.Big2, true),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big2, true))
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "vote", common.Big2, true)),
 				"Expired",
 			)
 		})
 		t.Run("cannot vote for a ballot already voter done", func(t *testing.T) {
 			gov, voter := deployGovernance(t)
 
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000)), "deposit")
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = new(big.Int).Sub(LOCK_AMOUNT, big.NewInt(1000000000))
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -2019,61 +2299,58 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo1"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			gov.Gov.ExecuteOk(t, voter, "vote", common.Big2, true)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "vote", common.Big2, true),
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeMember", info, gov.owner.From, common.Big0, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", common.Big2, true))
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "vote", common.Big2, true)),
 				"Expired",
 			)
 		})
 		t.Run("cannot add proposal during period time", func(t *testing.T) {
 			gov, voter := deployGovernance(t)
 
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeEnv",
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeEnv",
 				crypto.Keccak256Hash([]byte("blocksPer")),
 				EnvTypes.Uint,
 				hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 				[]byte("memo"),
 				big.NewInt(86400),
-			)
-			gov.Gov.ExecuteOk(t, voter, "addProposalToChangeEnv",
+			))
+
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "addProposalToChangeEnv",
 				crypto.Keccak256Hash([]byte("blocksPer")),
 				EnvTypes.Uint,
 				hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 				[]byte("memo"),
 				big.NewInt(86400),
-			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "setProposalTimePeriod", big.NewInt(60))
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter, "addProposalToChangeEnv",
+			))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "setProposalTimePeriod", big.NewInt(60)))
+
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter, "addProposalToChangeEnv",
 					crypto.Keccak256Hash([]byte("blocksPer")),
 					EnvTypes.Uint,
 					hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 					[]byte("memo"),
 					big.NewInt(86400),
-				), "Cannot add proposal too early",
+				)), "Cannot add proposal too early",
 			)
 		})
 	})
 	t.Run("Two Member", func(t *testing.T) {
-		deployGovernance := func(t *testing.T) (gov *Governance, govMem1 common.Address) {
-			gov = DeployGovernance(t)
-			govMem1 = sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
+		deployGovernance := func(t *testing.T) (gov *Governance, govMem1 *bind.TransactOpts) {
+			gov = NewGovernance(t).DeployContracts(t)
+			govMem1 = getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem1, "deposit"))
+			govMem1.Value = nil
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
+			info := MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -2081,9 +2358,13 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			require.Equal(t, common.Big2, gov.Gov.Call1(t, "getMemberLength").(*big.Int))
+			}
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", info))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+
+			var memberLen *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.Equal(t, common.Big2, memberLen)
 
 			gov.nodeInfos = append(gov.nodeInfos, node1)
 			return
@@ -2091,18 +2372,21 @@ func TestGov(t *testing.T) {
 		t.Run("cannot vote with changed voter address", func(t *testing.T) {
 			gov, _ := deployGovernance(t)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeEnv", sim.StringToBytes32("key"), EnvTypes.Bytes32, []byte("value"), []byte("memo"), big.NewInt(86400))
-			ballotIdx := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv", ToBytes32("key"), EnvTypes.Bytes32, []byte("value"), []byte("memo"), big.NewInt(86400)))
+			var (
+				ballotIdx *big.Int
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotIdx}, "ballotLength"))
 
 			node := gov.nodeInfos[0]
-			voter, voter1, user1 := sim.GetOrNewEOA("voter"), sim.GetOrNewEOA("voter1"), sim.GetOrNewEOA("user1")
-			gov.client.SendTransaction(t, gov.client.Owner, voter, towei(1), []byte{})
-			gov.client.SendTransaction(t, gov.client.Owner, voter1, towei(1), []byte{})
+			voter, voter1, user1 := getTxOpt(t, "voter"), getTxOpt(t, "voter1"), getTxOpt(t, "user1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, towei(1), &voter.From))
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, towei(1), &voter1.From))
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      voter,
-				Reward:     user1,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      voter.From,
+				Reward:     user1.From,
 				Name:       node.name,
 				Enode:      node.enode,
 				Ip:         node.ip,
@@ -2110,13 +2394,13 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			gov.Gov.ExecuteOk(t, voter, "vote", ballotIdx, true)
+			}, gov.owner.From, common.Big0, common.Big0))
+			gov.ExpectedOk(gov.GovImp.Transact(voter, "vote", ballotIdx, true))
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-				Staker:     gov.client.Owner,
-				Voter:      voter1,
-				Reward:     user1,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", MemberInfo{
+				Staker:     gov.owner.From,
+				Voter:      voter1.From,
+				Reward:     user1.From,
 				Name:       node.name,
 				Enode:      node.enode,
 				Ip:         node.ip,
@@ -2124,21 +2408,22 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			}, gov.client.Owner, common.Big0, common.Big0)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, voter1, "vote", ballotIdx, true),
+			}, gov.owner.From, common.Big0, common.Big0))
+
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(voter1, "vote", ballotIdx, true)),
 				"already voted",
 			)
 		})
 		t.Run("cannot addProposal to add member self", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
 			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "addProposalToAddMember",
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "addProposalToAddMember",
 					MemberInfo{
-						Staker:     govMem1,
-						Voter:      govMem1,
-						Reward:     govMem1,
+						Staker:     govMem1.From,
+						Voter:      govMem1.From,
+						Reward:     govMem1.From,
 						Name:       node.name,
 						Enode:      node.enode,
 						Ip:         node.ip,
@@ -2147,71 +2432,96 @@ func TestGov(t *testing.T) {
 						Memo:       []byte("memo1"),
 						Duration:   big.NewInt(86400),
 					},
-				), "Already member",
+				)), "Already member",
 			)
 		})
 		t.Run("can addProposal to remove member", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToRemoveMember", govMem1, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToRemoveMember", govMem1.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big2, length)
 		})
 		t.Run("can addProposal to add member where info is the removed member's with same govMem", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToRemoveMember", govMem1, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToRemoveMember", govMem1.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big2, length)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", length, true)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", length, true))
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.Equal(t, length, inVoting)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			state := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
-
-			gov.Gov.ExecuteOk(t, govMem1, "vote", length, true)
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", length, true))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0, inVoting)
 
-			state = gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 		})
 		t.Run("can addProposal to add member where info is the removed member's", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToRemoveMember", govMem1, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToRemoveMember", govMem1.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
 			require.Equal(t, common.Big2, length)
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", length, true)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", length, true))
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.Equal(t, length, inVoting)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			state := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
-
-			gov.Gov.ExecuteOk(t, govMem1, "vote", length, true)
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", length, true))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0, inVoting)
 
-			state = gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 
 			t.Log("member removed")
-			govMem2 := sim.GetOrNewEOA("govMem2")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
+			govMem2 := getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem2.From))
+			govMem2.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem2, "deposit"))
+			govMem2.Value = nil
 
 			node1 := gov.nodeInfos[1]
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem2,
-				Voter:      govMem2,
-				Reward:     govMem2,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
+				Staker:     govMem2.From,
+				Voter:      govMem2.From,
+				Reward:     govMem2.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -2219,35 +2529,31 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
+			}))
 
-			length = gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", length, true)
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", length, true))
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			state = gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, state[1])
-			require.True(t, state[2].(bool))
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 		})
 		t.Run("can vote to add member", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
 
-			govMem2 := sim.GetOrNewEOA("govMem2")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
+			govMem2 := getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem2.From))
+			govMem2.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem2, "deposit"))
+			govMem2.Value = nil
 
-			node2 := nodeInfo{
-				name:  []byte("name2"),
-				enode: hexutil.MustDecode("0x888777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a1"),
-				ip:    []byte("127.0.0.3"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem2,
-				Voter:      govMem2,
-				Reward:     govMem2,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
+				Staker:     govMem2.From,
+				Voter:      govMem2.From,
+				Reward:     govMem2.From,
 				Name:       node2.name,
 				Enode:      node2.enode,
 				Ip:         node2.ip,
@@ -2255,42 +2561,50 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
+			}))
 
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", length, true)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", length, true))
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.Equal(t, length, inVoting)
-			state := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			gov.Gov.ExecuteOk(t, govMem1, "vote", length, true)
-			inVoting2 := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting2.Sign() == 0)
-			state2 := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, state2[1])
-			require.True(t, state2[2].(bool))
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", length, true))
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0, inVoting)
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
 		})
 		t.Run("can vote to deny adding member", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
 
-			govMem2 := sim.GetOrNewEOA("govMem2")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
+			govMem2 := getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem2.From))
+			govMem2.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem2, "deposit"))
+			govMem2.Value = nil
 
-			node2 := nodeInfo{
-				name:  []byte("name2"),
-				enode: hexutil.MustDecode("0x888777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a1"),
-				ip:    []byte("127.0.0.3"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem2,
-				Voter:      govMem2,
-				Reward:     govMem2,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
+				Staker:     govMem2.From,
+				Voter:      govMem2.From,
+				Reward:     govMem2.From,
 				Name:       node2.name,
 				Enode:      node2.enode,
 				Ip:         node2.ip,
@@ -2298,110 +2612,158 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
+			}))
 
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", length, false)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", length, false))
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.Equal(t, length, inVoting)
-			state := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			gov.Gov.ExecuteOk(t, govMem1, "vote", length, false)
-			inVoting2 := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting2.Sign() == 0)
-			state2 := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Rejected, state2[1])
-			require.True(t, state2[2].(bool))
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", length, false))
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0, inVoting)
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
 		})
 		t.Run("can vote to remove first member", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
-			preAvail := gov.Staking.Call1(t, "availableBalanceOf", gov.client.Owner).(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToRemoveMember", gov.client.Owner, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))
 
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", length, true)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var preAvail, postAvail *big.Int
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&preAvail}, "availableBalanceOf", gov.owner.From))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToRemoveMember", gov.owner.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", length, true))
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.Equal(t, length, inVoting)
-			state := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			gov.Gov.ExecuteOk(t, govMem1, "vote", length, true)
-			inVoting2 := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting2.Sign() == 0)
-			state2 := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, state2[1])
-			require.True(t, state2[2].(bool))
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", length, true))
 
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0, inVoting)
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen, nodeLen, nodeIdx, nodeIdx2 *big.Int
+				isMem                                 bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
 			require.Equal(t, common.Big1, memberLen)
-			isMem := gov.Gov.Call1(t, "isMember", gov.client.Owner).(bool)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&isMem}, "isMember", gov.owner.From))
 			require.False(t, isMem)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
 			require.Equal(t, common.Big1, nodeLen)
-			nodeIdx := gov.Gov.Call1(t, "getNodeIdxFromMember", gov.client.Owner).(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdx}, "getNodeIdxFromMember", gov.owner.From))
 			require.True(t, nodeIdx.Sign() == 0)
-			nodeIdx2 := gov.Gov.Call1(t, "getNodeIdxFromMember", govMem1).(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdx2}, "getNodeIdxFromMember", govMem1.From))
 			require.Equal(t, common.Big1, nodeIdx2)
 
-			postAvail := gov.Staking.Call1(t, "availableBalanceOf", gov.client.Owner).(*big.Int)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&postAvail}, "availableBalanceOf", gov.owner.From))
 			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(postAvail, preAvail))
 		})
 		t.Run("can vote to remove last member", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
-			preAvail := gov.Staking.Call1(t, "availableBalanceOf", govMem1).(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToRemoveMember", govMem1, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))
 
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", length, true)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var preAvail, postAvail *big.Int
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&preAvail}, "availableBalanceOf", gov.owner.From))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToRemoveMember", govMem1.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)))
+
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", length, true))
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.Equal(t, length, inVoting)
-			state := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			gov.Gov.ExecuteOk(t, govMem1, "vote", length, true)
-			inVoting2 := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting2.Sign() == 0)
-			state2 := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Accepted, state2[1])
-			require.True(t, state2[2].(bool))
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", length, true))
 
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0, inVoting)
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Accepted, state)
+			require.True(t, isFinalized)
+
+			var (
+				memberLen, nodeLen, nodeIdx, nodeIdx2 *big.Int
+				isMem                                 bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
 			require.Equal(t, common.Big1, memberLen)
-			isMem := gov.Gov.Call1(t, "isMember", govMem1).(bool)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&isMem}, "isMember", govMem1.From))
 			require.False(t, isMem)
-			nodeLen := gov.Gov.Call1(t, "getNodeLength").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeLen}, "getNodeLength"))
 			require.Equal(t, common.Big1, nodeLen)
-			nodeIdx := gov.Gov.Call1(t, "getNodeIdxFromMember", govMem1).(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdx}, "getNodeIdxFromMember", govMem1.From))
 			require.True(t, nodeIdx.Sign() == 0)
-			nodeIdx2 := gov.Gov.Call1(t, "getNodeIdxFromMember", gov.client.Owner).(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdx2}, "getNodeIdxFromMember", gov.owner.From))
 			require.Equal(t, common.Big1, nodeIdx2)
 
-			postAvail := gov.Staking.Call1(t, "availableBalanceOf", govMem1).(*big.Int)
+			require.NoError(t, gov.StakingImp.Call(callOpts, &[]interface{}{&postAvail}, "availableBalanceOf", govMem1.From))
 			require.Equal(t, LOCK_AMOUNT, new(big.Int).Sub(postAvail, preAvail))
 		})
 		t.Run("cannot vote simultaneously", func(t *testing.T) {
 			gov, _ := deployGovernance(t)
 
-			govMem2 := sim.GetOrNewEOA("govMem2")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
+			govMem2 := getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem2.From))
+			govMem2.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem2, "deposit"))
+			govMem2.Value = nil
 
-			node2 := nodeInfo{
-				name:  []byte("name2"),
-				enode: hexutil.MustDecode("0x888777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a1"),
-				ip:    []byte("127.0.0.3"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem2,
-				Voter:      govMem2,
-				Reward:     govMem2,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
+				Staker:     govMem2.From,
+				Voter:      govMem2.From,
+				Reward:     govMem2.From,
 				Name:       node2.name,
 				Enode:      node2.enode,
 				Ip:         node2.ip,
@@ -2409,12 +2771,13 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
+			}))
 
-			govMem3 := sim.GetOrNewEOA("govMem3")
-			_, receipt = gov.client.SendTransaction(t, gov.client.Owner, govMem3, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem3, LOCK_AMOUNT, "deposit")
+			govMem3 := getTxOpt(t, "govMem3")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem3.From))
+			govMem3.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem3, "deposit"))
+			govMem3.Value = nil
 
 			node3 := nodeInfo{
 				name:  []byte("name3"),
@@ -2423,10 +2786,10 @@ func TestGov(t *testing.T) {
 				port:  big.NewInt(8542),
 			}
 
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem3,
-				Voter:      govMem3,
-				Reward:     govMem3,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
+				Staker:     govMem3.From,
+				Voter:      govMem3.From,
+				Reward:     govMem3.From,
 				Name:       node3.name,
 				Enode:      node3.enode,
 				Ip:         node3.ip,
@@ -2434,36 +2797,33 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
+			}))
 
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", new(big.Int).Sub(length, common.Big1), true)
-			voting := gov.Gov.Call1(t, "getBallotInVoting")
-			require.Equal(t, new(big.Int).Sub(length, common.Big1), voting)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "vote", length, true),
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", new(big.Int).Sub(length, common.Big1), true))
+			var inVoting *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "vote", length, true)),
 				"Now in voting with different ballot",
 			)
 		})
 		t.Run("vote is ended when the sum of voting power is max", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
 
-			govMem2 := sim.GetOrNewEOA("govMem2")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
+			govMem2 := getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Mul(LOCK_AMOUNT, common.Big2), &govMem2.From))
+			govMem2.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(govMem2, "deposit"))
+			govMem2.Value = nil
 
-			node2 := nodeInfo{
-				name:  []byte("name2"),
-				enode: hexutil.MustDecode("0x888777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a1"),
-				ip:    []byte("127.0.0.3"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem2,
-				Voter:      govMem2,
-				Reward:     govMem2,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
+				Staker:     govMem2.From,
+				Voter:      govMem2.From,
+				Reward:     govMem2.From,
 				Name:       node2.name,
 				Enode:      node2.enode,
 				Ip:         node2.ip,
@@ -2471,100 +2831,137 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
+			}))
 
-			length := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", length, true)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "ballotLength"))
+			require.Equal(t, common.Big2, length)
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", length, true))
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.Equal(t, length, inVoting)
-			state := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			gov.Gov.ExecuteOk(t, govMem1, "vote", length, false)
-			inVoting2 := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.True(t, inVoting2.Sign() == 0)
-			state2 := gov.BallotStorage.Call(t, "getBallotState", length)
-			require.Equal(t, BallotStates.Rejected, state2[1])
-			require.True(t, state2[2].(bool))
+			gov.ExpectedOk(gov.GovImp.Transact(govMem1, "vote", length, false))
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.True(t, inVoting.Sign() == 0, inVoting)
+			getBallotState = []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.Rejected, state)
+			require.True(t, isFinalized)
 		})
 		t.Run("cannot vote approval when the voting is ended", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
 
 			delay_time := big.NewInt(86400)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeEnv",
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv",
 				crypto.Keccak256Hash([]byte("blocksPer")),
 				EnvTypes.Uint,
 				hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 				[]byte("memo"),
 				delay_time,
-			)
-			ballotLen := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", ballotLen, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
+			))
+			var ballotLen *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotLen}, "ballotLength"))
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotLen, true))
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
 			require.Equal(t, common.Big2, length)
 
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.Equal(t, ballotLen, inVoting)
-			state := gov.BallotStorage.Call(t, "getBallotState", ballotLen)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.Equal(t, length, inVoting)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			gov.client.AdjustTime(t, time.Second*time.Duration(new(big.Int).Mul(delay_time, big.NewInt(2000)).Int64()))
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "vote", ballotLen, false),
+			gov.backend.AdjustTime(time.Second * time.Duration(new(big.Int).Mul(delay_time, big.NewInt(2000)).Int64()))
+			gov.backend.Commit()
+
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "vote", ballotLen, false)),
 				"Expired",
 			)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "finalizeEndedVote")
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "finalizeEndedVote"))
 
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
 		})
 		t.Run("Non member cannot end voting", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
 
 			delay_time := big.NewInt(86400)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToChangeEnv",
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToChangeEnv",
 				crypto.Keccak256Hash([]byte("blocksPer")),
 				EnvTypes.Uint,
 				hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000064"), // 32bytes, 100
 				[]byte("memo"),
 				delay_time,
-			)
-			ballotLen := gov.Gov.Call1(t, "ballotLength").(*big.Int)
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", ballotLen, true)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
+			))
+			var ballotLen *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotLen}, "ballotLength"))
+
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotLen, true))
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
 			require.Equal(t, common.Big2, length)
 
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
-			require.Equal(t, ballotLen, inVoting)
-			state := gov.BallotStorage.Call(t, "getBallotState", ballotLen)
-			require.Equal(t, BallotStates.InProgress, state[1])
-			require.False(t, state[2].(bool))
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+			require.Equal(t, length, inVoting)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", length))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.Equal(t, BallotStates.InProgress, state)
+			require.False(t, isFinalized)
 
-			gov.client.AdjustTime(t, time.Second*time.Duration(new(big.Int).Mul(delay_time, big.NewInt(2000)).Int64()))
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "vote", ballotLen, false),
+			gov.backend.AdjustTime(time.Second * time.Duration(new(big.Int).Mul(delay_time, big.NewInt(2000)).Int64()))
+			gov.backend.Commit()
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "vote", ballotLen, false)),
 				"Expired",
 			)
-			govMem3 := sim.GetOrNewEOA("getMem3")
-			gov.client.SendTransaction(t, gov.client.Owner, govMem3, towei(1), []byte{})
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem3, "finalizeEndedVote"),
+			govMem3 := getTxOpt(t, "getMem3")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, towei(1), &govMem3.From))
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem3, "finalizeEndedVote")),
 				"No Permission",
 			)
 
-			inVoting = gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.Equal(t, ballotLen, inVoting)
 		})
 		t.Run("reject proposal without voting about changing voter address if voter is already registered", func(t *testing.T) {
 			gov, govMem1 := deployGovernance(t)
 			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, gov.client.Owner, "addProposalToChangeMember", MemberInfo{
-					Staker:     gov.client.Owner,
-					Voter:      govMem1,
-					Reward:     gov.client.Owner,
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "addProposalToChangeMember", MemberInfo{
+					Staker:     gov.owner.From,
+					Voter:      govMem1.From,
+					Reward:     gov.owner.From,
 					Name:       node.name,
 					Enode:      node.enode,
 					Ip:         node.ip,
@@ -2572,28 +2969,49 @@ func TestGov(t *testing.T) {
 					LockAmount: LOCK_AMOUNT,
 					Memo:       []byte("memo1"),
 					Duration:   big.NewInt(86400),
-				}, gov.client.Owner, common.Big0, common.Big0),
+				}, gov.owner.From, common.Big0, common.Big0)),
 				"Already a member",
 			)
-			length := gov.Gov.Call1(t, "voteLength").(*big.Int)
+			var length *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
 			require.Equal(t, common.Big1, length)
-			inVoting := gov.Gov.Call1(t, "getBallotInVoting").(*big.Int)
+
+			var (
+				inVoting    *big.Int
+				state       *big.Int
+				isFinalized bool
+			)
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 			require.True(t, inVoting.Sign() == 0)
-			state := gov.BallotStorage.Call(t, "getBallotState", common.Big2)
-			require.True(t, state[1].(*big.Int).Sign() == 0)
-			require.False(t, state[2].(bool))
 
-			memberLen := gov.Gov.Call1(t, "getMemberLength").(*big.Int)
+			getBallotState := []interface{}{}
+			require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big2))
+			state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+			require.True(t, state.Sign() == 0)
+			require.False(t, isFinalized)
+
+			var (
+				memberLen                         *big.Int
+				memberAddr, voterAddr, rewardAddr common.Address
+			)
+
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
 			require.Equal(t, common.Big2, memberLen)
-			memberAddr := gov.Gov.Call1(t, "getMember", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, memberAddr)
-			voterAddr := gov.Gov.Call1(t, "getVoter", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, voterAddr)
-			rewardAddr := gov.Gov.Call1(t, "getReward", common.Big1).(common.Address)
-			require.Equal(t, gov.client.Owner, rewardAddr)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberAddr}, "getMember", common.Big1))
+			require.Equal(t, gov.owner.From, memberAddr)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&voterAddr}, "getVoter", common.Big1))
+			require.Equal(t, gov.owner.From, voterAddr)
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&rewardAddr}, "getReward", common.Big1))
+			require.Equal(t, gov.owner.From, rewardAddr)
 
-			getNode := gov.Gov.Call(t, "getNode", common.Big1)
-			name, enode, ip, port := getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
+			var (
+				name, enode, ip []byte
+				port            *big.Int
+			)
+			getNode := []interface{}{}
+			require.NoError(t, gov.GovImp.Call(callOpts, &getNode, "getNode", common.Big1))
+			name, enode, ip, port = getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
 			require.Equal(t, node.name, name)
 			require.Equal(t, node.enode, enode)
 			require.Equal(t, node.ip, ip)
@@ -2602,23 +3020,17 @@ func TestGov(t *testing.T) {
 	})
 	t.Run("Others", func(t *testing.T) {
 		t.Run("cannot init", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			govMem1 := sim.GetOrNewEOA("govMem1")
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem1, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem1, LOCK_AMOUNT, "deposit")
+			gov := NewGovernance(t).DeployContracts(t)
+			govMem1 := getTxOpt(t, "govMem1")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem1,
-				Voter:      govMem1,
-				Reward:     govMem1,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
+				Staker:     govMem1.From,
+				Voter:      govMem1.From,
+				Reward:     govMem1.From,
 				Name:       node1.name,
 				Enode:      node1.enode,
 				Ip:         node1.ip,
@@ -2626,28 +3038,31 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "vote", common.Big1, true)
-			require.Equal(t, common.Big2, gov.Gov.Call1(t, "getMemberLength").(*big.Int))
+			}))
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+
+			var memberLen *big.Int
+			require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&memberLen}, "getMemberLength"))
+			require.Equal(t, common.Big2, memberLen)
 
 			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "init", gov.Registry.Address, LOCK_AMOUNT, node.name, node.enode, node.ip, node.port),
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "init", gov.registry, LOCK_AMOUNT, node.name, node.enode, node.ip, node.port)),
 				"Initializable: contract is already initialized",
 			)
 		})
 		t.Run("cannot addProposal", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			govMem1, govMem2 := sim.GetOrNewEOA("govMem1"), sim.GetOrNewEOA("govMem2")
-			gov.client.SendTransaction(t, gov.client.Owner, govMem1, towei(1), []byte{})
-			gov.client.SendTransaction(t, gov.client.Owner, govMem2, towei(1), []byte{})
+			gov := NewGovernance(t).DeployContracts(t)
+			govMem1, govMem2 := getTxOpt(t, "govMem1"), getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, towei(1), &govMem1.From))
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, towei(1), &govMem2.From))
 
 			node := gov.nodeInfos[0]
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "addProposalToAddMember", MemberInfo{
-					Staker:     govMem1,
-					Voter:      govMem1,
-					Reward:     govMem1,
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "addProposalToAddMember", MemberInfo{
+					Staker:     govMem1.From,
+					Voter:      govMem1.From,
+					Reward:     govMem1.From,
 					Name:       node.name,
 					Enode:      node.enode,
 					Ip:         node.ip,
@@ -2655,29 +3070,24 @@ func TestGov(t *testing.T) {
 					LockAmount: LOCK_AMOUNT,
 					Memo:       []byte("memo"),
 					Duration:   big.NewInt(86400),
-				}),
+				})),
 				"No Permission",
 			)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "addProposalToRemoveMember", govMem1, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int)),
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "addProposalToRemoveMember", govMem1.From, LOCK_AMOUNT, []byte("memo1"), big.NewInt(86400), LOCK_AMOUNT, new(big.Int))),
 				"No Permission",
 			)
 
-			_, receipt := gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status)
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem1.From))
+			govMem1.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
+			govMem1.Value = nil
 
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "addProposalToChangeMember", MemberInfo{
-					Staker:     govMem2,
-					Voter:      govMem2,
-					Reward:     govMem2,
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "addProposalToChangeMember", MemberInfo{
+					Staker:     govMem2.From,
+					Voter:      govMem2.From,
+					Reward:     govMem2.From,
 					Name:       node1.name,
 					Enode:      node1.enode,
 					Ip:         node1.ip,
@@ -2685,36 +3095,31 @@ func TestGov(t *testing.T) {
 					LockAmount: LOCK_AMOUNT,
 					Memo:       []byte("memo"),
 					Duration:   big.NewInt(86400),
-				}, govMem1, common.Big0, common.Big0),
+				}, govMem1.From, common.Big0, common.Big0)),
 				"No Permission",
 			)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "addProposalToChangeGov", govMem1, []byte("memo"), big.NewInt(86400)),
-				"No Permission", // TODO check
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "addProposalToChangeGov", govMem1.From, []byte("memo"), big.NewInt(86400))),
+				"No Permission",
 			)
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "addProposalToChangeEnv", sim.StringToBytes32("key"), EnvTypes.Bytes32, []byte("value"), []byte("memo"), big.NewInt(86400)),
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "addProposalToChangeEnv", ToBytes32("key"), EnvTypes.Bytes32, []byte("value"), []byte("memo"), big.NewInt(86400))),
 				"No Permission",
 			)
 		})
 		t.Run("cannot vote", func(t *testing.T) {
-			gov := DeployGovernance(t)
-			govMem1, govMem2 := sim.GetOrNewEOA("govMem1"), sim.GetOrNewEOA("govMem2")
-			gov.client.SendTransaction(t, gov.client.Owner, govMem1, towei(1), []byte{})
-			gov.client.SendTransaction(t, gov.client.Owner, govMem2, new(big.Int).Add(LOCK_AMOUNT, towei(1)), []byte{})
-			gov.Staking.ExecuteWithETHOk(t, govMem2, LOCK_AMOUNT, "deposit")
+			gov := NewGovernance(t).DeployContracts(t)
+			govMem1, govMem2 := getTxOpt(t, "govMem1"), getTxOpt(t, "govMem2")
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, towei(1), &govMem1.From))
+			gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, new(big.Int).Add(LOCK_AMOUNT, towei(1)), &govMem2.From))
+			govMem2.Value = LOCK_AMOUNT
+			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem2"), "deposit"))
+			govMem2.Value = nil
 
-			node2 := nodeInfo{
-				name:  []byte("name2"),
-				enode: hexutil.MustDecode("0x888777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a1"),
-				ip:    []byte("127.0.0.3"),
-				port:  big.NewInt(8542),
-			}
-
-			gov.Gov.ExecuteOk(t, gov.client.Owner, "addProposalToAddMember", MemberInfo{
-				Staker:     govMem2,
-				Voter:      govMem2,
-				Reward:     govMem2,
+			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
+				Staker:     govMem2.From,
+				Voter:      govMem2.From,
+				Reward:     govMem2.From,
 				Name:       node2.name,
 				Enode:      node2.enode,
 				Ip:         node2.ip,
@@ -2722,9 +3127,9 @@ func TestGov(t *testing.T) {
 				LockAmount: LOCK_AMOUNT,
 				Memo:       []byte("memo"),
 				Duration:   big.NewInt(86400),
-			})
-			sim.ExpectedRevert(t,
-				gov.Gov.ExecuteFail(t, govMem1, "vote", common.Big1, true),
+			}))
+			ExpectedRevert(t,
+				gov.ExpectedFail(gov.GovImp.Transact(govMem1, "vote", common.Big1, true)),
 				"No Permission",
 			)
 		})
