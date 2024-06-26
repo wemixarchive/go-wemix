@@ -1,7 +1,7 @@
 #!/bin/bash
 
-bin/gwemix-local.sh init "" conf/config.json
-bin/gwemix-local.sh start
+bin/gwemix.sh init "" conf/config.json
+bin/gwemix.sh start
 
 wait_for_port() {
     local port="8588"
