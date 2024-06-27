@@ -98,8 +98,14 @@ ENV NODE_NUM=${NODE_NUM}
 RUN chmod a+x bin/set-nodekey.sh && \
     ./bin/set-nodekey.sh -a ${NODE_NUM}
 
+# Clean up unnecessary files
+RUN rm -rf nodekey
+
+# Make the binary executable
+RUN chmod a+x bin/gwemix
+
 # Download genesis.json
-RUN bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out genesis.json
+CMD bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out genesis.json
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \
@@ -114,7 +120,7 @@ RUN apt-get remove -y \
 EXPOSE 8588 8589 8598
 
 # Set the entrypoint
-ENTRYPOINT ["bin/gwemix", \
+ENTRYPOINT ["./bin/gwemix", \
     "--metrics", "--nodiscover", "--mine", \
     "--http", "--http.addr","0.0.0.0", "--http.port", "8588", \
     "--ws", "--ws.addr", "0.0.0.0", "--ws.port", "8598", \

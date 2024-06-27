@@ -100,9 +100,12 @@ ENV NODE_NUM=${NODE_NUM}
 RUN chmod a+x bin/set-nodekey.sh && \
     ./bin/set-nodekey.sh -a ${NODE_NUM}
 
+# Clean up unnecessary files
+RUN rm -rf nodekey
+
 # Run init-boot.sh
-RUN chmod a+x bin/init-boot.sh
-RUN bin/init-boot.sh
+RUN chmod a+x bin/init-boot.sh && \
+    ./bin/init-boot.sh
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \
@@ -115,5 +118,5 @@ RUN apt-get remove -y \
 # Expose necessary ports
 EXPOSE 8588 8589 8598
 
-# Set the entrypoint
-ENTRYPOINT ["/usr/local/wemix"]
+# Define the entrypoint
+ENTRYPOINT ["bash"]
