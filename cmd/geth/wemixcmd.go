@@ -293,6 +293,7 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 		return nil, fmt.Errorf("at least one account and node are required")
 	}
 
+	bootnodeExists := false
 	for _, m := range config.Members {
 		if !strings.HasPrefix(m.Id, "0x") {
 			m.Id = "0x" + m.Id
@@ -302,6 +303,12 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 		} else if len(bytes) != 64 {
 			return nil, fmt.Errorf("invalid node id: %s, error: size error", m.Id)
 		}
+		if m.Bootnode {
+			bootnodeExists = true
+		}
+	}
+	if !bootnodeExists {
+		return nil, errors.New("no bootnode found")
 	}
 
 	return &config, nil
@@ -443,9 +450,6 @@ func genGenesis(ctx *cli.Context) error {
 			}
 			break
 		}
-	}
-	if bootacct == "" || bootnode == "" {
-		return errors.New("no bootnode found")
 	}
 
 	genesis["coinbase"] = bootacct
