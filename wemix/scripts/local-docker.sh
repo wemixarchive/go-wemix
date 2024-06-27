@@ -30,13 +30,17 @@ if [ -z "$ACCOUNT_NUM" ] || [ -z "$BRANCH" ] || [ -z "$REPO" ]; then
   exit 1
 fi
 
-# gen-config.sh 실행
-chmod +x gen-config.sh
-./gen-config.sh -a "$ACCOUNT_NUM" -f config.json
+# key-gen.sh 실행
+chmod +x key-gen.sh
+./key-gen.sh -a "$ACCOUNT_NUM"
 
-# BRANCH와 REPO 정보를 입력으로 받아 gen-docker-compose.sh 실행
-chmod +x gen-docker-compose.sh
-./gen-docker-compose.sh -a "$ACCOUNT_NUM" -b "$BRANCH" -r "$REPO"
+# config-gen.sh 실행
+chmod +x config-gen.sh
+./config-gen.sh -a "$ACCOUNT_NUM" -f config.json
+
+# BRANCH와 REPO 정보를 입력으로 받아 docker-compose-gen.sh 실행
+chmod +x docker-compose-gen.sh
+./docker-compose-gen.sh -a "$ACCOUNT_NUM" -b "$BRANCH" -r "$REPO"
 
 # docker-compose.yml 파일을 이용해 docker-compose build 및 up 실행
 docker compose -f docker-compose.yml build --no-cache

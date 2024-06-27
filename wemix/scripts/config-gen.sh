@@ -53,26 +53,13 @@ ENV_JSON='{
 json_content=$(echo "$json_content" | jq --argjson env "$ENV_JSON" \
   '.env = $env| .extraData = "chain for local test"')
 
-mkdir keystore
-mkdir nodekey
-
+# JSON 구성 파일 생성
 for ((i = 1; i <= ACCOUNT_NUM; i++)); do
-  if [ -f "keystore/account$i" ]; then
-    rm keystore/account$i
-  fi
-  yes "test" | head -n 2 | gwemix wemix new-account --out keystore/account$i
-  
-  if [ -f "nodekey/nodekey$i" ]; then
-    rm nodekey/nodekey$i
-  fi
-  gwemix wemix new-nodekey --out nodekey/nodekey$i
-
   ids=$(gwemix wemix nodeid nodekey/nodekey$i)
   idv5=$(echo "$ids" | awk '/idv5:/ {print $2}')
   idv5="0x$idv5"
   ip="172.16.237.$((i+10))"
-
-  # account1 파일에서 address 필드 값 추출
+  
   address=$(jq -r '.address' "keystore/account$i")
   address="0x$address"
   name="localtest$i"
