@@ -11,26 +11,26 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
-	"github.com/ethereum/go-ethereum/wemix/metclient"
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 // collect mining peers states
 func (ma *wemixAdmin) collectMinerStates(height *big.Int) []*wemixapi.WemixMinerStatus {
-	var (
-		ctx context.Context
-		gov *metclient.RemoteContract
-		err error
-	)
-	ctx = context.Background()
-	if _, gov, _, _, err = ma.getRegGovEnvContracts(ctx, height); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	contracts, err := ma.getRegGovEnvContracts(ctx, height)
+	if err != nil {
 		return nil
 	}
-	e, err := getCoinbaseEnodeCache(ctx, height, gov)
+
+	e, err := getCoinbaseEnodeCache(ctx, height, contracts.GovImp)
 	if err != nil {
 		return nil
 	}
@@ -47,40 +47,46 @@ func (ma *wemixAdmin) collectMinerStates(height *big.Int) []*wemixapi.WemixMiner
 }
 
 // get governance nodes at modifiedBlock at height
-func getCoinbaseEnodeCache(ctx context.Context, height *big.Int, gov *metclient.RemoteContract) (*coinbaseEnodeEntry, error) {
-	var modifiedBlock *big.Int
-	if err := metclient.CallContract(ctx, gov, "modifiedBlock", nil, &modifiedBlock, height); err != nil {
+func getCoinbaseEnodeCache(ctx context.Context, height *big.Int, gov *gov.GovImp) (*coinbaseEnodeEntry, error) {
+	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
+	modifiedBlock, err := gov.ModifiedBlock(opts)
+	if err != nil {
 		return nil, err
-	} else if modifiedBlock.Int64() == 0 {
+	}
+	if modifiedBlock.Sign() == 0 {
 		return nil, wemixminer.ErrNotInitialized
 	}
+
 	// if found in cache, use it
 	if e, ok := coinbaseEnodeCache.Load(modifiedBlock.Int64()); ok {
 		return e.(*coinbaseEnodeEntry), nil
 	}
 	// otherwise, load it from the governance
 	var (
-		count, port     *big.Int
-		addr            common.Address
-		name, enode, ip []byte
-		output          = []interface{}{&name, &enode, &ip, &port}
-		e               = &coinbaseEnodeEntry{
+		count       *big.Int
+		addr        common.Address
+		name, enode []byte
+		e           = &coinbaseEnodeEntry{
 			modifiedBlock:  modifiedBlock,
 			coinbase2enode: map[string][]byte{},
 			enode2index:    map[string]int{},
 		}
 	)
-	if err := metclient.CallContract(ctx, gov, "getNodeLength", nil, &count, height); err != nil {
+	if count, err = gov.GetNodeLength(opts); err != nil {
 		return nil, err
 	}
 	for i := int64(1); i <= count.Int64(); i++ {
 		ix := big.NewInt(i)
-		if err := metclient.CallContract(ctx, gov, "getReward", &ix, &addr, height); err != nil {
+		if addr, err = gov.GetReward(opts, ix); err != nil {
 			return nil, err
 		}
-		if err := metclient.CallContract(ctx, gov, "getNode", &ix, &output, height); err != nil {
+
+		if output, err := gov.GetNode(opts, ix); err != nil {
 			return nil, err
+		} else {
+			name, enode = output.Name, output.Enode
 		}
+
 		idv4, _ := toIdv4(hex.EncodeToString(enode))
 		e.nodes = append(e.nodes, &wemixNode{
 			Name:  string(name),
@@ -96,7 +102,7 @@ func getCoinbaseEnodeCache(ctx context.Context, height *big.Int, gov *metclient.
 }
 
 // returns coinbase's enode if exists in governance at given height - 1
-func coinbaseExists(ctx context.Context, height *big.Int, gov *metclient.RemoteContract, coinbase *common.Address) ([]byte, error) {
+func coinbaseExists(ctx context.Context, height *big.Int, gov *gov.GovImp, coinbase *common.Address) ([]byte, error) {
 	e, err := getCoinbaseEnodeCache(ctx, new(big.Int).Sub(height, common.Big1), gov)
 	if err != nil {
 		return nil, err
@@ -109,7 +115,7 @@ func coinbaseExists(ctx context.Context, height *big.Int, gov *metclient.RemoteC
 }
 
 // returns true if enode exists in governance at given height-1
-func enodeExists(ctx context.Context, height *big.Int, gov *metclient.RemoteContract, enode []byte) (common.Address, error) {
+func enodeExists(ctx context.Context, height *big.Int, gov *gov.GovImp, enode []byte) (common.Address, error) {
 	e, err := getCoinbaseEnodeCache(ctx, new(big.Int).Sub(height, common.Big1), gov)
 	if err != nil {
 		return common.Address{}, err
@@ -124,9 +130,9 @@ func enodeExists(ctx context.Context, height *big.Int, gov *metclient.RemoteCont
 // returns wemix nodes at given height
 func getNodesAt(height *big.Int) ([]*wemixNode, error) {
 	ctx := context.Background()
-	if _, gov, _, _, err := admin.getRegGovEnvContracts(ctx, height); err != nil {
+	if contracts, err := admin.getRegGovEnvContracts(ctx, height); err != nil {
 		return nil, wemixminer.ErrNotInitialized
-	} else if e, err := getCoinbaseEnodeCache(ctx, height, gov); err != nil {
+	} else if e, err := getCoinbaseEnodeCache(ctx, height, contracts.GovImp); err != nil {
 		return nil, err
 	} else {
 		return e.nodes, nil
@@ -163,7 +169,7 @@ func getBlockMiner(ctx context.Context, cli *ethclient.Client, entry *coinbaseEn
 // It's reset when governance gets updated, i.e. search doesn't go back
 // beyond modifiedBlock + 1.
 // Not enforced if member count <= 2.
-func (ma *wemixAdmin) verifyMinerLimit(ctx context.Context, height *big.Int, gov *metclient.RemoteContract, coinbase *common.Address, enode []byte) (bool, error) {
+func (ma *wemixAdmin) verifyMinerLimit(ctx context.Context, height *big.Int, gov *gov.GovImp, coinbase *common.Address, enode []byte) (bool, error) {
 	// parent block number
 	prev := new(big.Int).Sub(height, common.Big1)
 	e, err := getCoinbaseEnodeCache(ctx, prev, gov)
@@ -203,34 +209,37 @@ func (ma *wemixAdmin) verifyMinerLimit(ctx context.Context, height *big.Int, gov
 
 // check if self is eligible to mine height block at height-1
 func (ma *wemixAdmin) isEligibleMiner(height *big.Int) (bool, error) {
-	var (
-		ctx   context.Context
-		enode []byte
-		gov   *metclient.RemoteContract
-		err   error
-	)
-	ctx = context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	prev := new(big.Int).Sub(height, common.Big1)
-	enode, err = hex.DecodeString(ma.self.Enode)
+	enode, err := hex.DecodeString(ma.self.Enode)
 	if err != nil {
 		return false, wemixminer.ErrNotInitialized
 	}
-	if _, gov, _, _, err = ma.getRegGovEnvContracts(ctx, prev); err != nil {
+	var gov *gov.GovImp
+	if contracts, err := ma.getRegGovEnvContracts(ctx, prev); err != nil {
 		return false, wemixminer.ErrNotInitialized
+	} else {
+		gov = contracts.GovImp
 	}
+
 	e, err := getCoinbaseEnodeCache(ctx, prev, gov)
 	if err != nil {
 		return false, err
 	}
+
 	// if count <= 2, not enforced
 	if len(e.nodes) <= 2 {
 		return true, nil
 	}
+
 	// the enode should not appear within the last (member count / 2) blocks
 	limit := len(e.nodes) / 2
 	if limit > int(height.Int64()-e.modifiedBlock.Int64()-1) {
 		limit = int(height.Int64() - e.modifiedBlock.Int64() - 1)
 	}
+
 	for h := new(big.Int).Set(prev); limit > 0; h, limit = h.Sub(h, common.Big1), limit-1 {
 		blockMinerEnode, err := getBlockMiner(ctx, ma.cli, e, h)
 		if err != nil {
@@ -247,19 +256,21 @@ func (ma *wemixAdmin) isEligibleMiner(height *big.Int) (bool, error) {
 // beyond modifiedBlock + 1.
 // Not enforced if member count <= 2.
 func (ma *wemixAdmin) nextMinerCandidates(height *big.Int) ([]*wemixNode, error) {
-	var (
-		ctx context.Context
-		gov *metclient.RemoteContract
-		err error
-	)
-	ctx = context.Background()
-	if _, gov, _, _, err = ma.getRegGovEnvContracts(ctx, height); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var gov *gov.GovImp
+	if contracts, err := ma.getRegGovEnvContracts(ctx, height); err != nil {
 		return nil, wemixminer.ErrNotInitialized
+	} else {
+		gov = contracts.GovImp
 	}
+
 	e, err := getCoinbaseEnodeCache(ctx, height, gov)
 	if err != nil {
 		return nil, err
 	}
+
 	m := map[string]float64{}
 	dix := (int(height.Int64()) + 1) % len(e.nodes) // default miner = height % member count
 	for i, n := range e.nodes {

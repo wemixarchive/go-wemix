@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
@@ -70,6 +71,20 @@ type SimulatedBackend struct {
 	events *filters.EventSystem // Event system for filtering log events live
 
 	config *params.ChainConfig
+}
+
+func NewSimulatedBackendWithEthereum(e *eth.Ethereum) *SimulatedBackend {
+	database := e.ChainDb()
+	blockchain := e.BlockChain()
+
+	backend := &SimulatedBackend{
+		database:   database,
+		blockchain: blockchain,
+		config:     blockchain.Config(),
+		events:     filters.NewEventSystem(&filterBackend{database, blockchain}, false),
+	}
+	backend.rollback(blockchain.CurrentBlock())
+	return backend
 }
 
 // NewSimulatedBackendWithDatabase creates a new binding backend based on the given database
