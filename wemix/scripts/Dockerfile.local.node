@@ -37,7 +37,7 @@ ENV BRANCH=${BRANCH}
 RUN git clone -b ${BRANCH} ${REPO} /go-wemix && \
     cd /go-wemix && \
     go mod download && \
-    make
+    USE_ROCKSDB=NO make
 
 # Clean up unnecessary packages and files after building
 RUN apt-get remove -y \

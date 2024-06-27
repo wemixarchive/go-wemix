@@ -37,7 +37,7 @@ ENV BRANCH=${BRANCH}
 RUN git clone -b ${BRANCH} ${REPO} /go-wemix && \
     cd /go-wemix && \
     go mod download && \
-    make
+    USE_ROCKSDB=NO make
 
 # Clean up unnecessary packages and files after building
 RUN apt-get remove -y \
@@ -102,15 +102,13 @@ RUN chmod a+x bin/set-nodekey.sh && \
 
 # Run init-boot.sh
 RUN chmod a+x bin/init-boot.sh
-RUN ./bin/init-boot.sh
+RUN bin/init-boot.sh
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \
     g++ \
     libc-dev \
-    ca-certificates \
-    wget \
-    netcat-traditional && \
+    ca-certificates && \
     apt autoremove -y && \
     apt-get clean
 
@@ -118,4 +116,4 @@ RUN apt-get remove -y \
 EXPOSE 8588 8589 8598
 
 # Set the entrypoint
-ENTRYPOINT ["bash"]
+ENTRYPOINT ["/usr/local/wemix"]

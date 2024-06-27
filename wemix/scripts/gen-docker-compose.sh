@@ -97,7 +97,7 @@ EOF
         REPO: $repo_url
         BRANCH: $branch_name
         NODE_NUM: $i
-    image: wemix/node:latest
+    image: wemix/node$((i-1)):latest
     hostname: wemix-node$((i-1))
     networks:
       wemix-dev-bridge:
