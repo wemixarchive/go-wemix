@@ -32,4 +32,4 @@ check_boot_node_started() {
 check_boot_node_started
 
 bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out genesis.json
-bin/gwemix --metrics --http --http.addr 0.0.0.0 --mine --http.port 8588 --ws --ws.addr 0.0.0.0 --ws.port 8598 --syncmode full --gcmode archive --port 8589
+bin/gwemix --datadir /usr/local/wemix --metrics --http --http.addr 0.0.0.0 --mine --http.port 8588 --ws --ws.addr 0.0.0.0 --ws.port 8598 --syncmode full --gcmode archive --port 8589
