@@ -43,5 +43,5 @@ chmod +x docker-compose-gen.sh
 ./docker-compose-gen.sh -a "$ACCOUNT_NUM" -b "$BRANCH" -r "$REPO"
 
 # docker-compose.yml 파일을 이용해 docker-compose build 및 up 실행
-docker compose -f docker-compose.yml build
+docker compose -f docker-compose.yml build --no-cache
 docker compose -f docker-compose.yml up -d

@@ -67,6 +67,7 @@ RUN apt-get install -y --no-install-recommends \
     jq \
     wget \
     pcscd \
+    curl \
     netcat-traditional && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
