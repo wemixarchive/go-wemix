@@ -102,10 +102,7 @@ RUN chmod a+x bin/set-nodekey.sh && \
 RUN rm -rf nodekey
 
 # Make the binary executable
-RUN chmod a+x bin/gwemix
-
-# Download genesis.json
-CMD bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out genesis.json
+RUN chmod a+x bin/init-node.sh
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \

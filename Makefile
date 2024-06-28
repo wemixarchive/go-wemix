@@ -31,7 +31,7 @@ endif
 
 gwemix.tar.gz: gwemix logrot
 	@[ -d build/conf ] || mkdir -p build/conf
-	@cp -p wemix/scripts/gwemix.sh wemix/scripts/set-nodekey.sh wemix/scripts/init-boot.sh build/bin/
+	@cp -p wemix/scripts/gwemix.sh wemix/scripts/set-nodekey.sh wemix/scripts/init-boot.sh wemix/scripts/init-node.sh build/bin/
 	@cp -p wemix/scripts/config.json.example		\
 		wemix/scripts/genesis-template.json		\
 		build/conf/

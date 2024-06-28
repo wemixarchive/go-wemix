@@ -104,8 +104,8 @@ RUN chmod a+x bin/set-nodekey.sh && \
 RUN rm -rf nodekey
 
 # Run init-boot.sh
-RUN chmod a+x bin/init-boot.sh && \
-    ./bin/init-boot.sh
+RUN chmod a+x bin/init-boot.sh
+CMD ./bin/init-boot.sh && tail -f /dev/null
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \
@@ -118,5 +118,5 @@ RUN apt-get remove -y \
 # Expose necessary ports
 EXPOSE 8588 8589 8598
 
-# Define the entrypoint
-ENTRYPOINT ["bash"]
+# # Define the entrypoint
+# ENTRYPOINT ["bash"]
