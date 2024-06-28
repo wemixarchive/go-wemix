@@ -36,3 +36,8 @@ check_gwemix_started() {
 check_gwemix_started
 
 bin/gwemix.sh init-gov "" conf/config.json keystore/account1 test
+
+echo "sleep 10 seconds for etcd init..."
+sleep 10
+
+curl -X POST --data '{"jsonrpc":"2.0","method":"admin_etcdInit","params":[],"id":1}' -H "Content-Type: application/json" http://127.0.0.1:8598
