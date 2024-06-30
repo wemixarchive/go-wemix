@@ -32,6 +32,9 @@ endif
 gwemix.tar.gz: gwemix logrot
 	@[ -d build/conf ] || mkdir -p build/conf
 	@cp -p local-docker-env/gwemix.sh local-docker-env/set-nodekey.sh local-docker-env/init-boot.sh local-docker-env/init-node.sh build/bin/
+	@cp -p wemix/scripts/config.json.example		\
+		wemix/scripts/genesis-template.json		\
+		build/conf/
 	@(cd build; tar cfz gwemix.tar.gz bin conf)
 	@echo "Done building build/gwemix.tar.gz"
 
