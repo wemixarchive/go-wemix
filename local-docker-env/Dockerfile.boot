@@ -1,0 +1,66 @@
+FROM ubuntu:latest
+
+# Update and upgrade the package list
+RUN apt-get update && \
+    apt-get upgrade -q -y
+
+# Install required runtime packages
+RUN apt-get install -y --no-install-recommends \
+    g++ \
+    libc-dev \
+    bash \
+    jq \
+    wget \
+    netcat-traditional && \
+    update-ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create directories for wemix
+RUN mkdir -p /usr/local/wemix
+
+# Set environment variables
+ENV PATH=/usr/local/wemix/bin:$PATH
+
+# Download and install solc
+RUN wget -nv -O /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.4.24/solc-static-linux && \
+    chmod a+x /usr/local/bin/solc
+
+# Set work directory
+WORKDIR /usr/local/wemix
+
+# Copy build artifacts
+COPY build/bin/ ./bin/
+
+# Copy config.json & key file
+COPY config.json ./conf/config.json
+COPY keystore/ ./keystore/
+COPY nodekey/ ./nodekey/
+
+# Define variables to be used at build time
+ARG NODE_NUM
+ENV NODE_NUM=${NODE_NUM}
+
+# Run set-nodekey.sh
+RUN chmod a+x bin/set-nodekey.sh && \
+    ./bin/set-nodekey.sh -a ${NODE_NUM}
+
+# Clean up unnecessary files
+RUN rm -rf nodekey
+
+# Run init-boot.sh
+RUN chmod a+x bin/init-boot.sh
+CMD ./bin/init-boot.sh && tail -f /dev/null
+
+# Clean up unnecessary packages
+RUN apt-get remove -y \
+    g++ \
+    libc-dev \
+    ca-certificates && \
+    apt autoremove -y && \
+    apt-get clean
+
+# Expose necessary ports
+EXPOSE 8588 8589 8598
+
+# # Define the entrypoint
+# ENTRYPOINT ["bash"]

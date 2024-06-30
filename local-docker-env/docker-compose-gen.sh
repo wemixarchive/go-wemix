@@ -35,7 +35,7 @@ fi
 
 # Set default output file if not provided
 if [ -z "$output_file" ]; then
-    output_file="docker-compose.yml"
+    output_file="local-docker-env/docker-compose.yml"
 fi
 
 # Generate docker-compose.yml content

@@ -1,20 +1,28 @@
 #!/bin/bash
 
-# Usage: ./gen-docker-compose.sh -a <account_num> -f <output_config_file>
+# Usage: ./gen-docker-compose.sh -a <account_num> -f <output_config_file> -r <repo_url> -b <branch_name>
 # -a: 계정 수
 # -f: 출력 파일
+# -r: 레포지토리 URL
+# -b: 브랜치 이름
 # -a 옵션은 필수이며, -f 옵션은 선택적
 # -f 옵션을 지정하지 않으면, 현재 디렉토리에 docker-compose.yml 파일을 생성
 # -f 옵션을 지정하면, 해당 경로에 docker-compose.yml 파일을 생성
 
 # Parse command line arguments
-while getopts "a:f" opt; do
+while getopts "a:f:r:b:" opt; do
     case $opt in
         a)
             account_num=$OPTARG
             ;;
         f)
             output_file=$OPTARG
+            ;;
+        r)
+            repo_url=$OPTARG
+            ;;
+        b)
+            branch_name=$OPTARG
             ;;
         \?)
             echo "Invalid option: -$OPTARG" >&2
@@ -33,9 +41,21 @@ if [ -z "$account_num" ]; then
     exit 1
 fi
 
+# Check if repo_url is provided
+if [ -z "$repo_url" ]; then
+    echo "Error: -r <repo_url> is required."
+    exit 1
+fi
+
+# Check if branch_name is provided
+if [ -z "$branch_name" ]; then
+    echo "Error: -b <branch_name> is required."
+    exit 1
+fi
+
 # Set default output file if not provided
 if [ -z "$output_file" ]; then
-    output_file="docker-compose.yml"
+    output_file="local-docker-env/docker-compose.yml"
 fi
 
 # Generate docker-compose.yml content
@@ -49,8 +69,10 @@ for ((i=1; i<=account_num; i++)); do
   wemix-boot:
     build:
       context: .
-      dockerfile: Dockerfile.boot
+      dockerfile: Dockerfile.boot.git
       args:
+        REPO: $repo_url
+        BRANCH: $branch_name
         NODE_NUM: $i
     image: wemix/node-boot:latest
     hostname: wemix-boot
@@ -70,8 +92,10 @@ EOF
   wemix-node$((i-1)):
     build:
       context: .
-      dockerfile: Dockerfile.node
+      dockerfile: Dockerfile.node.git
       args:
+        REPO: $repo_url
+        BRANCH: $branch_name
         NODE_NUM: $i
     image: wemix/node$((i-1)):latest
     hostname: wemix-node$((i-1))
