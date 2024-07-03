@@ -35,15 +35,16 @@ func TestDeployGoverananceContracts(t *testing.T) {
 		params.MaxGasLimit,
 	)
 
-	nonce, err := backend.NonceAt(context.Background(), opts.From, nil)
-	require.NoError(t, err)
-
 	fin := make(chan struct{})
 	defer close(fin)
 
 	go func() {
 		ticker := time.NewTicker(0.1e9)
 		defer ticker.Stop()
+
+		nonce, err := backend.NonceAt(context.Background(), opts.From, nil)
+		require.NoError(t, err)
+
 		for {
 			select {
 			case <-ticker.C:

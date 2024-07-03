@@ -1041,6 +1041,9 @@ func setRandomBootstrapNodes(ctx *cli.Context, bootnodes []string) []string {
 	}
 	// select random bootnodes
 	selectcount := params.BootnodeCount
+	if selectcount > bootnodeslen {
+		selectcount = bootnodeslen
+	}
 	urls := make([]string, selectcount)
 	tempnode := make([]string, bootnodeslen)
 	copy(tempnode, bootnodes)

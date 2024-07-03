@@ -1,23 +1,28 @@
 package gov
 
 const (
-	CNAME_Registry         string = "Registry"
-	CNAME_Gov              string = "Gov"
-	CNAME_GovImp           string = "GovImp"
-	CNAME_NCPExit          string = "NCPExit"
-	CNAME_NCPExitImp       string = "NCPExitImp"
-	CNAME_Staking          string = "Staking"
-	CNAME_StakingImp       string = "StakingImp"
-	CNAME_BallotStorage    string = "BallotStorage"
-	CNAME_BallotStorageImp string = "BallotStorageImp"
-	CNAME_EnvStorage       string = "EnvStorage"
-	CNAME_EnvStorageImp    string = "EnvStorageImp"
+	REGISTRY          = "Registry"
+	GOV               = "Gov"
+	GOV_IMP           = "GovImp"
+	NCPEXIT           = "NCPExit"
+	NCPEXIT_IMP       = "NCPExitImp"
+	STAKING           = "Staking"
+	STAKING_IMP       = "StakingImp"
+	BALLOTSTORAGE     = "BallotStorage"
+	BALLOTSTORAGE_IMP = "BallotStorageImp"
+	ENVSTORAGE        = "EnvStorage"
+	ENVSTORAGE_IMP    = "EnvStorageImp"
 )
 
 const (
-	DOMAIN_Gov           string = "GovernanceContract"
-	DOMAIN_NCPExit       string = "NCPExit"
-	DOMAIN_Staking       string = "Staking"
-	DOMAIN_BallotStorage string = "BallotStorage"
-	DOMAIN_EnvStorage    string = "EnvStorage"
+	DOMAIN_Gov           = "GovernanceContract"
+	DOMAIN_NCPExit       = "NCPExit"
+	DOMAIN_Staking       = "Staking"
+	DOMAIN_BallotStorage = "BallotStorage"
+	DOMAIN_EnvStorage    = "EnvStorage"
+
+	DOMAIN_StakingReward = "StakingReward"
+	DOMAIN_Ecosystem     = "Ecosystem"
+	DOMAIN_Maintenance   = "Maintenance"
+	DOMAIN_FeeCollector  = "FeeCollector"
 )

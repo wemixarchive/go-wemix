@@ -342,25 +342,25 @@ func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*re
 	}
 	rp.distributionMethod = []*big.Int{distributionMethod1, distributionMethod2, distributionMethod3, distributionMethod4}
 
-	staker, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32("StakingReward"))
+	staker, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_Staking))
 	if err != nil {
-		return nil, errors.Wrap(err, "StakingReward")
+		return nil, errors.Wrap(err, gov.DOMAIN_Staking)
 	}
 	rp.staker = &staker
 
-	ecoSystem, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32("Ecosystem"))
+	ecoSystem, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_Ecosystem))
 	if err != nil {
-		return nil, errors.Wrap(err, "Ecosystem")
+		return nil, errors.Wrap(err, gov.DOMAIN_Ecosystem)
 	}
 	rp.ecoSystem = &ecoSystem
 
-	maintenance, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32("Maintenance"))
+	maintenance, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_Maintenance))
 	if err != nil {
-		return nil, errors.Wrap(err, "Maintenance")
+		return nil, errors.Wrap(err, gov.DOMAIN_Maintenance)
 	}
 	rp.maintenance = &maintenance
 
-	feeCollector, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32("FeeCollector"))
+	feeCollector, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_FeeCollector))
 	if err != nil {
 		rp.feeCollector = nil
 	} else {

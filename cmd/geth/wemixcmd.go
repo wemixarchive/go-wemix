@@ -295,21 +295,20 @@ func loadGenesisConfig(r io.Reader) (*genesisConfig, error) {
 
 	bootnodeExists := false
 	for _, m := range config.Members {
-		// to conforming form to avoid checksum error
-		if !(len(m.Id) == 128 || len(m.Id) == 130) {
-			return nil, fmt.Errorf("not a node id: %s", m.Id)
-		}
-		if len(m.Id) == 128 {
+		if !strings.HasPrefix(m.Id, "0x") {
 			m.Id = "0x" + m.Id
+		}
+		if bytes, err := hexutil.Decode(m.Id); err != nil {
+			return nil, fmt.Errorf("invalid node id: %s, error: %s", m.Id, err)
+		} else if len(bytes) != 64 {
+			return nil, fmt.Errorf("invalid node id: %s, error: size error", m.Id)
 		}
 		if m.Bootnode {
 			bootnodeExists = true
-			break
 		}
 	}
-
 	if !bootnodeExists {
-		return nil, fmt.Errorf("no bootnode found")
+		return nil, errors.New("no bootnode found")
 	}
 
 	return &config, nil
@@ -423,7 +422,7 @@ func genGenesis(ctx *cli.Context) error {
 	if fn := ctx.String(dataFileFlag.Name); fn != "" {
 		r, err = os.Open(fn)
 		if err != nil {
-			utils.Fatalf("%v", err)
+			return err
 		}
 	}
 
@@ -436,29 +435,26 @@ func genGenesis(ctx *cli.Context) error {
 	if fn := ctx.String(outFlag.Name); fn != "" {
 		w, err = os.OpenFile(fn, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
-			utils.Fatalf("%v", err)
+			return err
 		}
 	}
 
-	if len(config.Members) <= 0 {
-		utils.Fatalf("At least one member and node are required.")
-	}
-
-	bootacct, bootnode, emptyAddr := "", "", common.Address{}
+	bootacct, bootnode, zeroAddress := "", "", common.Address{}
 	for _, i := range config.Members {
 		if i.Bootnode {
-			if !bytes.Equal(i.Addr[:], emptyAddr[:]) {
+			bootnode = i.Id
+			if i.Addr != zeroAddress {
 				bootacct = i.Addr.Hex()
-			} else if !bytes.Equal(i.Staker[:], emptyAddr[:]) {
+			} else if i.Staker != zeroAddress {
 				bootacct = i.Staker.Hex()
 			}
-			bootnode = i.Id
 			break
 		}
 	}
 
 	genesis["coinbase"] = bootacct
 	genesis["extraData"] = hexutil.Encode([]byte(fmt.Sprintf("%s\n%s", config.ExtraData, bootnode)))
+
 	alloc := map[string]map[string]string{}
 	for _, m := range config.Accounts {
 		alloc[m.Addr.Hex()] = map[string]string{
