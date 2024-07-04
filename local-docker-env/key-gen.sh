@@ -32,10 +32,21 @@ for ((i = 1; i <= ACCOUNT_NUM; i++)); do
   if [ -f "local-docker-env/keystore/account$i" ]; then
     rm local-docker-env/keystore/account$i
   fi
-  yes "test" | head -n 2 | gwemix wemix new-account --out local-docker-env/keystore/account$i
+
+  if yes "test" | head -n 2 | gwemix wemix new-account --out local-docker-env/keystore/account$i; then
+    echo "Account $i created successfully"
+  else
+    echo "Failed to create account $i"
+    exit 1
+  fi
   
   if [ -f "local-docker-env/nodekey/nodekey$i" ]; then
     rm local-docker-env/nodekey/nodekey$i
   fi
-  gwemix wemix new-nodekey --out local-docker-env/nodekey/nodekey$i
+  if gwemix wemix new-nodekey --out local-docker-env/nodekey/nodekey$i; then
+    echo "Nodekey $i created successfully"
+  else
+    echo "Failed to create nodekey $i"
+    exit 1
+  fi
 done
