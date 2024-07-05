@@ -1,3 +1,6 @@
+# Specifies the version of Ubuntu to be used in the Docker image.
+ARG UBUNTU_VERSION
+
 # Stage 1: Build stage
 FROM golang:1.19 as builder
 
@@ -49,7 +52,7 @@ RUN apt-get remove -y \
     apt-get clean
 
 # Stage 2: Runtime stage
-FROM ubuntu:latest
+FROM ubuntu:${UBUNTU_VERSION}
 
 # Set environment variables
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt

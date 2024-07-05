@@ -4,14 +4,8 @@
 current_dir=$(pwd)
 export PATH=$PATH:${current_dir}/go-wemix/build/bin
 
-# 필수 인수 확인
-if [ "$#" -ne 6 ]; then
-  echo "Usage: $0 -a <account_num> -b <branch> -r <repo>"
-  exit 1
-fi
-
 # 옵션 파싱
-while getopts "a:b:r:" opt; do
+while getopts "a:b:r:v:" opt; do
   case ${opt} in
   a)
     ACCOUNT_NUM=$OPTARG
@@ -22,6 +16,9 @@ while getopts "a:b:r:" opt; do
   r)
     REPO=$OPTARG
     ;;
+  v)
+    VERSION=$OPTARG
+    ;;
   \?)
     echo "Usage: $0 -a <account_num> -b <branch> -r <repo>"
     exit 1
@@ -31,8 +28,13 @@ done
 
 # 필수 인수 확인
 if [ -z "$ACCOUNT_NUM" ] || [ -z "$BRANCH" ] || [ -z "$REPO" ]; then
-  echo "Missing required arguments."
+  echo "Missing required arguments. Usage: $0 -a <account_num> -b <branch> -r <repo>"
   exit 1
+fi
+
+# Set default version if not provided
+if [ -z "$VERSION" ]; then
+    VERSION="latest"
 fi
 
 # key-gen.sh 실행
@@ -45,7 +47,7 @@ chmod +x local-docker-env/config-gen.sh
 
 # BRANCH와 REPO 정보를 입력으로 받아 docker-compose-gen.sh 실행
 chmod +x local-docker-env/docker-compose-gen-git.sh
-./local-docker-env/docker-compose-gen-git.sh -a "$ACCOUNT_NUM" -b "$BRANCH" -r "$REPO" || { echo "Failed to execute docker-compose-gen-git.sh."; exit 1; }
+./local-docker-env/docker-compose-gen-git.sh -a "$ACCOUNT_NUM" -b "$BRANCH" -r "$REPO" -v "$VERSION" || { echo "Failed to execute docker-compose-gen-git.sh."; exit 1; }
 
 # Dockerfile.boot.git 및 Dockerfile.node.git 파일 복사
 cp local-docker-env/Dockerfile.boot.git ./ || { echo "Failed to copy Dockerfile.boot.git."; exit 1; }

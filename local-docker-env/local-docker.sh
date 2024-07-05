@@ -4,17 +4,14 @@
 current_dir=$(pwd)
 export PATH=$PATH:${current_dir}/go-wemix/build/bin
 
-# 필수 인수 확인
-if [ "$#" -ne 2 ]; then
-  echo "Usage: $0 -a <account_num>"
-  exit 1
-fi
-
 # 옵션 파싱
-while getopts "a:" opt; do
+while getopts "a:v:" opt; do
   case ${opt} in
   a)
     ACCOUNT_NUM=$OPTARG
+    ;;
+  v)
+    VERSION=$OPTARG
     ;;
   \?)
     echo "Usage: $0 -a <account_num>"
@@ -25,8 +22,13 @@ done
 
 # 필수 인수 확인
 if [ -z "$ACCOUNT_NUM" ]; then
-  echo "Account number is required."
+  echo "Account number is required. Usage: $0 -a <account_num>"
   exit 1
+fi
+
+# Set default version if not provided
+if [ -z "$VERSION" ]; then
+    VERSION="latest"
 fi
 
 # key-gen.sh 실행
@@ -39,7 +41,7 @@ chmod +x local-docker-env/config-gen.sh
 
 # docker-compose-gen.sh 실행
 chmod +x local-docker-env/docker-compose-gen.sh
-./local-docker-env/docker-compose-gen.sh -a "$ACCOUNT_NUM" || { echo "Failed to execute docker-compose-gen.sh."; exit 1; }
+./local-docker-env/docker-compose-gen.sh -a "$ACCOUNT_NUM" -v "$VERSION" || { echo "Failed to execute docker-compose-gen.sh."; exit 1; }
 
 # Dockerfile.boot 및 Dockerfile.node 파일 복사
 cp local-docker-env/Dockerfile.boot ./ || { echo "Failed to copy Dockerfile.boot."; exit 1; }

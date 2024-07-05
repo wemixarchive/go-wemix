@@ -1,3 +1,6 @@
+# Specifies the version of Ubuntu to be used in the Docker image.
+ARG UBUNTU_VERSION
+
 # Stage 1: Build stage
 FROM golang:1.19 as builder
 
@@ -39,7 +42,7 @@ RUN apt-get remove -y \
     apt-get clean
 
 # Stage 2: Runtime stage
-FROM ubuntu:latest
+FROM ubuntu:${UBUNTU_VERSION}
 
 # Update and upgrade the package list
 RUN apt-get update && \
@@ -85,7 +88,7 @@ RUN rm -rf nodekey
 
 # Run init-boot.sh
 RUN chmod a+x bin/init-boot.sh
-CMD ./bin/init-boot.sh && tail -f /dev/null
+CMD ./bin/init-boot.sh && tail -f logs/log
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \

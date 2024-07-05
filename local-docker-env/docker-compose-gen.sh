@@ -3,18 +3,23 @@
 # Usage: ./gen-docker-compose.sh -a <account_num> -f <output_config_file>
 # -a: 계정 수
 # -f: 출력 파일
-# -a 옵션은 필수이며, -f 옵션은 선택적
+# -a 옵션은 필수이며, -f, -v 옵션은 선택적
 # -f 옵션을 지정하지 않으면, 현재 디렉토리에 docker-compose.yml 파일을 생성
 # -f 옵션을 지정하면, 해당 경로에 docker-compose.yml 파일을 생성
+# -v 옵션을 지정하지 않으면, latest 버전으로 설정
+# -v 옵션을 지정하면, 해당 버전으로 설정
 
 # Parse command line arguments
-while getopts "a:f" opt; do
+while getopts "a:f:v:" opt; do
     case $opt in
         a)
             account_num=$OPTARG
             ;;
         f)
             output_file=$OPTARG
+            ;;
+        v)
+            version=$OPTARG
             ;;
         \?)
             echo "Invalid option: -$OPTARG" >&2
@@ -38,6 +43,11 @@ if [ -z "$output_file" ]; then
     output_file="docker-compose.yml"
 fi
 
+# Set default version if not provided
+if [ -z "$version" ]; then
+    version="latest"
+fi
+
 # Generate docker-compose.yml content
 cat <<EOF > "$output_file"
 services:
@@ -52,6 +62,7 @@ for ((i=1; i<=account_num; i++)); do
       dockerfile: Dockerfile.boot
       args:
         NODE_NUM: $i
+        UBUNTU_VERSION: $version
     image: wemix/node-boot:latest
     hostname: wemix-boot
     networks:
@@ -73,6 +84,7 @@ EOF
       dockerfile: Dockerfile.node
       args:
         NODE_NUM: $i
+        UBUNTU_VERSION: $version
     image: wemix/node$((i-1)):latest
     hostname: wemix-node$((i-1))
     networks:

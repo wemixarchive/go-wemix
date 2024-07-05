@@ -11,12 +11,12 @@ This document explains how to set up a local testing environment based on the `g
 ### local-docker.sh
 
 - **Purpose**: Integrated running script for local testing based on the local repository.
-- **Usage**: `./local-docker-env/local-docker.sh -a <account_num>`
+- **Usage**: `./local-docker-env/local-docker.sh -a <account_num> -v <ubuntu_version>(optional)`
 
 ### local-docker-git.sh
 
 - **Purpose**: Integrated running script for local testing based on the Git repository.
-- **Usage**: `./local-docker-env/local-docker-git.sh -a <account_num> -b <branch> -r <repo>`
+- **Usage**: `./local-docker-env/local-docker-git.sh -a <account_num> -b <branch> -r <repo> -v <ubuntu_version>(optional)`
 
 ### key-gen.sh
 
@@ -31,12 +31,12 @@ This document explains how to set up a local testing environment based on the `g
 ### docker-compose-gen.sh
 
 - **Purpose**: Generates the `docker-compose.yml` file based on the local repository.
-- **Usage**: `./docker-compose-gen.sh -a <account_num> -f <output_file_path>`
+- **Usage**: `./docker-compose-gen.sh -a <account_num> -f <output_file_path> -v <ubuntu_version>(optional)`
 
 ### docker-compose-gen-git.sh
 
 - **Purpose**: Generates the `docker-compose.yml` file based on the Git repository.
-- **Usage**: `./docker-compose-gen-git.sh -a <account_num> -f <output_file_path> -r <repo_url> -b <branch_name>`
+- **Usage**: `./docker-compose-gen-git.sh -a <account_num> -f <output_file_path> -r <repo_url> -b <branch_name> -v <ubuntu_version>(optional)`
 
 ### init-boot.sh
 
@@ -66,11 +66,11 @@ This document explains how to set up a local testing environment based on the `g
 ### Execution based on the local repository code
 
 ```bash
-./local-docker-env/local-docker.sh -a <account_num>
+./local-docker-env/local-docker.sh -a <account_num> -v <ubuntu_version>(optional)
 ```
 
 ### Execution based on the Git repository code
 
 ```bash
-./local-docker-env/local-docker-git.sh -a <account_num> -b <branch> -r <repo>
+./local-docker-env/local-docker-git.sh -a <account_num> -b <branch> -r <repo> -v <ubuntu_version>(optional)
 ```
