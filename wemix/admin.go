@@ -344,7 +344,7 @@ func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*re
 
 	staker, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_StakingReward))
 	if err != nil {
-		return nil, errors.Wrap(err, gov.DOMAIN_Staking)
+		return nil, errors.Wrap(err, gov.DOMAIN_StakingReward)
 	}
 	rp.staker = &staker
 
