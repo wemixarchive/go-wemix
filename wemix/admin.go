@@ -342,7 +342,7 @@ func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*re
 	}
 	rp.distributionMethod = []*big.Int{distributionMethod1, distributionMethod2, distributionMethod3, distributionMethod4}
 
-	staker, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_Staking))
+	staker, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_StakingReward))
 	if err != nil {
 		return nil, errors.Wrap(err, gov.DOMAIN_Staking)
 	}
