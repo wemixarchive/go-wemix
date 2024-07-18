@@ -20,6 +20,7 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/eth/protocols/eth68"
 	"math/big"
 	"runtime"
 	"sync"
@@ -533,6 +534,7 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 // network protocols to start.
 func (s *Ethereum) Protocols() []p2p.Protocol {
 	protos := eth.MakeProtocols((*ethHandler)(s.handler), s.networkID, s.ethDialCandidates)
+	protos = append(protos, eth68.MakeProtocols((*ethHandler)(s.handler), s.networkID, s.ethDialCandidates)...)
 	if s.config.SnapshotCache > 0 {
 		protos = append(protos, snap.MakeProtocols((*snapHandler)(s.handler), s.snapDialCandidates)...)
 	}
