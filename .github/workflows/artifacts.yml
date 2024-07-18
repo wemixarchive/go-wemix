@@ -9,7 +9,7 @@ on:
 jobs:
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v4
 
@@ -18,19 +18,30 @@ jobs:
       with:
         go-version: '1.19'
 
+    - name: Setup packages
+      run: |
+        sudo apt install -y libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev
+        sudo apt remove -y bzip2 libbz2-dev zlib1g-dev
+
     - name: Build Go-WEMIX tarball
       run: USE_ROCKSDB=YES make gwemix.tar.gz
 
-    - name: Stat Go-WEMIX tarball
+    - name: Set version
       run: |
-        ls -l build/gwemix.tar.gz
-        tar tf build/gwemix.tar.gz
+        GWEMIX_VERSION_META="v$(build/bin/gwemix version | awk '/^Version/{ print $2 }')"
+        echo "GWEMIX_VERSION_META=$GWEMIX_VERSION_META" >> "$GITHUB_ENV"
+        echo "GWEMIX_VERSION=$(echo $GWEMIX_VERSION_META | cut -d'-' -f1)" >> "$GITHUB_ENV"
+        echo "GWEMIX_META=$(echo $GWEMIX_VERSION_META | cut -d'-' -f2-)" >> "$GITHUB_ENV"
+        echo "GWEMIX_COMMITHASH=$(echo ${{ github.sha }} | cut -c1-8)" >> "$GITHUB_ENV"
+
+    - name: Display ELF info
+      run: readelf -dV build/bin/gwemix
 
     - name: Move results to artifact
-      run: mv build/gwemix.tar.gz gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-rocksdb.tar.gz
+      run: mv build/gwemix.tar.gz gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-rocksdb.tar.gz
 
     - name: Upload Go-WEMIX
       uses: actions/upload-artifact@v4
       with:
-        name: artifact-${{ github.ref_name }}-${{ github.sha }}
-        path: gwemix-${{ github.ref_name }}-${{ github.sha }}-linux-amd64-rocksdb.tar.gz
+        name: artifact-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}
+        path: gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-rocksdb.tar.gz

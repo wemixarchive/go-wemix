@@ -108,6 +108,14 @@ type Response struct {
 	Done chan error    // Channel to signal message handling to the reader
 }
 
+func NewResponse(id uint64, code uint64, res interface{}) *Response {
+	return &Response{
+		id:   id,
+		code: code,
+		Res:  res,
+	}
+}
+
 // response is a wrapper around a remote Response that has an error channel to
 // signal on if processing the response failed.
 type response struct {
@@ -181,6 +189,10 @@ func (p *Peer) dispatchResponse(res *Response, metadata func() interface{}) erro
 	case <-p.term:
 		return errDisconnected
 	}
+}
+
+func (p *Peer) DispatchResponse(res *Response, metadata func() interface{}) error {
+	return p.dispatchResponse(res, metadata)
 }
 
 // dispatcher is a loop that accepts requests from higher layer packages, pushes

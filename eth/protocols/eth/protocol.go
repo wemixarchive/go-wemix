@@ -207,8 +207,8 @@ type NewBlockPacket struct {
 	TD    *big.Int
 }
 
-// sanityCheck verifies that the values are reasonable, as a DoS protection
-func (request *NewBlockPacket) sanityCheck() error {
+// SanityCheck verifies that the values are reasonable, as a DoS protection
+func (request *NewBlockPacket) SanityCheck() error {
 	if err := request.Block.SanityCheck(); err != nil {
 		return err
 	}

@@ -1,0 +1,58 @@
+name: "Release a tag as draft"
+
+on:
+  push:
+    tags:
+      - w*
+
+jobs:
+
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.19'
+
+    - name: Setup packages
+      run: |
+        sudo apt install -y libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev
+        sudo apt remove -y bzip2 libbz2-dev zlib1g-dev
+
+    - name: Build Go-WEMIX tarball (rocksdb)
+      run: USE_ROCKSDB=YES make gwemix.tar.gz
+
+    - name: Set version
+      run: |
+        GWEMIX_VERSION_META="v$(build/bin/gwemix version | awk '/^Version/{ print $2 }')"
+        echo "GWEMIX_VERSION_META=$GWEMIX_VERSION_META" >> "$GITHUB_ENV"
+        echo "GWEMIX_VERSION=$(echo $GWEMIX_VERSION_META | cut -d'-' -f1)" >> "$GITHUB_ENV"
+        echo "GWEMIX_META=$(echo $GWEMIX_VERSION_META | cut -d'-' -f2-)" >> "$GITHUB_ENV"
+        echo "GWEMIX_COMMITHASH=$(echo ${{ github.sha }} | cut -c1-8)" >> "$GITHUB_ENV"
+
+    - name: Display ELF info (rocksdb)
+      run: readelf -dV build/bin/gwemix
+
+    - name: Move results to artifact (rocksdb)
+      run: mv build/gwemix.tar.gz gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-rocksdb.tar.gz
+
+    - name: Build Go-WEMIX tarball (leveldb)
+      run: USE_ROCKSDB=NO make gwemix.tar.gz
+
+    - name: Display ELF info (leveldb)
+      run: readelf -dV build/bin/gwemix
+
+    - name: Move results to artifact (leveldb)
+      run: mv build/gwemix.tar.gz gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-leveldb.tar.gz
+
+    - name: GH Release
+      uses: softprops/action-gh-release@v2.0.5
+      with:
+        name: WEMIX3.0 Mainnet and Testnet Build (${{ env.GWEMIX_VERSION }})
+        draft: true
+        files: |
+          gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-rocksdb.tar.gz
+          gwemix-${{ env.GWEMIX_VERSION_META }}-${{ env.GWEMIX_COMMITHASH }}-linux-amd64-leveldb.tar.gz
