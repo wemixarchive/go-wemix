@@ -1096,6 +1096,16 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         return 0;
     }
 
+    // Critical
+
+    function upgradeTo(address) external override {
+        revert("Invalid access");
+    }
+
+    function upgradeToAndCall(address, bytes memory) external payable override {
+        revert("Invalid access");
+    }
+
     // Genernal Purpose
 
     event Executed(bool indexed success, address indexed to, uint256 value, bytes calldatas, bytes returnData);
@@ -1129,6 +1139,8 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
 
         (address _to, uint256 _value, bytes memory _calldata) = IBallotStorage(getBallotStorageAddress()).getBallotExecute(_ballotIdx);
         (bool _success, bytes memory _returnData) = _to.call{ value: _value }(_calldata);
+
+        modifiedBlock = block.number;
         emit Executed(_success, _to, _value, _calldata, _returnData);
     }
 }
