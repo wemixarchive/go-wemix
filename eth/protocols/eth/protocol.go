@@ -33,6 +33,7 @@ import (
 const (
 	ETH65 = 65
 	ETH66 = 66
+	ETH68 = 68
 )
 
 // ProtocolName is the official short name of the `eth` protocol used during
@@ -41,7 +42,7 @@ const ProtocolName = "mir"
 
 // ProtocolVersions are the supported versions of the `eth` protocol (first
 // is primary).
-var ProtocolVersions = []uint{ETH66, ETH65}
+var ProtocolVersions = []uint{ETH68, ETH66, ETH65}
 
 // protocolLengths are the number of implemented message corresponding to
 // different protocol versions.
@@ -316,6 +317,13 @@ type ReceiptsRLPPacket66 struct {
 // NewPooledTransactionHashesPacket represents a transaction announcement packet.
 type NewPooledTransactionHashesPacket []common.Hash
 
+// NewPooledTransactionHashesPacket68 represents a transaction announcement packet on eth/68 and newer.
+type NewPooledTransactionHashesPacket68 struct {
+	Types  []byte
+	Sizes  []uint32
+	Hashes []common.Hash
+}
+
 // GetPooledTransactionsPacket represents a transaction query.
 type GetPooledTransactionsPacket []common.Hash
 
@@ -420,6 +428,9 @@ func (*ReceiptsPacket) Kind() byte   { return ReceiptsMsg }
 
 func (*NewPooledTransactionHashesPacket) Name() string { return "NewPooledTransactionHashes" }
 func (*NewPooledTransactionHashesPacket) Kind() byte   { return NewPooledTransactionHashesMsg }
+
+func (*NewPooledTransactionHashesPacket68) Name() string { return "NewPooledTransactionHashes" }
+func (*NewPooledTransactionHashesPacket68) Kind() byte   { return NewPooledTransactionHashesMsg }
 
 func (*GetPooledTransactionsPacket) Name() string { return "GetPooledTransactions" }
 func (*GetPooledTransactionsPacket) Kind() byte   { return GetPooledTransactionsMsg }

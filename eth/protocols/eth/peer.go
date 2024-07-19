@@ -182,21 +182,11 @@ func (p *Peer) markBlock(hash common.Hash) {
 	p.knownBlocks.Add(hash)
 }
 
-// expose it for using from other package
-func (p *Peer) MarkBlock(hash common.Hash) {
-	p.markBlock(hash)
-}
-
 // markTransaction marks a transaction as known for the peer, ensuring that it
 // will never be propagated to this particular peer.
 func (p *Peer) markTransaction(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known transaction hash
 	p.knownTxs.Add(hash)
-}
-
-// expose it for using from other package
-func (p *Peer) MarkTransaction(hash common.Hash) {
-	p.markTransaction(hash)
 }
 
 // SendTransactions sends transactions to the peer and includes the hashes
