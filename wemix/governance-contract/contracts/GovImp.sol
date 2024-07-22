@@ -614,23 +614,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     function removeMember(uint256 ballotIdx) private {
         fromValidBallot(ballotIdx, uint256(BallotTypes.MemberRemoval));
 
-        (
-            address oldStaker, // newStakerAddress
-            // newVoterAddress
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-
-        ) = // newRewardAddress
-            // newNodeName
-            // newNodeId
-            // newNodeIp
-            // newNodePort
-            getBallotMember(ballotIdx);
+        (address oldStaker, , , , , , , , ) = getBallotMember(ballotIdx);
         if (!isMember(oldStaker)) {
             emit NotApplicable(ballotIdx, "Not already a member");
             return; // Non-member. it is abnormal case, but passed
