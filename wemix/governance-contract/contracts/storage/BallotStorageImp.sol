@@ -598,4 +598,6 @@ contract BallotStorageImp is GovChecker, BallotEnums, IBallotStorage, UUPSUpgrad
         BallotExecute memory _ballot = __ballotExecuteMap[_id];
         return (_ballot.target, _ballot.value, _ballot.data);
     }
+
+    uint256[49] private __gap_;
 }
