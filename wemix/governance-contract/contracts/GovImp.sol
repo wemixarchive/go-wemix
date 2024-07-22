@@ -516,7 +516,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             if (ballotType == uint256(BallotTypes.Execute)) {
                 IBallotStorage _ballotStorage = IBallotStorage(getBallotStorageAddress());
                 (, uint256 _value, ) = _ballotStorage.getBallotExecute(ballotIdx);
-                _returnValueToCreater(_ballotStorage, ballotIdx, _value);
+                _returnValueToCreator(_ballotStorage, ballotIdx, _value);
             }
         }
         finalizeBallot(ballotIdx, ballotState);
@@ -1140,16 +1140,16 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         modifiedBlock = block.number;
         emit Executed(_success, _target, _value, _calldata, _returnData);
 
-        if (!_success) _returnValueToCreater(_ballotStorage, _ballotIdx, _value);
+        if (!_success) _returnValueToCreator(_ballotStorage, _ballotIdx, _value);
     }
 
-    function _returnValueToCreater(IBallotStorage _ballotStorage, uint256 _ballotIDx, uint256 _value) private {
+    function _returnValueToCreator(IBallotStorage _ballotStorage, uint256 _ballotIDx, uint256 _value) private {
         if (_value == 0) return;
 
-        (, , , address _creater, , , , , , , ) = _ballotStorage.getBallotBasic(_ballotIDx);
-        (bool _ok, bytes memory _returnData) = _creater.call{ value: _value }("");
+        (, , , address _creator, , , , , , , ) = _ballotStorage.getBallotBasic(_ballotIDx);
+        (bool _ok, bytes memory _returnData) = _creator.call{ value: _value }("");
         if (!_ok) {
-            emit FailReturnValue(_ballotIDx, _creater, _value, _returnData);
+            emit FailReturnValue(_ballotIDx, _creator, _value, _returnData);
         }
     }
 }
