@@ -1099,7 +1099,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     // Genernal Purpose
 
     event Executed(bool indexed success, address indexed to, uint256 value, bytes calldatas, bytes returnData);
-    event FailReturnValue(uint256 indexed ballotIdx, address indexed target, uint256 value, bytes result);
+    event FailReturnValue(uint256 indexed ballotIdx, address indexed creator, uint256 value, bytes result);
 
     function addProposalToExecute(
         address _target,
