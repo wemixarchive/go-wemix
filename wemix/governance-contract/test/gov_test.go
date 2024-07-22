@@ -3153,13 +3153,11 @@ func TestGov(t *testing.T) {
 func TestExecute(t *testing.T) {
 	var (
 		callOpts = new(bind.CallOpts)
-		testBind *bindContract
-		testABI  *abi.ABI
 	)
 
-	getTestContract := func(t *testing.T, gov *Governance) (common.Address, *bind.BoundContract) {
-		if testBind == nil {
-			var testSource string = `
+	gov := NewGovernance(t).DeployContracts(t)
+	testAddress, testContract, testABI := func() (common.Address, *bind.BoundContract, *abi.ABI) {
+		var testSource string = `
 pragma solidity ^0.8.0;
 contract Test {
 	uint256 public a;
@@ -3172,47 +3170,45 @@ contract Test {
 		a += b + msg.value;
 	}
 }`
-			var (
-				dir      = t.TempDir()
-				filename = "Test.sol"
-			)
+		var (
+			dir      = t.TempDir()
+			filename = "Test.sol"
+		)
 
-			require.NoError(t, os.WriteFile(filepath.Join(dir, filename), []byte(testSource), 0700))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, filename), []byte(testSource), 0700))
 
-			compiled, err := compile.Compile(dir, filepath.Join(dir, filename))
-			require.NoError(t, err)
-			Test := compiled["Test"]
-			testBind, err = newBindContract(Test)
-			require.NoError(t, err)
+		compiled, err := compile.Compile(dir, filepath.Join(dir, filename))
+		require.NoError(t, err)
+		Test := compiled["Test"]
+		testBind, err := newBindContract(Test)
+		require.NoError(t, err)
 
-			testABI, err = parseABI(Test.Info.AbiDefinition)
-			require.NoError(t, err)
-		}
-
+		aBI, err := parseABI(Test.Info.AbiDefinition)
+		require.NoError(t, err)
 		ta, _, tc, err := testBind.Deploy(gov.backend, gov.owner)
 		require.NoError(t, err)
 		gov.backend.Commit()
 
-		return ta, tc
-	}
+		return ta, tc, aBI
+	}()
 
-	callA := func(t *testing.T, c *bind.BoundContract) *big.Int {
+	callA := func(t *testing.T) *big.Int {
 		var a = new(big.Int)
-		require.NoError(t, c.Call(callOpts, &[]interface{}{&a}, "a"))
+		require.NoError(t, testContract.Call(callOpts, &[]interface{}{&a}, "a"))
 		return a
 	}
 
 	t.Run("accept add by params", func(t *testing.T) {
-		gov := NewGovernance(t).DeployContracts(t)
-		testAddress, testContract := getTestContract(t, gov)
 		calldata, err := testABI.Pack("add", big.NewInt(1))
 		require.NoError(t, err)
 
-		require.True(t, callA(t, testContract).Sign() == 0)
+		beforeA := callA(t)
 
 		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
+		var ballotIdx *big.Int
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotIdx}, "ballotLength"))
 
-		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, true))
 		var (
 			length      *big.Int
 			inVoting    *big.Int
@@ -3220,27 +3216,25 @@ contract Test {
 			isFinalized bool
 		)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
-		require.Equal(t, common.Big1, length)
+		require.Equal(t, ballotIdx, length)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 		require.True(t, inVoting.Sign() == 0)
 		getBallotState := []interface{}{}
-		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", ballotIdx))
 		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
 		require.Equal(t, BallotStates.Accepted, state)
 		require.True(t, isFinalized)
 
-		require.Equal(t, callA(t, testContract), common.Big1)
+		require.Equal(t, callA(t), new(big.Int).Add(beforeA, common.Big1))
 	})
 	t.Run("accept add by msg.value", func(t *testing.T) {
-		gov := NewGovernance(t).DeployContracts(t)
-		testAddress, testContract := getTestContract(t, gov)
 		calldata := []byte{}
 
 		governanceAddress := common.Address{}
 		require.NoError(t, gov.Registry.Call(callOpts, &[]interface{}{&governanceAddress}, "getContractAddress", ToBytes32("GovernanceContract")))
 		require.NotEqual(t, common.Address{}, governanceAddress)
 
-		require.True(t, callA(t, testContract).Sign() == 0)
+		beforeA := callA(t)
 
 		gov.owner.Value = common.Big1
 		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
@@ -3249,7 +3243,13 @@ contract Test {
 		require.NoError(t, err)
 		require.Equal(t, common.Big1, balance)
 
-		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+		var ballotIdx *big.Int
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotIdx}, "ballotLength"))
+
+		beforeBalance, err := gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
+		require.NoError(t, err)
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, true))
 		var (
 			length      *big.Int
 			inVoting    *big.Int
@@ -3257,16 +3257,16 @@ contract Test {
 			isFinalized bool
 		)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
-		require.Equal(t, common.Big1, length)
+		require.Equal(t, ballotIdx, length)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 		require.True(t, inVoting.Sign() == 0)
 		getBallotState := []interface{}{}
-		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", ballotIdx))
 		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
 		require.Equal(t, BallotStates.Accepted, state)
 		require.True(t, isFinalized)
 
-		require.Equal(t, callA(t, testContract), common.Big1)
+		require.Equal(t, callA(t), new(big.Int).Add(beforeA, common.Big1))
 
 		balance, err = gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
 		require.NoError(t, err)
@@ -3274,19 +3274,17 @@ contract Test {
 
 		balance, err = gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
 		require.NoError(t, err)
-		require.Equal(t, common.Big1, balance)
+		require.Equal(t, big.NewInt(1), new(big.Int).Sub(balance, beforeBalance))
 	})
 	t.Run("accept add by params, msg.value", func(t *testing.T) {
-		gov := NewGovernance(t).DeployContracts(t)
-		testAddress, testContract := getTestContract(t, gov)
 		calldata, err := testABI.Pack("add", big.NewInt(1))
 		require.NoError(t, err)
+
+		beforeA := callA(t)
 
 		governanceAddress := common.Address{}
 		require.NoError(t, gov.Registry.Call(callOpts, &[]interface{}{&governanceAddress}, "getContractAddress", ToBytes32("GovernanceContract")))
 		require.NotEqual(t, common.Address{}, governanceAddress)
-
-		require.True(t, callA(t, testContract).Sign() == 0)
 
 		gov.owner.Value = common.Big1
 		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
@@ -3295,7 +3293,13 @@ contract Test {
 		require.NoError(t, err)
 		require.Equal(t, common.Big1, balance)
 
-		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+		var ballotIdx *big.Int
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotIdx}, "ballotLength"))
+
+		beforeBalance, err := gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
+		require.NoError(t, err)
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, true))
 		var (
 			length      *big.Int
 			inVoting    *big.Int
@@ -3303,16 +3307,16 @@ contract Test {
 			isFinalized bool
 		)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
-		require.Equal(t, common.Big1, length)
+		require.Equal(t, ballotIdx, length)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 		require.True(t, inVoting.Sign() == 0)
 		getBallotState := []interface{}{}
-		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", ballotIdx))
 		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
 		require.Equal(t, BallotStates.Accepted, state)
 		require.True(t, isFinalized)
 
-		require.Equal(t, callA(t, testContract), common.Big2)
+		require.Equal(t, callA(t), new(big.Int).Add(beforeA, common.Big2))
 
 		balance, err = gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
 		require.NoError(t, err)
@@ -3320,20 +3324,20 @@ contract Test {
 
 		balance, err = gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
 		require.NoError(t, err)
-		require.Equal(t, common.Big1, balance)
+		require.Equal(t, big.NewInt(1), new(big.Int).Sub(balance, beforeBalance))
 	})
-
 	t.Run("reject add by params", func(t *testing.T) {
-		gov := NewGovernance(t).DeployContracts(t)
-		testAddress, testContract := getTestContract(t, gov)
 		calldata, err := testABI.Pack("add", big.NewInt(1))
 		require.NoError(t, err)
 
-		require.True(t, callA(t, testContract).Sign() == 0)
+		beforeA := callA(t)
 
 		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
 
-		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, false))
+		var ballotIdx *big.Int
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotIdx}, "ballotLength"))
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, false))
 		var (
 			length      *big.Int
 			inVoting    *big.Int
@@ -3341,27 +3345,25 @@ contract Test {
 			isFinalized bool
 		)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
-		require.Equal(t, common.Big1, length)
+		require.Equal(t, ballotIdx, length)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 		require.True(t, inVoting.Sign() == 0)
 		getBallotState := []interface{}{}
-		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", ballotIdx))
 		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
 		require.Equal(t, BallotStates.Rejected, state)
 		require.True(t, isFinalized)
 
-		require.True(t, callA(t, testContract).Sign() == 0)
+		require.True(t, new(big.Int).Sub(callA(t), beforeA).Sign() == 0)
 	})
 	t.Run("reject add by msg.value", func(t *testing.T) {
-		gov := NewGovernance(t).DeployContracts(t)
-		testAddress, testContract := getTestContract(t, gov)
 		calldata := []byte{}
+
+		beforeA := callA(t)
 
 		governanceAddress := common.Address{}
 		require.NoError(t, gov.Registry.Call(callOpts, &[]interface{}{&governanceAddress}, "getContractAddress", ToBytes32("GovernanceContract")))
 		require.NotEqual(t, common.Address{}, governanceAddress)
-
-		require.True(t, callA(t, testContract).Sign() == 0)
 
 		gov.owner.Value = common.Big1
 		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
@@ -3371,7 +3373,13 @@ contract Test {
 		require.NoError(t, err)
 		require.Equal(t, common.Big1, balance)
 
-		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, false))
+		var ballotIdx *big.Int
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotIdx}, "ballotLength"))
+
+		beforeBalance, err := gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
+		require.NoError(t, err)
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, false))
 		var (
 			length      *big.Int
 			inVoting    *big.Int
@@ -3379,16 +3387,16 @@ contract Test {
 			isFinalized bool
 		)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
-		require.Equal(t, common.Big1, length)
+		require.Equal(t, ballotIdx, length)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 		require.True(t, inVoting.Sign() == 0)
 		getBallotState := []interface{}{}
-		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", ballotIdx))
 		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
 		require.Equal(t, BallotStates.Rejected, state)
 		require.True(t, isFinalized)
 
-		require.True(t, callA(t, testContract).Sign() == 0)
+		require.True(t, new(big.Int).Sub(callA(t), beforeA).Sign() == 0)
 
 		balance, err = gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
 		require.NoError(t, err)
@@ -3396,11 +3404,9 @@ contract Test {
 
 		balance, err = gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
 		require.NoError(t, err)
-		require.True(t, balance.Sign() == 0)
+		require.True(t, new(big.Int).Sub(balance, beforeBalance).Sign() == 0)
 	})
 	t.Run("reject add by params, msg.value", func(t *testing.T) {
-		gov := NewGovernance(t).DeployContracts(t)
-		testAddress, testContract := getTestContract(t, gov)
 		calldata, err := testABI.Pack("add", big.NewInt(1))
 		require.NoError(t, err)
 
@@ -3408,7 +3414,7 @@ contract Test {
 		require.NoError(t, gov.Registry.Call(callOpts, &[]interface{}{&governanceAddress}, "getContractAddress", ToBytes32("GovernanceContract")))
 		require.NotEqual(t, common.Address{}, governanceAddress)
 
-		require.True(t, callA(t, testContract).Sign() == 0)
+		beforeA := callA(t)
 
 		gov.owner.Value = common.Big1
 		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
@@ -3417,7 +3423,13 @@ contract Test {
 		require.NoError(t, err)
 		require.Equal(t, common.Big1, balance)
 
-		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, false)))
+		var ballotIdx *big.Int
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&ballotIdx}, "ballotLength"))
+
+		beforeBalance, err := gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
+		require.NoError(t, err)
+
+		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, false)))
 		var (
 			length      *big.Int
 			inVoting    *big.Int
@@ -3425,16 +3437,16 @@ contract Test {
 			isFinalized bool
 		)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
-		require.Equal(t, common.Big1, length)
+		require.Equal(t, ballotIdx, length)
 		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
 		require.True(t, inVoting.Sign() == 0)
 		getBallotState := []interface{}{}
-		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", ballotIdx))
 		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
 		require.Equal(t, BallotStates.Rejected, state)
 		require.True(t, isFinalized)
 
-		require.True(t, callA(t, testContract).Sign() == 0)
+		require.True(t, new(big.Int).Sub(callA(t), beforeA).Sign() == 0)
 
 		balance, err = gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
 		require.NoError(t, err)
@@ -3442,6 +3454,6 @@ contract Test {
 
 		balance, err = gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
 		require.NoError(t, err)
-		require.True(t, balance.Sign() == 0)
+		require.True(t, new(big.Int).Sub(balance, beforeBalance).Sign() == 0)
 	})
 }
