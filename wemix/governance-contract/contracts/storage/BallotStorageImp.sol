@@ -573,9 +573,9 @@ contract BallotStorageImp is GovChecker, BallotEnums, IBallotStorage, UUPSUpgrad
     struct BallotExecute {
         address target;
         uint256 value;
-        bytes calldatas;
+        bytes data;
     }
-    mapping(uint => BallotExecute) internal __ballotExecuteMap;
+    mapping(uint => BallotExecute) private __ballotExecuteMap;
 
     function createBallotForExecute(
         uint256 _id,
@@ -588,15 +588,14 @@ contract BallotStorageImp is GovChecker, BallotEnums, IBallotStorage, UUPSUpgrad
     ) external override onlyGov notDisabled {
         require(_ballotType == uint256(BallotTypes.Execute), "Invalid Ballot Type");
         require(_target != address(0), "Invalid target address");
-
         // ballot basic
         _createBallot(_id, _ballotType, _duration, _creator);
         // ballot executeMap
-        __ballotExecuteMap[_id] = BallotExecute({ target: _target, value: _value, calldatas: _calldata });
+        __ballotExecuteMap[_id] = BallotExecute({ target: _target, value: _value, data: _calldata });
     }
 
     function getBallotExecute(uint256 _id) external view override returns (address, uint256, bytes memory) {
         BallotExecute memory _ballot = __ballotExecuteMap[_id];
-        return (_ballot.target, _ballot.value, _ballot.calldatas);
+        return (_ballot.target, _ballot.value, _ballot.data);
     }
 }

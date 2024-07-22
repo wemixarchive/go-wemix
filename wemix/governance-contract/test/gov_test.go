@@ -4,14 +4,17 @@ import (
 	"context"
 	"math/big"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	compile "github.com/ethereum/go-ethereum/wemix/governance-contract"
 	"github.com/stretchr/testify/require"
 )
 
@@ -136,12 +139,6 @@ func TestGov(t *testing.T) {
 			gov.ExpectedOk(gov.StakingImp.Transact(getTxOpt(t, "govMem1"), "deposit"))
 			govMem1.Value = nil
 			// proposal
-			node1 := nodeInfo{
-				name:  []byte("name1"),
-				enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
-				ip:    []byte("127.0.0.2"),
-				port:  big.NewInt(8542),
-			}
 			gov.nodeInfos = append(gov.nodeInfos, node1)
 			info := MemberInfo{
 				Staker:     govMem1.From,
@@ -2516,8 +2513,6 @@ func TestGov(t *testing.T) {
 			gov.ExpectedOk(gov.StakingImp.Transact(govMem2, "deposit"))
 			govMem2.Value = nil
 
-			node1 := gov.nodeInfos[1]
-
 			gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", MemberInfo{
 				Staker:     govMem2.From,
 				Voter:      govMem2.From,
@@ -3133,5 +3128,320 @@ func TestGov(t *testing.T) {
 				"No Permission",
 			)
 		})
+		t.Run("upgradeTo", func(t *testing.T) {
+			gov := NewGovernance(t).DeployContracts(t)
+
+			var (
+				callOpts = new(bind.CallOpts)
+
+				getGasLimitAndBaseFee []interface{}
+				MBF                   *big.Int
+			)
+
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &getGasLimitAndBaseFee, "getGasLimitAndBaseFee"))
+			require.NoError(t, gov.EnvStorageImp.Call(callOpts, &[]interface{}{&MBF}, "getMaxBaseFee"))
+
+			newGovImp, _, err := gov.Deploy(compiled.GovImp.Deploy(gov.backend, gov.owner))
+			require.NoError(t, err)
+
+			ExpectedRevert(t, gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "upgradeTo", newGovImp)), "Invalid access")
+			ExpectedRevert(t, gov.ExpectedFail(gov.GovImp.Transact(gov.owner, "upgradeToAndCall", newGovImp, []byte{})), "Invalid access")
+		})
+	})
+}
+
+func TestExecute(t *testing.T) {
+	var (
+		callOpts = new(bind.CallOpts)
+		testBind *bindContract
+		testABI  *abi.ABI
+	)
+
+	getTestContract := func(t *testing.T, gov *Governance) (common.Address, *bind.BoundContract) {
+		if testBind == nil {
+			var testSource string = `
+pragma solidity ^0.8.0;
+contract Test {
+	uint256 public a;
+
+	receive() external payable {
+		a += msg.value;
+	}
+
+	function add(uint256 b) external payable {
+		a += b + msg.value;
+	}
+}`
+			var (
+				dir      = t.TempDir()
+				filename = "Test.sol"
+			)
+
+			require.NoError(t, os.WriteFile(filepath.Join(dir, filename), []byte(testSource), 0700))
+
+			compiled, err := compile.Compile(dir, filepath.Join(dir, filename))
+			require.NoError(t, err)
+			Test := compiled["Test"]
+			testBind, err = newBindContract(Test)
+			require.NoError(t, err)
+
+			testABI, err = parseABI(Test.Info.AbiDefinition)
+			require.NoError(t, err)
+		}
+
+		ta, _, tc, err := testBind.Deploy(gov.backend, gov.owner)
+		require.NoError(t, err)
+		gov.backend.Commit()
+
+		return ta, tc
+	}
+
+	callA := func(t *testing.T, c *bind.BoundContract) *big.Int {
+		var a = new(big.Int)
+		require.NoError(t, c.Call(callOpts, &[]interface{}{&a}, "a"))
+		return a
+	}
+
+	t.Run("accept add by params", func(t *testing.T) {
+		gov := NewGovernance(t).DeployContracts(t)
+		testAddress, testContract := getTestContract(t, gov)
+		calldata, err := testABI.Pack("add", big.NewInt(1))
+		require.NoError(t, err)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+
+		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+		var (
+			length      *big.Int
+			inVoting    *big.Int
+			state       *big.Int
+			isFinalized bool
+		)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+		require.Equal(t, common.Big1, length)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+		require.True(t, inVoting.Sign() == 0)
+		getBallotState := []interface{}{}
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+		require.Equal(t, BallotStates.Accepted, state)
+		require.True(t, isFinalized)
+
+		require.Equal(t, callA(t, testContract), common.Big1)
+	})
+	t.Run("accept add by msg.value", func(t *testing.T) {
+		gov := NewGovernance(t).DeployContracts(t)
+		testAddress, testContract := getTestContract(t, gov)
+		calldata := []byte{}
+
+		governanceAddress := common.Address{}
+		require.NoError(t, gov.Registry.Call(callOpts, &[]interface{}{&governanceAddress}, "getContractAddress", ToBytes32("GovernanceContract")))
+		require.NotEqual(t, common.Address{}, governanceAddress)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+
+		gov.owner.Value = common.Big1
+		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
+		gov.owner.Value = nil
+		balance, err := gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
+		require.NoError(t, err)
+		require.Equal(t, common.Big1, balance)
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+		var (
+			length      *big.Int
+			inVoting    *big.Int
+			state       *big.Int
+			isFinalized bool
+		)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+		require.Equal(t, common.Big1, length)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+		require.True(t, inVoting.Sign() == 0)
+		getBallotState := []interface{}{}
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+		require.Equal(t, BallotStates.Accepted, state)
+		require.True(t, isFinalized)
+
+		require.Equal(t, callA(t, testContract), common.Big1)
+
+		balance, err = gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
+		require.NoError(t, err)
+		require.True(t, balance.Sign() == 0)
+
+		balance, err = gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
+		require.NoError(t, err)
+		require.Equal(t, common.Big1, balance)
+	})
+	t.Run("accept add by params, msg.value", func(t *testing.T) {
+		gov := NewGovernance(t).DeployContracts(t)
+		testAddress, testContract := getTestContract(t, gov)
+		calldata, err := testABI.Pack("add", big.NewInt(1))
+		require.NoError(t, err)
+
+		governanceAddress := common.Address{}
+		require.NoError(t, gov.Registry.Call(callOpts, &[]interface{}{&governanceAddress}, "getContractAddress", ToBytes32("GovernanceContract")))
+		require.NotEqual(t, common.Address{}, governanceAddress)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+
+		gov.owner.Value = common.Big1
+		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
+		gov.owner.Value = nil
+		balance, err := gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
+		require.NoError(t, err)
+		require.Equal(t, common.Big1, balance)
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, true))
+		var (
+			length      *big.Int
+			inVoting    *big.Int
+			state       *big.Int
+			isFinalized bool
+		)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+		require.Equal(t, common.Big1, length)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+		require.True(t, inVoting.Sign() == 0)
+		getBallotState := []interface{}{}
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+		require.Equal(t, BallotStates.Accepted, state)
+		require.True(t, isFinalized)
+
+		require.Equal(t, callA(t, testContract), common.Big2)
+
+		balance, err = gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
+		require.NoError(t, err)
+		require.True(t, balance.Sign() == 0)
+
+		balance, err = gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
+		require.NoError(t, err)
+		require.Equal(t, common.Big1, balance)
+	})
+
+	t.Run("reject add by params", func(t *testing.T) {
+		gov := NewGovernance(t).DeployContracts(t)
+		testAddress, testContract := getTestContract(t, gov)
+		calldata, err := testABI.Pack("add", big.NewInt(1))
+		require.NoError(t, err)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+
+		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, false))
+		var (
+			length      *big.Int
+			inVoting    *big.Int
+			state       *big.Int
+			isFinalized bool
+		)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+		require.Equal(t, common.Big1, length)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+		require.True(t, inVoting.Sign() == 0)
+		getBallotState := []interface{}{}
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+		require.Equal(t, BallotStates.Rejected, state)
+		require.True(t, isFinalized)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+	})
+	t.Run("reject add by msg.value", func(t *testing.T) {
+		gov := NewGovernance(t).DeployContracts(t)
+		testAddress, testContract := getTestContract(t, gov)
+		calldata := []byte{}
+
+		governanceAddress := common.Address{}
+		require.NoError(t, gov.Registry.Call(callOpts, &[]interface{}{&governanceAddress}, "getContractAddress", ToBytes32("GovernanceContract")))
+		require.NotEqual(t, common.Address{}, governanceAddress)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+
+		gov.owner.Value = common.Big1
+		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
+		gov.owner.Value = nil
+
+		balance, err := gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
+		require.NoError(t, err)
+		require.Equal(t, common.Big1, balance)
+
+		gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, false))
+		var (
+			length      *big.Int
+			inVoting    *big.Int
+			state       *big.Int
+			isFinalized bool
+		)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+		require.Equal(t, common.Big1, length)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+		require.True(t, inVoting.Sign() == 0)
+		getBallotState := []interface{}{}
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+		require.Equal(t, BallotStates.Rejected, state)
+		require.True(t, isFinalized)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+
+		balance, err = gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
+		require.NoError(t, err)
+		require.True(t, balance.Sign() == 0)
+
+		balance, err = gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
+		require.NoError(t, err)
+		require.True(t, balance.Sign() == 0)
+	})
+	t.Run("reject add by params, msg.value", func(t *testing.T) {
+		gov := NewGovernance(t).DeployContracts(t)
+		testAddress, testContract := getTestContract(t, gov)
+		calldata, err := testABI.Pack("add", big.NewInt(1))
+		require.NoError(t, err)
+
+		governanceAddress := common.Address{}
+		require.NoError(t, gov.Registry.Call(callOpts, &[]interface{}{&governanceAddress}, "getContractAddress", ToBytes32("GovernanceContract")))
+		require.NotEqual(t, common.Address{}, governanceAddress)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+
+		gov.owner.Value = common.Big1
+		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToExecute", testAddress, calldata, []byte("memo"), big.NewInt(86400))))
+		gov.owner.Value = nil
+		balance, err := gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
+		require.NoError(t, err)
+		require.Equal(t, common.Big1, balance)
+
+		require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", common.Big1, false)))
+		var (
+			length      *big.Int
+			inVoting    *big.Int
+			state       *big.Int
+			isFinalized bool
+		)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&length}, "voteLength"))
+		require.Equal(t, common.Big1, length)
+		require.NoError(t, gov.GovImp.Call(callOpts, &[]interface{}{&inVoting}, "getBallotInVoting"))
+		require.True(t, inVoting.Sign() == 0)
+		getBallotState := []interface{}{}
+		require.NoError(t, gov.BallotStorageImp.Call(callOpts, &getBallotState, "getBallotState", common.Big1))
+		state, isFinalized = getBallotState[1].(*big.Int), getBallotState[2].(bool)
+		require.Equal(t, BallotStates.Rejected, state)
+		require.True(t, isFinalized)
+
+		require.True(t, callA(t, testContract).Sign() == 0)
+
+		balance, err = gov.backend.BalanceAt(callOpts.Context, governanceAddress, nil)
+		require.NoError(t, err)
+		require.True(t, balance.Sign() == 0)
+
+		balance, err = gov.backend.BalanceAt(callOpts.Context, testAddress, nil)
+		require.NoError(t, err)
+		require.True(t, balance.Sign() == 0)
 	})
 }
