@@ -1145,6 +1145,4 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         modifiedBlock = block.number;
         emit Executed(_success, _target, _value, _calldata, _returnData);
     }
-
-    uint256[50] private __gap_;
 }
