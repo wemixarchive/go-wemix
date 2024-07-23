@@ -403,11 +403,11 @@ func testGetBlockBodies(t *testing.T, protocol uint) {
 }
 
 // Tests that the state trie nodes can be retrieved based on hashes.
-func TestGetNodeData65(t *testing.T) { testGetNodeData(t, ETH65) }
-func TestGetNodeData66(t *testing.T) { testGetNodeData(t, ETH66) }
-func TestGetNodeData68(t *testing.T) { testGetNodeData(t, ETH68) }
+func TestGetNodeData65(t *testing.T) { testGetNodeData(t, ETH65, false) }
+func TestGetNodeData66(t *testing.T) { testGetNodeData(t, ETH66, false) }
+func TestGetNodeData68(t *testing.T) { testGetNodeData(t, ETH68, true) }
 
-func testGetNodeData(t *testing.T, protocol uint) {
+func testGetNodeData(t *testing.T, protocol uint, drop bool) {
 	t.Parallel()
 
 	// Define three accounts to simulate transactions with
@@ -472,8 +472,15 @@ func testGetNodeData(t *testing.T, protocol uint) {
 		})
 	}
 	msg, err := peer.app.ReadMsg()
-	if err != nil {
-		t.Fatalf("failed to read node data response: %v", err)
+	if !drop {
+		if err != nil {
+			t.Fatalf("failed to read node data response: %v", err)
+		}
+	} else {
+		if err != nil {
+			return
+		}
+		t.Fatalf("succeeded to read node data response on non-supporting protocol: %v", msg)
 	}
 	if msg.Code != NodeDataMsg {
 		t.Fatalf("response packet code mismatch: have %x, want %x", msg.Code, NodeDataMsg)
