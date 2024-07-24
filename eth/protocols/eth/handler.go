@@ -102,8 +102,12 @@ func MakeProtocols(backend Backend, network uint64, dnsdisc enode.Iterator) []p2
 	for i, version := range ProtocolVersions {
 		version := version // Closure
 
+		protocolName := ProtocolName
+		if version == ETH68 {
+			protocolName = Protocol68Name
+		}
 		protocols[i] = p2p.Protocol{
-			Name:    ProtocolName,
+			Name:    protocolName,
 			Version: version,
 			Length:  protocolLengths[version],
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {

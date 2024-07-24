@@ -39,6 +39,7 @@ const (
 // ProtocolName is the official short name of the `eth` protocol used during
 // devp2p capability negotiation.
 const ProtocolName = "mir"
+const Protocol68Name = "eth"
 
 // ProtocolVersions are the supported versions of the `eth` protocol (first
 // is primary).
