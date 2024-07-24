@@ -1,3 +1,6 @@
+# Specifies the version of Ubuntu to be used in the Docker image.
+ARG UBUNTU_VERSION
+
 # Stage 1: Build stage
 FROM golang:1.19 as builder
 
@@ -11,8 +14,8 @@ RUN apt-get update && \
 # Install required packages
 RUN apt-get install -y --no-install-recommends \
     git \
-    ca-certificates \
     openssl \
+    ca-certificates \
     make && \
     rm -rf /var/lib/apt/lists/*
 
@@ -27,11 +30,17 @@ RUN openssl s_client -showcerts -connect proxy.golang.org:443 </dev/null 2>/dev/
     openssl x509 -outform PEM > ${cert_location}/proxy.golang.crt && \
     update-ca-certificates
 
+# Define variables to be used at build time
+ARG REPO
+ARG BRANCH
+ENV REPO=${REPO}
+ENV BRANCH=${BRANCH}
+
 # Clone the repository, install dependencies, and build the project
-RUN git clone https://github.com/wemixarchive/go-wemix.git /go-wemix && \
+RUN git clone -b ${BRANCH} ${REPO} /go-wemix && \
     cd /go-wemix && \
     go mod download && \
-    make
+    USE_ROCKSDB=NO make -f Makefile-local-env
 
 # Clean up unnecessary packages and files after building
 RUN apt-get remove -y \
@@ -43,7 +52,7 @@ RUN apt-get remove -y \
     apt-get clean
 
 # Stage 2: Runtime stage
-FROM ubuntu:22.04
+FROM ubuntu:${UBUNTU_VERSION}
 
 # Set environment variables
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
@@ -58,12 +67,14 @@ RUN apt-get install -y --no-install-recommends \
     libc-dev \
     ca-certificates \
     bash \
-    wget && \
+    jq \
+    wget \
+    netcat-traditional && \
     update-ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 # Create directories for wemix
-RUN mkdir -p /usr/local/wemix /usr/local/wemix/keystore
+RUN mkdir -p /usr/local/wemix
 
 # Set environment variables
 ENV PATH=/usr/local/wemix/bin:$PATH
@@ -75,15 +86,34 @@ COPY --from=builder /go-wemix/build /usr/local/wemix/
 RUN wget -nv -O /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.4.24/solc-static-linux && \
     chmod a+x /usr/local/bin/solc
 
-# Create new accounts for wemix
-RUN bash -c 'for i in 1 2 3 4; do \
-    /usr/local/wemix/bin/gwemix wemix new-account --password <(echo demo) --out /usr/local/wemix/keystore/account-$i; \
-done'
+# Set work directory
+WORKDIR /usr/local/wemix
+
+# Copy config.json & key file
+COPY local-docker-env/config.json ./conf/config.json
+COPY local-docker-env/keystore/ ./keystore/
+COPY local-docker-env/nodekey/ ./nodekey/
+
+# Define variables to be used at build time
+ARG NODE_NUM
+ENV NODE_NUM=${NODE_NUM}
+
+# Run set-nodekey.sh
+RUN chmod a+x bin/set-nodekey.sh && \
+    ./bin/set-nodekey.sh -a ${NODE_NUM}
+
+# Clean up unnecessary files
+RUN rm -rf nodekey
+
+# Make the binary executable
+RUN chmod a+x bin/init-node.sh
+CMD ./bin/init-node.sh
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \
     g++ \
     libc-dev \
+    ca-certificates \
     wget && \
     apt autoremove -y && \
     apt-get clean
@@ -91,5 +121,9 @@ RUN apt-get remove -y \
 # Expose necessary ports
 EXPOSE 8588 8589 8598
 
-# Set the entrypoint
-ENTRYPOINT ["/usr/local/wemix/bin/gwemix"]
+# # Set the entrypoint
+# ENTRYPOINT ["./bin/gwemix", \
+#     "--metrics", "--nodiscover", "--mine", \
+#     "--http", "--http.addr","0.0.0.0", "--http.port", "8588", \
+#     "--ws", "--ws.addr", "0.0.0.0", "--ws.port", "8598", \
+#     "--syncmode", "full", "--gcmode", "archive", "--port", "8589"]
