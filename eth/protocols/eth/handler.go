@@ -101,13 +101,8 @@ func MakeProtocols(backend Backend, network uint64, dnsdisc enode.Iterator) []p2
 	protocols := make([]p2p.Protocol, len(ProtocolVersions))
 	for i, version := range ProtocolVersions {
 		version := version // Closure
-
-		protocolName := ProtocolName
-		if version == ETH68 {
-			protocolName = Protocol68Name
-		}
 		protocols[i] = p2p.Protocol{
-			Name:    protocolName,
+			Name:    ProtocolName,
 			Version: version,
 			Length:  protocolLengths[version],
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
@@ -126,6 +121,13 @@ func MakeProtocols(backend Backend, network uint64, dnsdisc enode.Iterator) []p2
 			},
 			Attributes:     []enr.Entry{currentENREntry(backend.Chain())},
 			DialCandidates: dnsdisc,
+			Match: func(myProtoName string, myProtoVersion uint, cap p2p.Cap) bool {
+				if myProtoName == ProtocolName && myProtoVersion == ETH68 {
+					// WEMIX: in case ETH68, permit the protocol name `eth` including `mir`
+					return (cap.Name == ProtocolName || cap.Name == ProtocolAlias) && cap.Version == ETH68
+				}
+				return myProtoName == cap.Name && myProtoVersion == cap.Version
+			},
 		}
 	}
 	return protocols

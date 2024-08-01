@@ -19,7 +19,6 @@ package eth
 import (
 	"encoding/json"
 	"fmt"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -143,17 +142,7 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	}
 	f := func() error {
 		response := ServiceGetBlockHeadersQuery(backend.Chain(), query.GetBlockHeadersPacket, peer)
-		if len(response) == int(query.GetBlockHeadersPacket.Amount) {
-			return peer.ReplyBlockHeadersRLP(query.RequestId, response)
-		} else {
-			// Wemix: fall back to old behavior
-			response2 := answerGetBlockHeadersQuery(backend, query.GetBlockHeadersPacket, peer)
-			if len(response2) > len(response) {
-				return peer.ReplyBlockHeaders(query.RequestId, response2)
-			} else {
-				return peer.ReplyBlockHeadersRLP(query.RequestId, response)
-			}
-		}
+		return peer.ReplyBlockHeadersRLP(query.RequestId, response)
 	}
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()

@@ -382,7 +382,12 @@ func matchProtocols(protocols []Protocol, caps []Cap, rw MsgReadWriter) map[stri
 outer:
 	for _, cap := range caps {
 		for _, proto := range protocols {
-			if proto.Name == cap.Name && proto.Version == cap.Version {
+			if proto.Match == nil {
+				proto.Match = func(protoName string, protoVersion uint, cap Cap) bool {
+					return protoName == cap.Name && protoVersion == cap.Version
+				}
+			}
+			if proto.Match(proto.Name, proto.Version, cap) {
 				// If an old protocol version matched, revert it
 				if old := result[cap.Name]; old != nil {
 					offset -= old.Length

@@ -23,6 +23,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 )
 
+type matchFunc func(protoName string, protoVersion uint, cap Cap) bool
+
 // Protocol represents a P2P subprotocol implementation.
 type Protocol struct {
 	// Name should contain the official protocol name,
@@ -61,6 +63,9 @@ type Protocol struct {
 
 	// Attributes contains protocol specific information for the node record.
 	Attributes []enr.Entry
+
+	// WEMIX: for supporting ETH protocol name
+	Match matchFunc
 }
 
 func (p Protocol) cap() Cap {
