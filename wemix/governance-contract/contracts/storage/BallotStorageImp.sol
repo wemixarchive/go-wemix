@@ -567,4 +567,42 @@ contract BallotStorageImp is GovChecker, BallotEnums, IBallotStorage, UUPSUpgrad
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    // Genernal Purpose
+
+    struct BallotExecute {
+        address target;
+        uint256 value;
+        bytes data;
+    }
+    mapping(uint => BallotExecute) private __ballotExecuteMap;
+
+    function createBallotForExecute(
+        uint256 _id,
+        uint256 _ballotType,
+        uint256 _duration,
+        address _creator,
+        address _target,
+        uint256 _value,
+        bytes memory _calldata
+    ) external override onlyGov notDisabled {
+        require(_ballotType == uint256(BallotTypes.Execute), "Invalid Ballot Type");
+        require(_target != address(0), "Invalid target address");
+        // ballot basic
+        _createBallot(_id, _ballotType, _duration, _creator);
+        // ballot executeMap
+        __ballotExecuteMap[_id] = BallotExecute({ target: _target, value: _value, data: _calldata });
+    }
+
+    function getBallotExecute(uint256 _id) external view override returns (address, uint256, bytes memory) {
+        BallotExecute memory _ballot = __ballotExecuteMap[_id];
+        return (_ballot.target, _ballot.value, _ballot.data);
+    }
+
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+     */
+    uint256[40] private __gap;
 }

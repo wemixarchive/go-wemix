@@ -41,4 +41,8 @@ interface IBallotStorage {
     function getBallotAddress(uint256) external view returns (address);
     function getBallotVariable(uint256) external view returns (bytes32, uint256, bytes memory);
     function getBallotForExit(uint256) external view returns (uint256, uint256);
+
+    // Genernal Purpose
+    function createBallotForExecute(uint256, uint256, uint256, address, address, uint256, bytes memory) external;
+    function getBallotExecute(uint256) external view returns (address, uint256, bytes memory);
 }

@@ -509,6 +509,14 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
                 changeGov(ballotIdx);
             } else if (ballotType == uint256(BallotTypes.EnvValChange)) {
                 applyEnv(ballotIdx);
+            } else if (ballotType == uint256(BallotTypes.Execute)) {
+                _execute(ballotIdx);
+            }
+        } else {
+            if (ballotType == uint256(BallotTypes.Execute)) {
+                IBallotStorage _ballotStorage = IBallotStorage(getBallotStorageAddress());
+                (, uint256 _value, ) = _ballotStorage.getBallotExecute(ballotIdx);
+                _returnValueToCreator(_ballotStorage, ballotIdx, _value);
             }
         }
         finalizeBallot(ballotIdx, ballotState);
@@ -1076,5 +1084,72 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         ballotInVoting = ogov.getBallotInVoting();
 
         return 0;
+    }
+
+    // Critical
+
+    function upgradeTo(address) external override {
+        revert("Invalid access");
+    }
+
+    function upgradeToAndCall(address, bytes memory) external payable override {
+        revert("Invalid access");
+    }
+
+    // Genernal Purpose
+
+    event Executed(bool indexed success, address indexed to, uint256 value, bytes calldatas, bytes returnData);
+    event FailReturnValue(uint256 indexed ballotIdx, address indexed creator, uint256 value, bytes result);
+
+    function addProposalToExecute(
+        address _target,
+        bytes memory _calldata,
+        bytes memory _memo,
+        uint256 _duration
+    ) external payable onlyGovMem checkTimePeriod checkLockedAmount {
+        require(_target != ZERO, "target cannot be zero");
+
+        address _creator = msg.sender;
+        if (msg.value != 0) {
+            (bool _ok, ) = _creator.call{ value: 0 }("");
+            require(_ok, "creator is not payable");
+        }
+
+        uint256 _ballotIdx = ballotLength + 1;
+
+        IBallotStorage(getBallotStorageAddress()).createBallotForExecute(
+            _ballotIdx, // ballot id
+            uint256(BallotTypes.Execute), // ballot type
+            _duration,
+            _creator, // creator
+            _target,
+            msg.value,
+            _calldata
+        );
+        updateBallotMemo(_ballotIdx, _memo);
+        ballotLength = _ballotIdx;
+    }
+
+    function _execute(uint256 _ballotIdx) private {
+        fromValidBallot(_ballotIdx, uint256(BallotTypes.Execute));
+        IBallotStorage _ballotStorage = IBallotStorage(getBallotStorageAddress());
+
+        (address _target, uint256 _value, bytes memory _calldata) = _ballotStorage.getBallotExecute(_ballotIdx);
+        (bool _success, bytes memory _returnData) = _target.call{ value: _value }(_calldata);
+
+        modifiedBlock = block.number;
+        emit Executed(_success, _target, _value, _calldata, _returnData);
+
+        if (!_success) _returnValueToCreator(_ballotStorage, _ballotIdx, _value);
+    }
+
+    function _returnValueToCreator(IBallotStorage _ballotStorage, uint256 _ballotIDx, uint256 _value) private {
+        if (_value == 0) return;
+
+        (, , , address _creator, , , , , , , ) = _ballotStorage.getBallotBasic(_ballotIDx);
+        (bool _ok, bytes memory _returnData) = _creator.call{ value: _value }("");
+        if (!_ok) {
+            emit FailReturnValue(_ballotIDx, _creator, _value, _returnData);
+        }
     }
 }
