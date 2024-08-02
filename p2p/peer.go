@@ -389,11 +389,11 @@ outer:
 			}
 			if proto.Match(cap) {
 				// If an old protocol version matched, revert it
-				if old := result[cap.Name]; old != nil {
+				if old := result[proto.Name]; old != nil {
 					offset -= old.Length
 				}
 				// Assign the new match
-				result[cap.Name] = &protoRW{Protocol: proto, offset: offset, in: make(chan Msg), w: rw}
+				result[proto.Name] = &protoRW{Protocol: proto, offset: offset, in: make(chan Msg), w: rw}
 				offset += proto.Length
 
 				continue outer
