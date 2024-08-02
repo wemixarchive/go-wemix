@@ -383,11 +383,11 @@ outer:
 	for _, cap := range caps {
 		for _, proto := range protocols {
 			if proto.Match == nil {
-				proto.Match = func(protoName string, protoVersion uint, cap Cap) bool {
-					return protoName == cap.Name && protoVersion == cap.Version
+				proto.Match = func(cap Cap) bool {
+					return proto.Name == cap.Name && proto.Version == cap.Version
 				}
 			}
-			if proto.Match(proto.Name, proto.Version, cap) {
+			if proto.Match(cap) {
 				// If an old protocol version matched, revert it
 				if old := result[cap.Name]; old != nil {
 					offset -= old.Length

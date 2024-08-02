@@ -101,6 +101,17 @@ func MakeProtocols(backend Backend, network uint64, dnsdisc enode.Iterator) []p2
 	protocols := make([]p2p.Protocol, len(ProtocolVersions))
 	for i, version := range ProtocolVersions {
 		version := version // Closure
+		var matchFunc func(cap p2p.Cap) bool = nil
+		var representativeNameFunc func() string = nil
+		if version == ETH68 {
+			matchFunc = func(cap p2p.Cap) bool {
+				return (cap.Name == ProtocolName || cap.Name == ProtocolAlias) && cap.Version == ETH68
+			}
+			representativeNameFunc = func() string {
+				// When WEMIX node does p2p.handshaking, it sends `eth` for the `eth68` protocol name instead of `mir`
+				return ProtocolAlias
+			}
+		}
 		protocols[i] = p2p.Protocol{
 			Name:    ProtocolName,
 			Version: version,
@@ -119,15 +130,10 @@ func MakeProtocols(backend Backend, network uint64, dnsdisc enode.Iterator) []p2
 			PeerInfo: func(id enode.ID) interface{} {
 				return backend.PeerInfo(id)
 			},
-			Attributes:     []enr.Entry{currentENREntry(backend.Chain())},
-			DialCandidates: dnsdisc,
-			Match: func(myProtoName string, myProtoVersion uint, cap p2p.Cap) bool {
-				if myProtoName == ProtocolName && myProtoVersion == ETH68 {
-					// WEMIX: in case ETH68, permit the protocol name `eth` including `mir`
-					return (cap.Name == ProtocolName || cap.Name == ProtocolAlias) && cap.Version == ETH68
-				}
-				return myProtoName == cap.Name && myProtoVersion == cap.Version
-			},
+			Attributes:         []enr.Entry{currentENREntry(backend.Chain())},
+			DialCandidates:     dnsdisc,
+			Match:              matchFunc,
+			RepresentativeName: representativeNameFunc,
 		}
 	}
 	return protocols

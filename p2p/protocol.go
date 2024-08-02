@@ -23,7 +23,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 )
 
-type matchFunc func(protoName string, protoVersion uint, cap Cap) bool
+type matchFunc func(cap Cap) bool
+type representativeNameFunc func() string
 
 // Protocol represents a P2P subprotocol implementation.
 type Protocol struct {
@@ -65,11 +66,15 @@ type Protocol struct {
 	Attributes []enr.Entry
 
 	// WEMIX: for supporting ETH protocol name
-	Match matchFunc
+	Match              matchFunc
+	RepresentativeName representativeNameFunc
 }
 
 func (p Protocol) cap() Cap {
-	return Cap{p.Name, p.Version}
+	if p.RepresentativeName == nil {
+		return Cap{p.Name, p.Version}
+	}
+	return Cap{p.RepresentativeName(), p.Version}
 }
 
 // Cap is the structure of a peer capability.
