@@ -365,7 +365,12 @@ func countMatchingProtocols(protocols []Protocol, caps []Cap) int {
 	n := 0
 	for _, cap := range caps {
 		for _, proto := range protocols {
-			if proto.Name == cap.Name && proto.Version == cap.Version {
+			if proto.Match == nil {
+				proto.Match = func(cap Cap) bool {
+					return proto.Name == cap.Name && proto.Version == cap.Version
+				}
+			}
+			if proto.Match(cap) {
 				n++
 			}
 		}
