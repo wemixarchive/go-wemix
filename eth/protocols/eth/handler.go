@@ -260,7 +260,7 @@ func handleMessage(backend Backend, peer *Peer) error {
 	if peer.Version() == ETH66 {
 		handlers = eth66
 	}
-	if peer.Version() == ETH68 {
+	if peer.Version() >= ETH68 {
 		handlers = eth68
 	}
 
