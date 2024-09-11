@@ -116,6 +116,10 @@ type NewPooledTransactionHashes eth.NewPooledTransactionHashesPacket
 
 func (nb NewPooledTransactionHashes) Code() int { return 24 }
 
+type NewPooledTransactionHashes68 eth.NewPooledTransactionHashesPacket68
+
+func (nb NewPooledTransactionHashes68) Code() int { return 24 }
+
 type GetPooledTransactions eth.GetPooledTransactionsPacket
 
 func (gpt GetPooledTransactions) Code() int { return 25 }

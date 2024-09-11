@@ -36,8 +36,8 @@ type GovContracts struct {
 	BallotStorageImp *BallotStorageImp
 	EnvStorage       *EnvStorage
 	EnvStorageImp    *EnvStorageImp
-	NCPExit          *NCPExit
-	NCPExitImp       *NCPExitImp
+	NCPExit          *NCPExit    // not used; only used for deploying gov contracts
+	NCPExitImp       *NCPExitImp // not used; only used for deploying gov contracts
 	address          struct {
 		Registry      common.Address
 		Gov           common.Address
@@ -76,9 +76,8 @@ func NewGovContracts(backend bind.ContractBackend, registry common.Address) (*Go
 		return nil, errors.Wrap(err, DOMAIN_BallotStorage)
 	} else if gov.address.EnvStorage, gov.EnvStorage, gov.EnvStorageImp, err = newUUPSContracts(cfg, DOMAIN_EnvStorage, NewEnvStorage, NewEnvStorageImp); err != nil {
 		return nil, errors.Wrap(err, DOMAIN_EnvStorage)
-	} else if gov.address.NCPExit, gov.NCPExit, gov.NCPExitImp, err = newUUPSContracts(cfg, DOMAIN_NCPExit, NewNCPExit, NewNCPExitImp); err != nil {
-		return nil, errors.Wrap(err, DOMAIN_NCPExit)
 	} else {
+		// NCPExit and NCPExitImp are not loaded. It can be nil at the block that is gov contracts were deployed in
 		return gov, nil
 	}
 }
