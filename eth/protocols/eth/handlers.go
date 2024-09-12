@@ -143,17 +143,7 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	}
 	f := func() error {
 		response := ServiceGetBlockHeadersQuery(backend.Chain(), query.GetBlockHeadersPacket, peer)
-		if len(response) == int(query.GetBlockHeadersPacket.Amount) {
-			return peer.ReplyBlockHeadersRLP(query.RequestId, response)
-		} else {
-			// Wemix: fall back to old behavior
-			response2 := answerGetBlockHeadersQuery(backend, query.GetBlockHeadersPacket, peer)
-			if len(response2) > len(response) {
-				return peer.ReplyBlockHeaders(query.RequestId, response2)
-			} else {
-				return peer.ReplyBlockHeadersRLP(query.RequestId, response)
-			}
-		}
+		return peer.ReplyBlockHeadersRLP(query.RequestId, response)
 	}
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
@@ -787,6 +777,33 @@ func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) 
 	f := func() error {
 		// Schedule all the unknown hashes for retrieval
 		for _, hash := range *ann {
+			peer.markTransaction(hash)
+		}
+		return backend.Handle(peer, ann)
+	}
+	if params.ConsensusMethod == params.ConsensusPoW {
+		return f()
+	}
+	go f()
+	return nil
+}
+
+func handleNewPooledTransactionHashes68(backend Backend, msg Decoder, peer *Peer) error {
+	// New transaction announcement arrived, make sure we have
+	// a valid and fresh chain to handle them
+	if !backend.AcceptTxs() {
+		return nil
+	}
+	ann := new(NewPooledTransactionHashesPacket68)
+	if err := msg.Decode(ann); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	if len(ann.Hashes) != len(ann.Types) || len(ann.Hashes) != len(ann.Sizes) {
+		return fmt.Errorf("%w: message %v: invalid len of fields: %v %v %v", errDecode, msg, len(ann.Hashes), len(ann.Types), len(ann.Sizes))
+	}
+	f := func() error {
+		// Schedule all the unknown hashes for retrieval
+		for _, hash := range ann.Hashes {
 			peer.markTransaction(hash)
 		}
 		return backend.Handle(peer, ann)

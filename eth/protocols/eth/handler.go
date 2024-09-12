@@ -101,7 +101,17 @@ func MakeProtocols(backend Backend, network uint64, dnsdisc enode.Iterator) []p2
 	protocols := make([]p2p.Protocol, len(ProtocolVersions))
 	for i, version := range ProtocolVersions {
 		version := version // Closure
-
+		var matchFunc func(cap p2p.Cap) bool = nil
+		var representativeNameFunc func() string = nil
+		if version == ETH68 {
+			matchFunc = func(cap p2p.Cap) bool {
+				return (cap.Name == ProtocolName || cap.Name == ProtocolAlias) && cap.Version == ETH68
+			}
+			representativeNameFunc = func() string {
+				// When WEMIX node does p2p.handshaking, it sends `eth` for the `eth68` protocol name instead of `mir`
+				return ProtocolAlias
+			}
+		}
 		protocols[i] = p2p.Protocol{
 			Name:    ProtocolName,
 			Version: version,
@@ -120,8 +130,10 @@ func MakeProtocols(backend Backend, network uint64, dnsdisc enode.Iterator) []p2
 			PeerInfo: func(id enode.ID) interface{} {
 				return backend.PeerInfo(id)
 			},
-			Attributes:     []enr.Entry{currentENREntry(backend.Chain())},
-			DialCandidates: dnsdisc,
+			Attributes:         []enr.Entry{currentENREntry(backend.Chain())},
+			DialCandidates:     dnsdisc,
+			Match:              matchFunc,
+			RepresentativeName: representativeNameFunc,
 		}
 	}
 	return protocols
@@ -216,6 +228,21 @@ var eth66 = map[uint64]msgHandler{
 	TransactionsExMsg: handleTransactionsEx,
 }
 
+var eth68 = map[uint64]msgHandler{
+	NewBlockHashesMsg:             handleNewBlockhashes,
+	NewBlockMsg:                   handleNewBlock,
+	TransactionsMsg:               handleTransactions,
+	NewPooledTransactionHashesMsg: handleNewPooledTransactionHashes68,
+	GetBlockHeadersMsg:            handleGetBlockHeaders66,
+	BlockHeadersMsg:               handleBlockHeaders66,
+	GetBlockBodiesMsg:             handleGetBlockBodies66,
+	BlockBodiesMsg:                handleBlockBodies66,
+	GetReceiptsMsg:                handleGetReceipts66,
+	ReceiptsMsg:                   handleReceipts66,
+	GetPooledTransactionsMsg:      handleGetPooledTransactions66,
+	PooledTransactionsMsg:         handlePooledTransactions66,
+}
+
 // handleMessage is invoked whenever an inbound message is received from a remote
 // peer. The remote connection is torn down upon returning any error.
 func handleMessage(backend Backend, peer *Peer) error {
@@ -230,8 +257,11 @@ func handleMessage(backend Backend, peer *Peer) error {
 	defer msg.Discard()
 
 	var handlers = eth65
-	if peer.Version() >= ETH66 {
+	if peer.Version() == ETH66 {
 		handlers = eth66
+	}
+	if peer.Version() >= ETH68 {
+		handlers = eth68
 	}
 
 	// Track the amount of time it takes to serve the request and run the handler
