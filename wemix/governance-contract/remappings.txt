@@ -1,2 +1,0 @@
-@openzeppelin/contracts/=contracts/openzeppelin/contracts/contracts/
-@openzeppelin/contracts-upgradeable/=contracts/openzeppelin/contracts-upgradeable/contracts/

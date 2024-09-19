@@ -365,12 +365,7 @@ func countMatchingProtocols(protocols []Protocol, caps []Cap) int {
 	n := 0
 	for _, cap := range caps {
 		for _, proto := range protocols {
-			if proto.Match == nil {
-				proto.Match = func(cap Cap) bool {
-					return proto.Name == cap.Name && proto.Version == cap.Version
-				}
-			}
-			if proto.Match(cap) {
+			if proto.Name == cap.Name && proto.Version == cap.Version {
 				n++
 			}
 		}
@@ -387,18 +382,13 @@ func matchProtocols(protocols []Protocol, caps []Cap, rw MsgReadWriter) map[stri
 outer:
 	for _, cap := range caps {
 		for _, proto := range protocols {
-			if proto.Match == nil {
-				proto.Match = func(cap Cap) bool {
-					return proto.Name == cap.Name && proto.Version == cap.Version
-				}
-			}
-			if proto.Match(cap) {
+			if proto.Name == cap.Name && proto.Version == cap.Version {
 				// If an old protocol version matched, revert it
-				if old := result[proto.Name]; old != nil {
+				if old := result[cap.Name]; old != nil {
 					offset -= old.Length
 				}
 				// Assign the new match
-				result[proto.Name] = &protoRW{Protocol: proto, offset: offset, in: make(chan Msg), w: rw}
+				result[cap.Name] = &protoRW{Protocol: proto, offset: offset, in: make(chan Msg), w: rw}
 				offset += proto.Length
 
 				continue outer

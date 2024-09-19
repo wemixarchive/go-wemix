@@ -334,8 +334,8 @@ func ReadHeaderRange(db ethdb.Reader, number uint64, count uint64) []rlp.RawValu
 		return rlpHeaders
 	}
 	// read remaining from ancients
-	maxBytes := count * 8000 // WEMIX mainnet block header size is 4K bytes in normal
-	data, err := db.AncientRange(freezerHeaderTable, i+1-count, count, maxBytes)
+	max := count * 700
+	data, err := db.AncientRange(freezerHeaderTable, i+1-count, count, max)
 	if err == nil && uint64(len(data)) == count {
 		// the data is on the order [h, h+1, .., n] -- reordering needed
 		for i := range data {
