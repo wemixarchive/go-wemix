@@ -19,7 +19,8 @@ jobs:
 
     - name: Setup packages
       run: |
-        sudo apt install -y libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev
+        sudo apt-get update
+        sudo apt-get install -y libjemalloc-dev liblz4-dev libsnappy-dev libzstd-dev libudev-dev
         sudo apt remove -y bzip2 libbz2-dev zlib1g-dev
 
     - name: Build Go-WEMIX tarball (rocksdb)
