@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"path"
@@ -20,7 +19,7 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -33,8 +32,10 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
+	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
+	"github.com/pkg/errors"
 )
 
 type wemixNode struct {
@@ -61,10 +62,7 @@ type wemixAdmin struct {
 	bootNodeId  string // allowed to generate block without admin contract
 	bootAccount common.Address
 	nodeInfo    *p2p.NodeInfo
-	registry    *metclient.RemoteContract
-	gov         *metclient.RemoteContract
-	staking     *metclient.RemoteContract
-	envStorage  *metclient.RemoteContract
+	contracts   *gov.GovContracts
 	Updates     chan bool
 	rpcCli      *rpc.Client
 	cli         *ethclient.Client
@@ -174,7 +172,7 @@ func toIdv4(id string) (string, error) {
 			return idv4.ID().String(), nil
 		}
 	} else {
-		return "", fmt.Errorf("Invalid V5 Identifier")
+		return "", fmt.Errorf("invalid V5 Identifier")
 	}
 }
 
@@ -191,14 +189,13 @@ func (ma *wemixAdmin) getGenesisInfo() (string, common.Address, error) {
 	if err != nil {
 		return "", common.Address{}, err
 	}
-
 	var nodeId string
 	if len(block.Extra) < 64 {
-		return "", common.Address{}, fmt.Errorf("Invalid bootnode id in the genesis block")
+		return "", common.Address{}, fmt.Errorf("invalid bootnode id in the genesis block")
 	} else if len(block.Extra) == 64 {
 		nodeId = hex.EncodeToString(block.Extra)
 	} else if len(block.Extra) <= 128 {
-		return "", common.Address{}, fmt.Errorf("Invalid bootnode id in the genesis block")
+		return "", common.Address{}, fmt.Errorf("invalid bootnode id in the genesis block")
 	} else {
 		nodeId = string(block.Extra[len(block.Extra)-128:])
 	}
@@ -206,140 +203,14 @@ func (ma *wemixAdmin) getGenesisInfo() (string, common.Address, error) {
 	return nodeId, block.Coinbase, nil
 }
 
-func (ma *wemixAdmin) getRegistryAddress(ctx context.Context, cli *ethclient.Client, registryAbi abi.ABI, height *big.Int) (*common.Address, error) {
-	contract := &metclient.RemoteContract{
-		Cli: cli,
-		Abi: registryAbi,
+func (ma *wemixAdmin) getRegGovEnvContracts(ctx context.Context, height *big.Int) (*gov.GovContracts, error) {
+	if ctx == nil {
+		var cancel func()
+		ctx, cancel = context.WithCancel(context.Background())
+		defer cancel()
 	}
-	for i := uint64(0); i < 10; i++ {
-		addr := crypto.CreateAddress(ma.bootAccount, i)
-		contract.To = &addr
-
-		var v *big.Int
-		err := metclient.CallContract(ctx, contract, "magic", nil, &v, height)
-		if err == nil && v.Cmp(magic) == 0 {
-			return &addr, nil
-		}
-	}
-	return nil, wemixminer.ErrNotInitialized
-}
-
-// it should be the first transaction of the coinbase of the genesis block
-func (ma *wemixAdmin) getAdminAddresses() (registry, gov, staking, envStorage *common.Address, err error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	registry, gov, staking, envStorage = nil, nil, nil, nil
-	contract := &metclient.RemoteContract{
-		Cli: ma.cli,
-		Abi: ma.registry.Abi,
-	}
-	if ma.registry != nil && ma.registry.To != nil {
-		registry = ma.registry.To
-	} else {
-		registry, err = ma.getRegistryAddress(ctx, ma.cli, ma.registry.Abi, nil)
-		if err != nil {
-			err = ethereum.NotFound
-			return
-		}
-	}
-	contract.To = registry
-
-	n1 := metclient.ToBytes32("GovernanceContract")
-	n2 := metclient.ToBytes32("Staking")
-	n3 := metclient.ToBytes32("EnvStorage")
-	var a1, a2, a3 common.Address
-	input := []interface{}{n1}
-	if err = metclient.CallContract(ctx, contract, "getContractAddress", input, &a1, nil); err != nil {
-		return
-	}
-	input = []interface{}{n2}
-	if err = metclient.CallContract(ctx, contract, "getContractAddress", input, &a2, nil); err != nil {
-		return
-	}
-	input = []interface{}{n3}
-	if err = metclient.CallContract(ctx, contract, "getContractAddress", input, &a3, nil); err != nil {
-		return
-	}
-
-	log.Debug("Wemix Contract Address",
-		hex.EncodeToString(n1[:]), a1.Hex(),
-		hex.EncodeToString(n2[:]), a2.Hex(),
-		hex.EncodeToString(n3[:]), a3.Hex())
-
-	gov, staking, envStorage = &a1, &a2, &a3
-	return
-}
-
-func (ma *wemixAdmin) getInt(ctx context.Context, contract *metclient.RemoteContract, block *big.Int, name string) (int64, error) {
-	var v *big.Int
-	err := metclient.CallContract(ctx, contract, name, nil, &v, block)
-	if err != nil {
-		return 0, err
-	} else {
-		return v.Int64(), nil
-	}
-}
-
-// TODO: error handling
-func (ma *wemixAdmin) getRegGovEnvContracts(ctx context.Context, height *big.Int) (reg, gov, env, staking *metclient.RemoteContract, err error) {
-	if ma.registry == nil {
-		err = wemixminer.ErrNotInitialized
-		return
-	}
-	reg = &metclient.RemoteContract{
-		Cli: ma.cli,
-		Abi: ma.registry.Abi,
-	}
-	env = &metclient.RemoteContract{
-		Cli: ma.cli,
-		Abi: ma.envStorage.Abi,
-	}
-	gov = &metclient.RemoteContract{
-		Cli: ma.cli,
-		Abi: ma.gov.Abi,
-	}
-	staking = &metclient.RemoteContract{
-		Cli: ma.cli,
-		Abi: ma.staking.Abi,
-	}
-	if ma.registry.To != nil {
-		reg.To = ma.registry.To
-	} else {
-		var addr *common.Address
-		if addr, err = ma.getRegistryAddress(ctx, ma.cli, reg.Abi, height); err != nil {
-			err = wemixminer.ErrNotInitialized
-			return
-		}
-		reg.To = addr
-	}
-
-	var addr common.Address
-	input := []interface{}{metclient.ToBytes32("GovernanceContract")}
-	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
-		err = wemixminer.ErrNotInitialized
-		return
-	}
-	gov.To = &common.Address{}
-	gov.To.SetBytes(addr.Bytes())
-
-	input = []interface{}{metclient.ToBytes32("EnvStorage")}
-	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
-		err = wemixminer.ErrNotInitialized
-		return
-	}
-	env.To = &common.Address{}
-	env.To.SetBytes(addr.Bytes())
-
-	input = []interface{}{metclient.ToBytes32("Staking")}
-	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
-		err = wemixminer.ErrNotInitialized
-		return
-	}
-	staking.To = &common.Address{}
-	staking.To.SetBytes(addr.Bytes())
-
-	return
+	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
+	return gov.GetGovContractsByOwner(opts, ma.cli, ma.bootAccount)
 }
 
 // returns []*wemixNode from map[string]*wemixNode
@@ -415,40 +286,35 @@ func (ma *wemixAdmin) getMinerNodes(height int64, locked bool) (*wemixNode, *wem
 
 // get nodes from the Governance contract
 func (ma *wemixAdmin) getWemixNodes(ctx context.Context, block *big.Int) ([]*wemixNode, error) {
-	var (
-		nodes           []*wemixNode
-		addr            common.Address
-		name, enode, ip []byte
-		port            *big.Int
-		count           int64
-		input, output   []interface{}
-		err             error
-	)
-
-	count, err = ma.getInt(ctx, ma.gov, block, "getNodeLength")
+	callOpts := &bind.CallOpts{Context: ctx, BlockNumber: block}
+	nodes := make([]*wemixNode, 0)
+	nodeLength, err := ma.contracts.GovImp.GetNodeLength(callOpts)
+	if err != nil {
+		return nil, err
+	}
+	count := nodeLength.Int64()
 	for i := int64(1); i <= count; i++ {
-		input = []interface{}{big.NewInt(i)}
-		output = []interface{}{&name, &enode, &ip, &port}
-		if err = metclient.CallContract(ctx, ma.gov, "getNode", input, &output, block); err != nil {
+		node, err := ma.contracts.GovImp.GetNode(callOpts, big.NewInt(i))
+		if err != nil {
+			return nil, err
+		}
+		member, err := ma.contracts.GovImp.GetMember(callOpts, big.NewInt(i))
+		if err != nil {
 			return nil, err
 		}
 
-		if err = metclient.CallContract(ctx, ma.gov, "getMember", input, &addr, block); err != nil {
-			return nil, err
-		}
-
-		sid := hex.EncodeToString(enode)
+		sid := hex.EncodeToString(node.Enode)
 		if len(sid) != 128 {
 			return nil, ErrInvalidEnode
 		}
 		idv4, _ := toIdv4(sid)
 		nodes = append(nodes, &wemixNode{
-			Name:  string(name),
+			Name:  string(node.Name),
 			Enode: sid,
-			Ip:    string(ip),
+			Ip:    string(node.Ip),
 			Id:    idv4,
-			Port:  int(port.Int64()),
-			Addr:  addr,
+			Port:  int(node.Port.Int64()),
+			Addr:  member,
 		})
 	}
 	sort.Slice(nodes, func(i, j int) bool {
@@ -459,147 +325,76 @@ func (ma *wemixAdmin) getWemixNodes(ctx context.Context, block *big.Int) ([]*wem
 
 func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*rewardParameters, error) {
 	rp := &rewardParameters{}
-	reg, gov, env, staking, err := ma.getRegGovEnvContracts(ctx, height)
+	contracts, err := ma.getRegGovEnvContracts(ctx, height)
+	if err != nil {
+		return nil, err
+	}
+	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
+
+	rp.rewardAmount, err = contracts.EnvStorageImp.GetBlockRewardAmount(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = metclient.CallContract(ctx, env, "getBlockRewardAmount", nil, &rp.rewardAmount, height); err != nil {
+	distributionMethod1, distributionMethod2, distributionMethod3, distributionMethod4, err := contracts.EnvStorageImp.GetBlockRewardDistributionMethod(opts)
+	if err != nil {
 		return nil, err
 	}
+	rp.distributionMethod = []*big.Int{distributionMethod1, distributionMethod2, distributionMethod3, distributionMethod4}
 
-	rp.distributionMethod = make([]*big.Int, 4)
-	if err = metclient.CallContract(ctx, env, "getBlockRewardDistributionMethod", nil, &rp.distributionMethod, height); err != nil {
-		return nil, err
+	staker, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_StakingReward))
+	if err != nil {
+		return nil, errors.Wrap(err, gov.DOMAIN_StakingReward)
 	}
+	rp.staker = &staker
 
-	var addr common.Address
-	input := []interface{}{metclient.ToBytes32("StakingReward")}
-	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
-		return nil, err
+	ecoSystem, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_Ecosystem))
+	if err != nil {
+		return nil, errors.Wrap(err, gov.DOMAIN_Ecosystem)
 	}
-	rp.staker = &common.Address{}
-	rp.staker.SetBytes(addr.Bytes())
+	rp.ecoSystem = &ecoSystem
 
-	input = []interface{}{metclient.ToBytes32("Ecosystem")}
-	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
-		return nil, err
+	maintenance, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_Maintenance))
+	if err != nil {
+		return nil, errors.Wrap(err, gov.DOMAIN_Maintenance)
 	}
-	rp.ecoSystem = &common.Address{}
-	rp.ecoSystem.SetBytes(addr.Bytes())
+	rp.maintenance = &maintenance
 
-	input = []interface{}{metclient.ToBytes32("Maintenance")}
-	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
-		return nil, err
-	}
-	rp.maintenance = &common.Address{}
-	rp.maintenance.SetBytes(addr.Bytes())
-
-	input = []interface{}{metclient.ToBytes32("FeeCollector")}
-	if err = metclient.CallContract(ctx, reg, "getContractAddress", input, &addr, height); err != nil {
-		// ignore error
+	feeCollector, err := contracts.Registry.GetContractAddress(opts, metclient.ToBytes32(gov.DOMAIN_FeeCollector))
+	if err != nil {
 		rp.feeCollector = nil
 	} else {
-		rp.feeCollector = &common.Address{}
-		rp.feeCollector.SetBytes(addr.Bytes())
+		rp.feeCollector = &feeCollector
 	}
 
-	rp.blocksPer, err = ma.getInt(ctx, env, height, "getBlocksPer")
+	blocksPer, err := contracts.EnvStorageImp.GetBlocksPer(opts)
 	if err != nil {
 		return nil, err
 	}
+	rp.blocksPer = blocksPer.Int64()
 
-	if count, err := ma.getInt(ctx, gov, height, "getMemberLength"); err != nil {
+	if countBig, err := contracts.GovImp.GetMemberLength(opts); err != nil {
 		return nil, err
 	} else {
+		count := countBig.Int64()
 		for i := int64(1); i <= count; i++ {
-			var rewardAddress common.Address
-			var stake *big.Int
-
-			input = []interface{}{big.NewInt(i)}
-			if err = metclient.CallContract(ctx, gov, "getMember", input, &addr, height); err != nil {
+			index := big.NewInt(i)
+			if member, err := contracts.GovImp.GetMember(opts, index); err != nil {
 				return nil, err
-			}
-			input = []interface{}{big.NewInt(i)}
-			if err = metclient.CallContract(ctx, gov, "getReward", input, &rewardAddress, height); err != nil {
+			} else if reward, err := contracts.GovImp.GetReward(opts, index); err != nil {
 				return nil, err
-			}
-			input = []interface{}{addr}
-			if err = metclient.CallContract(ctx, staking, "lockedBalanceOf", input, &stake, height); err != nil {
+			} else if stake, err := contracts.StakingImp.LockedBalanceOf(opts, member); err != nil {
 				return nil, err
+			} else {
+				rp.members = append(rp.members, &wemixMember{
+					Staker: member,
+					Reward: reward,
+					Stake:  stake,
+				})
 			}
-			rp.members = append(rp.members, &wemixMember{
-				Staker: addr,
-				Reward: rewardAddress,
-				Stake:  stake,
-			})
 		}
 	}
-
 	return rp, nil
-}
-
-func (ma *wemixAdmin) getRewardAccounts(ctx context.Context, block *big.Int) (rewardPoolAccount, maintenanceAccount *common.Address, members []*wemixMember, err error) {
-	var (
-		addr  common.Address
-		count int64
-		stake *big.Int
-		input []interface{}
-	)
-
-	if ma.registry == nil || ma.registry.To == nil {
-		err = wemixminer.ErrNotInitialized
-		return
-	}
-
-	input = []interface{}{metclient.ToBytes32("RewardPool")}
-	err = metclient.CallContract(ctx, ma.registry, "getContractAddress", input, &addr, block)
-	if err == nil {
-		rewardPoolAccount = &common.Address{}
-		rewardPoolAccount.SetBytes(addr.Bytes())
-	}
-
-	input = []interface{}{metclient.ToBytes32("Maintenance")}
-	err = metclient.CallContract(ctx, ma.registry, "getContractAddress", input, &addr, block)
-	if err == nil {
-		maintenanceAccount = &common.Address{}
-		maintenanceAccount.SetBytes(addr.Bytes())
-	}
-
-	count, err = ma.getInt(ctx, ma.gov, block, "getMemberLength")
-	if err != nil {
-		return
-	}
-
-	for i := int64(1); i <= count; i++ {
-		var rewardAddress common.Address
-
-		input = []interface{}{big.NewInt(i)}
-		err = metclient.CallContract(ctx, ma.gov, "getMember", input,
-			&addr, block)
-		if err != nil {
-			return
-		}
-		err = metclient.CallContract(ctx, ma.gov, "getReward", input,
-			&rewardAddress, block)
-		if err != nil {
-			return
-		}
-		input = []interface{}{addr}
-		err = metclient.CallContract(ctx, ma.staking, "lockedBalanceOf", input,
-			&stake, block)
-		if err != nil {
-			return
-		}
-
-		members = append(members, &wemixMember{
-			Staker: addr,
-			Reward: rewardAddress,
-			Stake:  stake,
-		})
-	}
-
-	return
 }
 
 // temporary internal structure to collect data from governance contracts
@@ -612,73 +407,79 @@ type govdata struct {
 	nodes, addedNodes, updatedNodes, deletedNodes  []*wemixNode
 }
 
-func (ma *wemixAdmin) getGovData(refresh bool) (data *govdata, err error) {
-	data = &govdata{}
+func (ma *wemixAdmin) getGovData(refresh bool) (*govdata, error) {
+	data := new(govdata)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	block, err := ma.cli.HeaderByNumber(ctx, nil)
 	if err != nil {
-		return
+		return data, err
 	}
 	data.blockNum = block.Number.Int64()
 	if !refresh && data.blockNum <= ma.lastBlock {
-		return
+		return data, err
 	}
 
-	data.modifiedBlock, err = ma.getInt(ctx, ma.gov, block.Number,
-		"modifiedBlock")
-	if err != nil {
-		return
+	opts := &bind.CallOpts{Context: ctx, BlockNumber: block.Number}
+	if modifiedBlock, err := ma.contracts.GovImp.ModifiedBlock(opts); err != nil {
+		return data, err
+	} else {
+		data.modifiedBlock = modifiedBlock.Int64()
 	}
+
 	if !refresh && ma.modifiedBlock == data.modifiedBlock {
-		return
+		return data, nil
 	}
 
-	data.blockInterval, err = ma.getInt(ctx, ma.envStorage, block.Number, "getBlockCreationTime")
-	if err != nil {
-		// TODO: ignore this error for now
+	if blockInterval, err := ma.contracts.EnvStorageImp.GetBlockCreationTime(opts); err != nil {
 		data.blockInterval = ma.blockInterval
-		//return
+	} else {
+		data.blockInterval = blockInterval.Int64()
 	}
-	data.blocksPer, err = ma.getInt(ctx, ma.envStorage, block.Number, "getBlocksPer")
-	if err != nil {
-		// TODO: ignore this error for now
-		data.blocksPer = ma.blocksPer
-		//return
-	}
-	data.maxIdleBlockInterval, err = ma.getInt(ctx, ma.envStorage, block.Number, "getMaxIdleBlockInterval")
-	if err != nil {
-		// TODO: ignore this error for now
-		data.maxIdleBlockInterval = int64(params.MaxIdleBlockInterval)
-		//return
-	}
-	err = metclient.CallContract(ctx, ma.envStorage, "getBlockRewardAmount", nil, &data.blockReward, block.Number)
-	if err != nil {
-		return
-	}
-	err = metclient.CallContract(ctx, ma.envStorage, "getMaxPriorityFeePerGas", nil, &data.maxPriorityFeePerGas, block.Number)
-	if err != nil {
-		return
-	}
-	gasLimitAndBaseFee := make([]*big.Int, 3)
-	err = metclient.CallContract(ctx, ma.envStorage, "getGasLimitAndBaseFee", nil, &gasLimitAndBaseFee, block.Number)
-	if err != nil {
-		return
-	}
-	data.gasLimit = gasLimitAndBaseFee[0]
-	data.baseFeeMaxChangeRate = gasLimitAndBaseFee[1].Int64()
-	data.gasTargetPercentage = gasLimitAndBaseFee[2].Int64()
 
-	err = metclient.CallContract(ctx, ma.envStorage, "getMaxBaseFee", nil, &data.maxBaseFee, block.Number)
-	if err != nil {
-		return
+	if blocksPer, err := ma.contracts.EnvStorageImp.GetBlocksPer(opts); err != nil {
+		data.blocksPer = ma.blocksPer
+	} else {
+		data.blocksPer = blocksPer.Int64()
+	}
+
+	if maxIdleBlockInterval, err := ma.contracts.EnvStorageImp.GetMaxIdleBlockInterval(opts); err != nil {
+		data.maxIdleBlockInterval = int64(params.MaxIdleBlockInterval)
+	} else {
+		data.maxIdleBlockInterval = maxIdleBlockInterval.Int64()
+	}
+
+	if blockReward, err := ma.contracts.EnvStorageImp.GetBlockRewardAmount(opts); err != nil {
+		return data, err
+	} else {
+		data.blockReward = blockReward
+	}
+
+	if maxPriorityFeePerGas, err := ma.contracts.EnvStorageImp.GetMaxPriorityFeePerGas(opts); err != nil {
+		return data, err
+	} else {
+		data.maxPriorityFeePerGas = maxPriorityFeePerGas
+	}
+
+	if gasLimit, baseFeeMaxChangeRate, gasTargetPercentage, err := ma.contracts.EnvStorageImp.GetGasLimitAndBaseFee(opts); err != nil {
+		return data, err
+	} else {
+		data.gasLimit = gasLimit
+		data.baseFeeMaxChangeRate = baseFeeMaxChangeRate.Int64()
+		data.gasTargetPercentage = gasTargetPercentage.Int64()
+	}
+
+	if maxBaseFee, err := ma.contracts.EnvStorageImp.GetMaxBaseFee(opts); err != nil {
+		return data, err
+	} else {
+		data.maxBaseFee = maxBaseFee
 	}
 
 	data.nodes, err = ma.getWemixNodes(ctx, block.Number)
 	if err != nil {
-		return
+		return data, err
 	}
 
 	oldNodes := ma.getNodes()
@@ -720,8 +521,7 @@ func (ma *wemixAdmin) getGovData(refresh bool) (data *govdata, err error) {
 			data.addedNodes = append(data.addedNodes, data.nodes[j])
 		}
 	}
-
-	return
+	return data, nil
 }
 
 func StartAdmin(stack *node.Node, datadir string) {
@@ -736,35 +536,10 @@ func StartAdmin(stack *node.Node, datadir string) {
 		utils.Fatalf("Failed to attach to self: %v", err)
 	}
 
-	registryContract, err := metclient.LoadJsonContract(strings.NewReader(RegistryAbi))
-	if err != nil {
-		utils.Fatalf("Loading ABI failed: %v", err)
-	}
-	govContract, err := metclient.LoadJsonContract(strings.NewReader(GovAbi))
-	if err != nil {
-		utils.Fatalf("Loading ABI failed: %v", err)
-	}
-	stakingContract, err := metclient.LoadJsonContract(strings.NewReader(StakingAbi))
-	if err != nil {
-		utils.Fatalf("Loading ABI failed: %v", err)
-	}
-	envStorageImpContract, err := metclient.LoadJsonContract(strings.NewReader(EnvStorageImpAbi))
-	if err != nil {
-		utils.Fatalf("Loading ABI failed: %v", err)
-	}
-
 	cli := ethclient.NewClient(rpcCli)
 	admin = &wemixAdmin{
-		stack: stack,
-		lock:  &sync.Mutex{},
-		registry: &metclient.RemoteContract{
-			Cli: cli, Abi: registryContract.Abi},
-		gov: &metclient.RemoteContract{
-			Cli: cli, Abi: govContract.Abi},
-		staking: &metclient.RemoteContract{
-			Cli: cli, Abi: stakingContract.Abi},
-		envStorage: &metclient.RemoteContract{
-			Cli: cli, Abi: envStorageImpContract.Abi},
+		stack:       stack,
+		lock:        &sync.Mutex{},
 		Updates:     make(chan bool, 10),
 		rpcCli:      rpcCli,
 		cli:         cli,
@@ -810,22 +585,16 @@ func (ma *wemixAdmin) addPeer(node *wemixNode) error {
 }
 
 func (ma *wemixAdmin) update() {
-	if ma.registry == nil || ma.registry.To == nil {
+	if ma.contracts == nil || ma.contracts.Registry == nil {
 		return
 	}
 
 	refresh := false
-	registry, gov, staking, envStorage, err := ma.getAdminAddresses()
+	contracts, err := ma.getRegGovEnvContracts(nil, nil)
 	if err != nil {
 		return
-	} else if !bytes.Equal(registry[:], ma.registry.To[:]) ||
-		!bytes.Equal(gov[:], ma.gov.To[:]) ||
-		!bytes.Equal(staking[:], ma.staking.To[:]) ||
-		!bytes.Equal(envStorage[:], ma.envStorage.To[:]) {
-		ma.registry.To = registry
-		ma.gov.To = gov
-		ma.staking.To = staking
-		ma.envStorage.To = envStorage
+	} else if !ma.contracts.Equal(contracts) {
+		ma.contracts = contracts
 		refresh = true
 	}
 
@@ -895,7 +664,7 @@ func (ma *wemixAdmin) update() {
 					"maxPriorityFeePerGas", data.maxPriorityFeePerGas)
 			}
 
-			if ma.self != nil && !bytes.Equal(ma.self.Addr[:], nilAddress[:]) {
+			if ma.self != nil && ma.self.Addr != nilAddress {
 				err = ma.rpcCli.CallContext(ctx, &v, "miner_setEtherbase", &ma.self.Addr)
 				if err != nil || !*v {
 					log.Info("set the coinbase", "error", err)
@@ -966,16 +735,13 @@ func (ma *wemixAdmin) run() {
 				ma.nodeInfo = nodeInfo
 			}
 		}
-		if ma.registry.To == nil {
-			registry, gov, staking, envStorage, err := ma.getAdminAddresses()
+		if ma.contracts == nil {
+			contracts, err := ma.getRegGovEnvContracts(nil, nil)
 			if err == nil {
-				ma.registry.To = registry
-				ma.gov.To = gov
-				ma.staking.To = staking
-				ma.envStorage.To = envStorage
+				ma.contracts = contracts
 			}
 		}
-		if ma.registry.To != nil && ma.nodeInfo != nil {
+		if ma.contracts != nil && ma.nodeInfo != nil {
 			ma.update()
 			if ma.amPartner() && ma.self != nil && !ma.etcdIsRunning() {
 				EtcdStart()
@@ -1015,11 +781,11 @@ type reward struct {
 }
 
 // handles rewards in testnet block 94
-func handleBlock94Rewards(height *big.Int, rp *rewardParameters, fees *big.Int) []reward {
+func handleBlock94Rewards(height *big.Int, rp *rewardParameters, _ /*fees*/ *big.Int) []reward {
 	if height.Int64() != 94 || len(rp.members) != 0 ||
-		!bytes.Equal(rp.staker[:], testnetBlock94Rewards[0].Addr[:]) ||
-		!bytes.Equal(rp.ecoSystem[:], testnetBlock94Rewards[1].Addr[:]) ||
-		!bytes.Equal(rp.maintenance[:], testnetBlock94Rewards[2].Addr[:]) {
+		*rp.staker != testnetBlock94Rewards[0].Addr ||
+		*rp.ecoSystem != testnetBlock94Rewards[1].Addr ||
+		*rp.maintenance != testnetBlock94Rewards[2].Addr {
 		return nil
 	}
 	return testnetBlock94Rewards
@@ -1181,67 +947,61 @@ func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance
 	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
 }
 
-func getCoinbase(height *big.Int) (coinbase common.Address, err error) {
+func getCoinbase(height *big.Int) (common.Address, error) {
 	if admin == nil {
-		err = wemixminer.ErrNotInitialized
-		return
+		return common.Address{}, wemixminer.ErrNotInitialized
 	}
+
 	prvKey := admin.stack.Server().PrivateKey
 	if admin.self != nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		num := new(big.Int).Sub(height, common.Big1)
-		_, gov, _, _, err2 := admin.getRegGovEnvContracts(ctx, num)
-		if err2 != nil {
-			err = err2
-			return
+		contracts, err := admin.getRegGovEnvContracts(ctx, num)
+		if err != nil {
+			return common.Address{}, err
 		}
-
 		nodeId := crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
-		if addr, err2 := enodeExists(ctx, height, gov, nodeId); err2 != nil {
-			err = err2
-			return
-		} else {
-			coinbase = addr
-		}
+		return enodeExists(ctx, height, contracts.GovImp, nodeId)
 	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
-		coinbase = admin.bootAccount
+		return admin.bootAccount, nil
+	} else {
+		return common.Address{}, ethereum.NotFound
 	}
-	return
 }
 
-func signBlock(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error) {
+func signBlock(height *big.Int, hash common.Hash) (common.Address, []byte, error) {
 	if admin == nil {
-		err = wemixminer.ErrNotInitialized
-		return
+		return common.Address{}, nil, wemixminer.ErrNotInitialized
 	}
-	data := append(height.Bytes(), hash.Bytes()...)
-	data = crypto.Keccak256(data)
 	prvKey := admin.stack.Server().PrivateKey
-	sig, err = crypto.Sign(data, prvKey)
-	if admin.self != nil {
+	sig, err := crypto.Sign(crypto.Keccak256(append(height.Bytes(), hash.Bytes()...)), prvKey)
+	if err != nil {
+		return common.Address{}, nil, err
+	}
+
+	if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
+		return admin.bootAccount, sig, nil
+	} else if admin.self != nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		num := new(big.Int).Sub(height, common.Big1)
-		_, gov, _, _, err2 := admin.getRegGovEnvContracts(ctx, num)
-		if err2 != nil {
-			err = err2
-			return
+		contracts, err := admin.getRegGovEnvContracts(ctx, num)
+		if err != nil {
+			return common.Address{}, nil, err
 		}
 
 		nodeId := crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
-		if addr, err2 := enodeExists(ctx, height, gov, nodeId); err2 != nil {
-			err = err2
-			return
+		if addr, err := enodeExists(ctx, height, contracts.GovImp, nodeId); err != nil {
+			return common.Address{}, nil, err
 		} else {
-			coinbase = addr
+			return addr, sig, nil
 		}
-	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
-		coinbase = admin.bootAccount
+	} else {
+		return common.Address{}, sig, wemixminer.ErrNotInitialized
 	}
-	return
 }
 
 func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool {
@@ -1250,12 +1010,13 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 
 	// get nodeid from the coinbase
 	num := new(big.Int).Sub(height, common.Big1)
-	_, gov, _, _, err := admin.getRegGovEnvContracts(ctx, num)
+	contracts, err := admin.getRegGovEnvContracts(ctx, num)
 	if err != nil {
-		return err == wemixminer.ErrNotInitialized
-	} else if count, err := admin.getInt(ctx, gov, num, "getMemberLength"); err != nil || count == 0 {
-		return err == wemixminer.ErrNotInitialized || count == 0
+		return err == wemixminer.ErrNotInitialized || errors.Is(err, ethereum.NotFound)
+	} else if count, err := contracts.GovImp.GetMemberLength(&bind.CallOpts{Context: ctx, BlockNumber: num}); err != nil || count.Sign() == 0 {
+		return err == wemixminer.ErrNotInitialized || count.Sign() == 0
 	}
+	gov := contracts.GovImp
 	// if minerNodeId is given, i.e. present in block header, use it,
 	// otherwise, derive it from the codebase
 	var data []byte
@@ -1383,28 +1144,17 @@ func (ma *wemixAdmin) pendingEmpty() bool {
 	return status.Pending == 0
 }
 
-func getMaxPriorityFeePerGas() *big.Int {
-	defaultFee := big.NewInt(100 * params.GWei)
-	if admin == nil || admin.envStorage == nil || admin.envStorage.To == nil {
-		return defaultFee
-	}
-	var fee *big.Int
-	if err := metclient.CallContract(context.Background(), admin.envStorage, "getMaxPriorityFeePerGas", nil, &fee, nil); err != nil {
-		return defaultFee
-	}
-	return fee
-}
-
 func suggestGasPrice() *big.Int {
 	defaultFee := big.NewInt(100 * params.GWei)
-	if admin == nil || admin.envStorage == nil || admin.envStorage.To == nil {
+	if admin == nil || admin.contracts == nil || admin.contracts.EnvStorageImp == nil {
 		return defaultFee
 	}
-	var fee *big.Int
-	if err := metclient.CallContract(context.Background(), admin.envStorage, "getMaxPriorityFeePerGas", nil, &fee, nil); err != nil {
+	fee, err := admin.contracts.EnvStorageImp.GetMaxPriorityFeePerGas(nil)
+	if err != nil {
 		return defaultFee
+	} else {
+		return fee
 	}
-	return fee
 }
 
 func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, gasLimit *big.Int, baseFeeMaxChangeRate, gasTargetPercentage int64, err error) {
@@ -1437,31 +1187,39 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var env, gov *metclient.RemoteContract
-	if _, gov, env, _, err = admin.getRegGovEnvContracts(ctx, height); err != nil {
+	var (
+		env *gov.EnvStorageImp
+		gov *gov.GovImp
+	)
+	if contracts, err2 := admin.getRegGovEnvContracts(ctx, height); err2 != nil {
 		err = wemixminer.ErrNotInitialized
 		return
-	} else if count, err2 := admin.getInt(ctx, gov, height, "getMemberLength"); err2 != nil || count == 0 {
-		err = wemixminer.ErrNotInitialized
-		return
+	} else {
+		env, gov = contracts.EnvStorageImp, contracts.GovImp
 	}
-	var v *big.Int
-	if err = metclient.CallContract(ctx, env, "getBlockCreationTime", nil, &v, height); err != nil {
-		err = wemixminer.ErrNotInitialized
-		return
-	}
-	blockInterval = v.Int64()
 
-	gasLimitAndBaseFee := make([]*big.Int, 3)
-	if err = metclient.CallContract(ctx, env, "getGasLimitAndBaseFee", nil, &gasLimitAndBaseFee, height); err != nil {
+	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
+	if count, err2 := gov.GetMemberLength(opts); err2 != nil || count.Sign() == 0 {
 		err = wemixminer.ErrNotInitialized
 		return
 	}
-	gasLimit = gasLimitAndBaseFee[0]
-	baseFeeMaxChangeRate = gasLimitAndBaseFee[1].Int64()
-	gasTargetPercentage = gasLimitAndBaseFee[2].Int64()
+	if v, err2 := env.GetBlockCreationTime(opts); err2 != nil {
+		err = wemixminer.ErrNotInitialized
+		return
+	} else {
+		blockInterval = v.Int64()
+	}
 
-	if err = metclient.CallContract(ctx, env, "getMaxBaseFee", nil, &maxBaseFee, height); err != nil {
+	if GasLimit, BaseFeeMaxChangeRate, GasTargetPercentage, err2 := env.GetGasLimitAndBaseFee(opts); err2 != nil {
+		err = wemixminer.ErrNotInitialized
+		return
+	} else {
+		gasLimit = GasLimit
+		baseFeeMaxChangeRate = BaseFeeMaxChangeRate.Int64()
+		gasTargetPercentage = GasTargetPercentage.Int64()
+	}
+
+	if maxBaseFee, err = env.GetMaxBaseFee(opts); err != nil {
 		err = wemixminer.ErrNotInitialized
 		return
 	}
@@ -1522,11 +1280,12 @@ func Info() interface{} {
 			return nodes[i].Name < nodes[j].Name
 		})
 
+		ca := admin.contracts.Address()
 		info := &map[string]interface{}{
 			"consensus":                 params.ConsensusMethod,
-			"registry":                  admin.registry.To,
-			"governance":                admin.gov.To,
-			"staking":                   admin.staking.To,
+			"registry":                  ca.Registry,
+			"governance":                ca.Gov,
+			"staking":                   ca.Staking,
 			"modifiedblock":             admin.modifiedBlock,
 			"blocksPer":                 admin.blocksPer,
 			"blockInterval":             admin.blockInterval,
@@ -1732,7 +1491,7 @@ func (ma *wemixAdmin) getTxPoolStatus() (pending, queued uint, err error) {
 	p, b1 := data["pending"]
 	q, b2 := data["queued"]
 	if !b1 || !b2 {
-		err = fmt.Errorf("Invalid Data")
+		err = fmt.Errorf("invalid Data")
 	} else {
 		pending = uint(p)
 		queued = uint(q)
@@ -1803,6 +1562,7 @@ func init() {
 	wemixminer.AcquireMiningTokenFunc = acquireMiningToken
 	wemixminer.ReleaseMiningTokenFunc = releaseMiningToken
 	wemixminer.HasMiningTokenFunc = hasMiningToken
+
 	wemixapi.Info = Info
 	wemixapi.GetMiners = getMiners
 	wemixapi.GetMinerStatus = getMinerStatus
