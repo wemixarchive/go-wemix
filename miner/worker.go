@@ -385,6 +385,11 @@ func (w *worker) pendingBlockAndReceipts() (*types.Block, types.Receipts) {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
+	if w.chainConfig.IsMontBlanc(w.chain.CurrentBlock().Number()) {
+		log.Warn("go-wemix only supports SPoA network, please transition new ones with supporting PoS network")
+		return
+	}
+
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
 }
