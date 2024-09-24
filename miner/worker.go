@@ -1600,9 +1600,14 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	} else {
 		return
 	}
+	parent := w.chain.CurrentBlock()
+	height := new(big.Int).Add(parent.Number(), common.Big1)
+	// Wemix: Skip blocks after mont blanc fork
+	if w.chain.Config().IsMontBlanc(height) {
+		log.Warn("go-wemix skips mining due to mont blanc fork", "height", height, "parent-hash", parent.Hash())
+		return
+	}
 	if !wemixminer.IsPoW() {
-		parent := w.chain.CurrentBlock()
-		height := new(big.Int).Add(parent.Number(), common.Big1)
 		ok, err := wemixminer.AcquireMiningToken(height, parent.Hash())
 		if ok {
 			log.Debug("Mining Token, successful", "height", height, "parent-hash", parent.Hash())
