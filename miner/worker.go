@@ -1597,9 +1597,9 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	}
 	parent := w.chain.CurrentBlock()
 	height := new(big.Int).Add(parent.Number(), common.Big1)
-	// Wemix: Skip blocks after mont blanc fork
+	// Wemix: Skip blocks after MontBlanc hard fork
 	if w.chain.Config().IsMontBlanc(height) {
-		log.Warn("go-wemix skips mining due to mont blanc fork", "height", height, "parent-hash", parent.Hash())
+		log.Warn("go-wemix skips mining due to MontBlanc hard fork", "height", height, "parent-hash", parent.Hash())
 		return
 	}
 	if !wemixminer.IsPoW() {

@@ -321,7 +321,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	}
 	// Wemix: Verify SPoA block
 	if chain.Config().IsMontBlanc(header.Number) {
-		return fmt.Errorf("go-wemix does not support mont blanc fork")
+		return fmt.Errorf("go-wemix does not support blocks after MontBlanc hard fork")
 	}
 	// Wemix: Check if it's generated and signed by a registered node
 	if !wemixminer.IsPoW() && !wemixminer.VerifyBlockSig(header.Number, header.Coinbase, header.MinerNodeId, header.Root, header.MinerNodeSig, chain.Config().IsPangyo(header.Number)) {
