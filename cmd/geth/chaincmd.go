@@ -208,6 +208,7 @@ func initGenesis(ctx *cli.Context) error {
 
 func dumpGenesis(ctx *cli.Context) error {
 	// TODO(rjl493456442) support loading from the custom datadir
+	utils.SetWemixConfig(ctx, nil, nil)
 	genesis := utils.MakeGenesis(ctx)
 	if genesis == nil {
 		genesis = core.DefaultGenesisBlock()
