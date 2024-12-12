@@ -144,7 +144,7 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 		utils.Fatalf("Failed to set account manager backends: %v", err)
 	}
 
-	utils.SetWemixConfig(ctx, stack, &cfg.Eth)
+	utils.SetWemixConfig(ctx)
 	utils.SetEthConfig(ctx, stack, &cfg.Eth)
 	if ctx.GlobalIsSet(utils.EthStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.GlobalString(utils.EthStatsURLFlag.Name)
