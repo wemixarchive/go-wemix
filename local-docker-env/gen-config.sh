@@ -2,7 +2,7 @@
 
 # 필수 인수 확인
 if [ "$#" -ne 4 ]; then
-  echo "Usage: $0 -a <account_num> -f <output_config_file>"
+  echo "Usage: $0 -a <node_num> -f <output_config_file>"
   exit 1
 fi
 
@@ -10,20 +10,20 @@ fi
 while getopts "a:f:" opt; do
   case ${opt} in
   a)
-    ACCOUNT_NUM=$OPTARG
+    NODE_NUM=$OPTARG
     ;;
   f)
     OUTPUT_CONFIG_FILE=$OPTARG
     ;;
   \?)
-    echo "Usage: $0 -a <account_num> -f <output_config_file>"
+    echo "Usage: $0 -a <node_num> -f <output_config_file>"
     exit 1
     ;;
   esac
 done
 
 # 필수 인수 확인
-if [ -z "$ACCOUNT_NUM" ] || [ -z "$OUTPUT_CONFIG_FILE" ]; then
+if [ -z "$NODE_NUM" ] || [ -z "$OUTPUT_CONFIG_FILE" ]; then
   exit 1
 fi
 
@@ -54,7 +54,7 @@ json_content=$(echo "$json_content" | jq --argjson env "$ENV_JSON" \
   '.env = $env| .extraData = "chain for local test"')
 
 # JSON 구성 파일 생성
-for ((i = 1; i <= ACCOUNT_NUM; i++)); do
+for ((i = 1; i <= NODE_NUM; i++)); do
   ids=$(gwemix wemix nodeid local-docker-env/nodekey/nodekey$i) || { echo "Failed to get node ID"; exit 1; }
   idv5=$(echo "$ids" | awk '/idv5:/ {print $2}')
   idv5="0x$idv5"
