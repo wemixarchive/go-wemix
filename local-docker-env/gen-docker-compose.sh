@@ -45,7 +45,7 @@ fi
 
 # Set default version if not provided
 if [ -z "$version" ]; then
-    version="latest"
+    version="22.04"
 fi
 
 # Generate docker-compose.yml content

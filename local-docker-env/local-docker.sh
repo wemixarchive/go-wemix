@@ -55,6 +55,7 @@ chmod +x local-docker-env/gen-account.sh
 if [ "$KEEP_NODEKEY" = false ]; then
   chmod +x local-docker-env/gen-nodekey.sh
   ./local-docker-env/gen-nodekey.sh -a "$NODE_NUM" || { echo "Failed to execute gen-nodekey.sh."; exit 1; }
+  echo "Nodekey generated successfully."
 else
   for ((i = 1; i <= NODE_NUM; i++)); do
     if [ ! -f "local-docker-env/nodekey/nodekey$i" ]; then
@@ -62,6 +63,7 @@ else
       exit 1
     fi
   done
+  echo "Nodekey exists."
 fi
 
 # gen-config.sh 실행

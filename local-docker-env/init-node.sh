@@ -31,5 +31,12 @@ check_boot_node_started() {
 
 check_boot_node_started
 
-bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out genesis.json
+bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out /usr/local/wemix/genesis.json
+
+# genesis.json 파일이 생성되었는지 확인
+if [ ! -f /usr/local/wemix/genesis.json ]; then
+    echo "Failed to create genesis.json file."
+    exit 1
+fi
+
 bin/gwemix --datadir /usr/local/wemix --metrics --http --http.addr 0.0.0.0 --mine --http.port 8588 --ws --ws.addr 0.0.0.0 --ws.port 8598 --syncmode full --gcmode archive --port 8589
