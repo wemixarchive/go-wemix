@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Usage: ./gen-docker-compose.sh -a <account_num> -f <output_config_file>
-# -a: 계정 수
-# -f: 출력 파일
-# -a 옵션은 필수이며, -f, -v 옵션은 선택적
-# -f 옵션을 지정하지 않으면, 현재 디렉토리에 docker-compose.yml 파일을 생성
-# -f 옵션을 지정하면, 해당 경로에 docker-compose.yml 파일을 생성
-# -v 옵션을 지정하지 않으면, latest 버전으로 설정
-# -v 옵션을 지정하면, 해당 버전으로 설정
+# -a: number of accounts
+# -f: output file
+# -a option is required, -f and -v options are optional
+# If -f option is not specified, a docker-compose.yml file will be created in the current directory
+# If -f option is specified, a docker-compose.yml file will be created at the specified path
+# If -v option is not specified, the version will be set to latest
+# If -v option is specified, the version will be set to the specified version
 
 # Parse command line arguments
 while getopts "a:f:v:" opt; do
