@@ -4,9 +4,9 @@ chmod a+x bin/gwemix.sh
 bin/gwemix.sh init "" conf/config.json
 bin/gwemix.sh start
 
-# gwemix 서비스가 정상적으로 시작되었는지 확인
+# Check if gwemix service has started successfully
 check_gwemix_started() {
-    local log_file="logs/log" # gwemix 로그 파일 경로
+    local log_file="logs/log"
     local success_message="HTTP server started"
     local max_retries=30
     local retries=0
@@ -32,7 +32,7 @@ check_gwemix_started() {
     fi
 }
 
-# gwemix 서비스가 정상적으로 시작되었는지 확인
+# Check if gwemix service has started successfully
 check_gwemix_started
 
 bin/gwemix.sh init-gov "" conf/config.json keystore/account1 test

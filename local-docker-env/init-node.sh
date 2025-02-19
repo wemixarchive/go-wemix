@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# gwemix 서비스 시작
+# Set the permissions for the gwemix binary
 chmod a+x bin/gwemix
 
 # Check if the boot node has started
@@ -31,5 +31,12 @@ check_boot_node_started() {
 
 check_boot_node_started
 
-bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out genesis.json
+bin/gwemix wemix download-genesis --url http://172.16.237.11:8588 --out /usr/local/wemix/genesis.json
+
+# Check if the genesis.json file has been created
+if [ ! -f /usr/local/wemix/genesis.json ]; then
+    echo "Failed to create genesis.json file."
+    exit 1
+fi
+
 bin/gwemix --datadir /usr/local/wemix --metrics --http --http.addr 0.0.0.0 --mine --http.port 8588 --ws --ws.addr 0.0.0.0 --ws.port 8598 --syncmode full --gcmode archive --port 8589

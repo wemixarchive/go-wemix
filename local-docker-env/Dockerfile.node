@@ -2,7 +2,7 @@
 ARG UBUNTU_VERSION
 
 # Stage 1: Build stage
-FROM golang:1.19 as builder
+FROM golang:1.19 AS builder
 
 # Set environment variables
 ENV PATH=/usr/local/go/bin:$PATH
@@ -42,7 +42,7 @@ RUN apt-get remove -y \
     apt-get clean
 
 # Stage 2: Runtime stage
-FROM ubuntu:${UBUNTU_VERSION}
+FROM ubuntu:${UBUNTU_VERSION:-latest}
 
 # Update and upgrade the package list
 RUN apt-get update && \
