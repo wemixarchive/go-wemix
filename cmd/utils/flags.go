@@ -1981,7 +1981,7 @@ func SetDNSDiscoveryDefaults(cfg *ethconfig.Config, genesis common.Hash) {
 }
 
 // SetWemixConfig applies wemix related command line flags to the config.
-func SetWemixConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
+func SetWemixConfig(ctx *cli.Context) {
 	if ctx.GlobalIsSet(ConsensusMethodFlag.Name) {
 		params.ConsensusMethod = ctx.GlobalInt(ConsensusMethodFlag.Name)
 	} else {
