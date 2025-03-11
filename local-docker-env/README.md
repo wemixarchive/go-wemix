@@ -11,32 +11,22 @@ This document explains how to set up a local testing environment based on the `g
 ### local-docker.sh
 
 - **Purpose**: Integrated running script for local testing based on the local repository.
-- **Usage**: `./local-docker-env/local-docker.sh -a <account_num> -v <ubuntu_version>(optional)`
+- **Usage**: `./local-docker-env/local-docker.sh -a <account_num> -v <ubuntu_version>(optional) --keep-nodekey(optional)`
 
 ### local-docker-git.sh
 
 - **Purpose**: Integrated running script for local testing based on the Git repository.
-- **Usage**: `./local-docker-env/local-docker-git.sh -a <account_num> -b <branch> -r <repo> -v <ubuntu_version>(optional)`
+- **Usage**: `./local-docker-env/local-docker-git.sh -a <account_num> -b <branch> -r <repo> -v <ubuntu_version>(optional --keep-nodekey(optional)`
 
-### key-gen.sh
+### gen-nodekey.sh
 
-- **Purpose**: Generates an account in the `keystore` folder and creates a nodekey in the `nodekey` folder.
-- **Usage**: `./key-gen.sh -a <account_num>`
+- **Purpose**: Script for generating a nodekey for the node.
+- **Usage**: `./local-docker-env/gen-nodekey.sh -a <nodekey_num>`
 
-### config-gen.sh
+### gen-account.sh
 
-- **Purpose**: Generates the `config.json` file.
-- **Usage**: `./config-gen.sh -a <account_num> -f <output_config_file>`
-
-### docker-compose-gen.sh
-
-- **Purpose**: Generates the `docker-compose.yml` file based on the local repository.
-- **Usage**: `./docker-compose-gen.sh -a <account_num> -f <output_file_path> -v <ubuntu_version>(optional)`
-
-### docker-compose-gen-git.sh
-
-- **Purpose**: Generates the `docker-compose.yml` file based on the Git repository.
-- **Usage**: `./docker-compose-gen-git.sh -a <account_num> -f <output_file_path> -r <repo_url> -b <branch_name> -v <ubuntu_version>(optional)`
+- **Purpose**: Script for generating a nodekey for the node.
+- **Usage**: `./local-docker-env/gen-account.sh -a <account_num>`
 
 ### init-boot.sh
 
@@ -66,11 +56,11 @@ This document explains how to set up a local testing environment based on the `g
 ### Execution based on the local repository code
 
 ```bash
-./local-docker-env/local-docker.sh -a <account_num> -v <ubuntu_version>(optional)
+./local-docker-env/local-docker.sh -a <account_num> -v <ubuntu_version> (optional) --keep-nodekey (optional)
 ```
 
 ### Execution based on the Git repository code
 
 ```bash
-./local-docker-env/local-docker-git.sh -a <account_num> -b <branch> -r <repo> -v <ubuntu_version>(optional)
+./local-docker-env/local-docker-git.sh -a <account_num> -b <branch> -r <repo> -v <ubuntu_version> (optional) --keep-nodekey (optional)
 ```
