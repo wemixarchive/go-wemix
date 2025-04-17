@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# 필수 인수 확인
+# Check required arguments
 if [ "$#" -ne 2 ]; then
   echo "Usage: $0 -a <account_num>"
   exit 1
 fi
 
-# 옵션 파싱
+# Option parsing
 while getopts "a:" opt; do
   case ${opt} in
   a)
@@ -19,7 +19,7 @@ while getopts "a:" opt; do
   esac
 done
 
-# 필수 인수 확인
+# Check required arguments
 if [ -z "$ACCOUNT_NUM" ]; then
   exit 1
 fi

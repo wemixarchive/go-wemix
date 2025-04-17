@@ -28,6 +28,8 @@
         "londonBlock": 0,
         "muirGlacierBlock": 0,
         "pangyoBlock": 0,
-        "applepieBlock": 0
+        "applepieBlock": 0,
+        "briocheBlock" : 0,
+        "montBlancBlock": 100
     }
 }
