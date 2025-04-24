@@ -1631,13 +1631,17 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,
 	})
+	if err != nil {
+		log.Error("Error in preparing work", "err", err)
+		return
+	}
 	if !wemixminer.IsPoW() { // Wemix
 		if coinbase, err := wemixminer.GetCoinbase(work.header.Number); err == nil {
 			work.coinbase = coinbase
+		} else {
+			log.Error("Error in getting coinbase", "err", err)
+			return
 		}
-	}
-	if err != nil {
-		return
 	}
 
 	if !wemixminer.IsPoW() { // Wemix
