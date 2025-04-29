@@ -188,7 +188,6 @@ func (ma *wemixAdmin) verifyMinerLimit(ctx context.Context, height *big.Int, gov
 		}
 		enode = enode2
 	}
-	var miners [][]byte
 	// the enode should not appear within the last (member count / 2) blocks
 	limit := len(e.nodes) / 2
 	if limit > int(height.Int64()-e.modifiedBlock.Int64()-1) {
@@ -199,7 +198,6 @@ func (ma *wemixAdmin) verifyMinerLimit(ctx context.Context, height *big.Int, gov
 		if err != nil {
 			return false, err
 		}
-		miners = append(miners, blockMinerEnode[:])
 		if bytes.Equal(enode[:], blockMinerEnode[:]) {
 			return false, nil
 		}
