@@ -152,7 +152,7 @@ func getBlockMiner(ctx context.Context, cli *ethclient.Client, entry *coinbaseEn
 	if len(block.MinerNodeId) == 0 {
 		enode, ok := entry.coinbase2enode[string(block.Coinbase[:])]
 		if !ok {
-			return nil, ErrNotFound
+			return nil, nil
 		}
 		height2enode.Put(height.Uint64(), enode)
 		return enode, nil
