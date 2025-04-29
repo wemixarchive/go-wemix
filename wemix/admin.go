@@ -981,9 +981,7 @@ func signBlock(height *big.Int, hash common.Hash) (common.Address, []byte, error
 		return common.Address{}, nil, err
 	}
 
-	if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
-		return admin.bootAccount, sig, nil
-	} else if admin.self != nil {
+	if admin.self != nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -999,6 +997,8 @@ func signBlock(height *big.Int, hash common.Hash) (common.Address, []byte, error
 		} else {
 			return addr, sig, nil
 		}
+	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
+		return admin.bootAccount, sig, nil
 	} else {
 		return common.Address{}, sig, wemixminer.ErrNotInitialized
 	}
