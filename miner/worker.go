@@ -1646,7 +1646,10 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 
 	if !wemixminer.IsPoW() { // Wemix
 		if !w.commitTransactionsEx(work, interrupt, start) {
-			w.commitEx(work, w.fullTaskHook, true, start)
+			err := w.commitEx(work, w.fullTaskHook, true, start)
+			if err != nil {
+				log.Error("Error in committing work", "err", err)
+			}
 		}
 		return
 	}
