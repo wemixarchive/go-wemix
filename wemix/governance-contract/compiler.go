@@ -2,7 +2,6 @@ package compile
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,19 +12,17 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/fabelx/go-solc-select/pkg/config"
-	"github.com/fabelx/go-solc-select/pkg/installer"
-	"github.com/fabelx/go-solc-select/pkg/versions"
+	"github.com/ethereum/go-ethereum/wemix/governance-contract/solcdownloader"
 	"github.com/pkg/errors"
 )
 
 var (
 	solcVersion string = "0.8.14"
-	solcCmd     string = fmt.Sprintf("solc-%s", solcVersion)
 )
 
 func Compile(root string, sourceFiles ...string) (compiledTy, error) {
-	if err := installSolc(); err != nil {
+	solcPath, err := solcdownloader.GetSolcBin(solcVersion)
+	if err != nil {
 		return nil, err
 	}
 	if root == "" {
@@ -40,7 +37,7 @@ func Compile(root string, sourceFiles ...string) (compiledTy, error) {
 		"--",
 	}
 	// ~/.gsolc-select/artifacts/solc-0.8.14/0.8.14
-	cmd := exec.Command(filepath.Join(config.SolcArtifacts, solcCmd, solcCmd), append(args, sourceFiles...)...)
+	cmd := exec.Command(solcPath, append(args, sourceFiles...)...)
 
 	var stderr, stdout bytes.Buffer
 	cmd.Stderr, cmd.Stdout = &stderr, &stdout
@@ -69,29 +66,6 @@ func Compile(root string, sourceFiles ...string) (compiledTy, error) {
 		}
 		return out, nil
 	}
-}
-
-func installSolc() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	// check already installed
-	installedVersions := versions.GetInstalled()
-	if installedVersions[solcVersion] != "" {
-		return nil
-	}
-
-	// install solc-0.8.14
-	installed, _, err := installer.InstallSolcs(ctx, []string{solcVersion})
-	if err != nil {
-		return err
-	}
-
-	for _, v := range installed {
-		if v == solcVersion {
-			return nil
-		}
-	}
-	return fmt.Errorf("failed to install version %s", solcVersion)
 }
 
 type compiledTy map[string]*compiler.Contract
