@@ -74,9 +74,9 @@ func Sign(hash []byte, prv *ecdsa.PrivateKey) ([]byte, error) {
 		return nil, fmt.Errorf("hash is required to be exactly 32 bytes (%d)", len(hash))
 	}
 	// curve equality check removed: pointer equality is unreliable across implementations
-	// if prv.Curve != btcec.S256() {
-	// 	return nil, fmt.Errorf("private key curve is not secp256k1")
-	// }
+	if prv.Curve != S256() {
+		return nil, fmt.Errorf("private key curve is not secp256k1")
+	}
 	// ecdsa.PrivateKey -> secp256k1.PrivateKey
 	var priv secp256k1.PrivateKey
 	if overflow := priv.Key.SetByteSlice(prv.D.Bytes()); overflow || priv.Key.IsZero() {
@@ -147,40 +147,3 @@ func CompressPubkey(pubkey *ecdsa.PublicKey) []byte {
 func S256() elliptic.Curve {
 	return secp256k1.S256()
 }
-
-// // S256 returns an instance of the secp256k1 curve.
-// func S256() EllipticCurve {
-// 	return btCurve{secp256k1.S256()}
-// }
-
-// type btCurve struct {
-// 	*secp256k1.KoblitzCurve
-// }
-
-// // Marshal converts a point given as (x, y) into a byte slice.
-// func (curve btCurve) Marshal(x, y *big.Int) []byte {
-// 	byteLen := (curve.Params().BitSize + 7) / 8
-
-// 	ret := make([]byte, 1+2*byteLen)
-// 	ret[0] = 4 // uncompressed point
-
-// 	x.FillBytes(ret[1 : 1+byteLen])
-// 	y.FillBytes(ret[1+byteLen : 1+2*byteLen])
-
-// 	return ret
-// }
-
-// // Unmarshal converts a point, serialised by Marshal, into an x, y pair. On
-// // error, x = nil.
-// func (curve btCurve) Unmarshal(data []byte) (x, y *big.Int) {
-// 	byteLen := (curve.Params().BitSize + 7) / 8
-// 	if len(data) != 1+2*byteLen {
-// 		return nil, nil
-// 	}
-// 	if data[0] != 4 { // uncompressed form
-// 		return nil, nil
-// 	}
-// 	x = new(big.Int).SetBytes(data[1 : 1+byteLen])
-// 	y = new(big.Int).SetBytes(data[1+byteLen:])
-// 	return
-// }
