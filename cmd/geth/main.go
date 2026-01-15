@@ -28,7 +28,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/gosigar"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/cmd/utils"
@@ -44,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/wemix"
+	gopsutil "github.com/shirou/gopsutil/mem"
 	"golang.org/x/sys/unix"
 
 	// Force-load the tracer engines to trigger registration
@@ -490,8 +490,8 @@ func startNode(ctx *cli.Context, stack *node.Node, backend ethapi.Backend, isCon
 		}
 	}
 	// try to limit max rss memory size to 60 % of total memory
-	var mem gosigar.Mem
-	if err := mem.Get(); err == nil {
+	mem, err := gopsutil.VirtualMemory()
+	if err == nil {
 		// 60% of total memory in KB
 		maxMem := int64(mem.Total * 6 / 10)
 		// In Mac OS X Getrusage().Maxrss is bytes, everywhere else it's KB.
