@@ -16,15 +16,6 @@ RUN apt-get install -y --no-install-recommends \
     make && \
     rm -rf /var/lib/apt/lists/*
 
-# Define the location for custom certificates
-ARG cert_location=/usr/local/share/ca-certificates
-
-# Fetch and install certificates for github.com and proxy.golang.org
-RUN openssl s_client -showcerts -connect github.com:443 </dev/null 2>/dev/null | \
-    openssl x509 -outform PEM > ${cert_location}/github.crt && \
-    openssl s_client -showcerts -connect proxy.golang.org:443 </dev/null 2>/dev/null | \
-    openssl x509 -outform PEM > ${cert_location}/proxy.golang.crt && \
-    update-ca-certificates
 
 # Clone the repository, install dependencies, and build the project
 RUN git clone https://github.com/wemixarchive/go-wemix.git /go-wemix && \
@@ -73,11 +64,6 @@ COPY --from=builder /go-wemix/build /usr/local/wemix/
 # Download and install solc
 RUN wget -nv -O /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.4.24/solc-static-linux && \
     chmod a+x /usr/local/bin/solc
-
-# Create new accounts for wemix
-RUN bash -c 'for i in 1 2 3 4; do \
-    /usr/local/wemix/bin/gwemix wemix new-account --password <(echo demo) --out /usr/local/wemix/keystore/account-$i; \
-done'
 
 # Clean up unnecessary packages
 RUN apt-get remove -y \
