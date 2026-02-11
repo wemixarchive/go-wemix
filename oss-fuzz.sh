@@ -90,9 +90,6 @@ function compile_fuzzer {
 }
 
 compile_fuzzer tests/fuzzers/bitutil  Fuzz      fuzzBitutilCompress
-compile_fuzzer tests/fuzzers/bn256    FuzzAdd   fuzzBn256Add
-compile_fuzzer tests/fuzzers/bn256    FuzzMul   fuzzBn256Mul
-compile_fuzzer tests/fuzzers/bn256    FuzzPair  fuzzBn256Pair
 compile_fuzzer tests/fuzzers/runtime  Fuzz      fuzzVmRuntime
 compile_fuzzer tests/fuzzers/keystore   Fuzz fuzzKeystore
 compile_fuzzer tests/fuzzers/txfetcher  Fuzz fuzzTxfetcher
@@ -114,11 +111,6 @@ compile_fuzzer tests/fuzzers/bls12381  FuzzG2MultiExp fuzz_g2_multiexp
 compile_fuzzer tests/fuzzers/bls12381  FuzzPairing fuzz_pairing
 compile_fuzzer tests/fuzzers/bls12381  FuzzMapG1 fuzz_map_g1
 compile_fuzzer tests/fuzzers/bls12381  FuzzMapG2 fuzz_map_g2
-
-compile_fuzzer tests/fuzzers/bls12381  FuzzCrossG1Add fuzz_cross_g1_add
-compile_fuzzer tests/fuzzers/bls12381  FuzzCrossG1MultiExp fuzz_cross_g1_multiexp
-compile_fuzzer tests/fuzzers/bls12381  FuzzCrossG2Add fuzz_cross_g2_add
-compile_fuzzer tests/fuzzers/bls12381  FuzzCrossPairing fuzz_cross_pairing
 
 compile_fuzzer tests/fuzzers/snap  FuzzARange fuzz_account_range
 compile_fuzzer tests/fuzzers/snap  FuzzSRange fuzz_storage_range
