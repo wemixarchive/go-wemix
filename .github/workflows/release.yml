@@ -5,6 +5,9 @@ on:
     tags:
       - w*
 
+permissions:
+  contents: write
+
 jobs:
 
   build:
