@@ -13,7 +13,6 @@ require (
 	github.com/cespare/cp v0.1.0
 	github.com/charlanxcc/logrot v0.0.0-20180713171554-0c22fa310dfe
 	github.com/cloudflare/cloudflare-go v0.14.0
-	github.com/consensys/gnark-crypto v0.4.1-0.20210426202927-39ac3d4b3f1f
 	github.com/davecgh/go-spew v1.1.1
 	github.com/deckarep/golang-set v1.8.0
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
