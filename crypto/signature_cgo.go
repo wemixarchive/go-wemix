@@ -21,7 +21,6 @@ package crypto
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common/math"
@@ -40,8 +39,7 @@ func SigToPub(hash, sig []byte) (*ecdsa.PublicKey, error) {
 		return nil, err
 	}
 
-	x, y := elliptic.Unmarshal(S256(), s)
-	return &ecdsa.PublicKey{Curve: S256(), X: x, Y: y}, nil
+	return UnmarshalPubkey(s)
 }
 
 // Sign calculates an ECDSA signature.
@@ -83,6 +81,6 @@ func CompressPubkey(pubkey *ecdsa.PublicKey) []byte {
 }
 
 // S256 returns an instance of the secp256k1 curve.
-func S256() elliptic.Curve {
+func S256() EllipticCurve {
 	return secp256k1.S256()
 }
