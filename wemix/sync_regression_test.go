@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -109,6 +110,25 @@ func reportInvariants(t *testing.T, invs []invariant) {
 // handleStatusEx body mirrors — eth/protocols/eth/wemix_handlers.go
 // ---------------------------------------------------------------------------
 
+// simulatedStatusExMinInterval mirrors production statusExMinInterval
+// (wemix_handlers.go). Used by simulateHandleStatusEx_Hardened.
+const simulatedStatusExMinInterval = 5 * time.Second
+
+// simulatedStatusExLastSeen mirrors production statusExLastSeen. A separate
+// map is used so simulator state can be reset between rounds without
+// touching production state.
+var simulatedStatusExLastSeen sync.Map
+
+// resetSimulatedRateLimitState clears the simulator's per-peer rate-limit
+// cache. Call this at the start of any scenario that reuses peer IDs across
+// rounds, otherwise the previous round's timestamps leak into the next.
+func resetSimulatedRateLimitState() {
+	simulatedStatusExLastSeen.Range(func(k, _ any) bool {
+		simulatedStatusExLastSeen.Delete(k)
+		return true
+	})
+}
+
 // simulateHandleStatusEx_Vulnerable mirrors handleStatusEx as it existed
 // before the NodeName rebinding hardening. Preserved for regression
 // detection.
@@ -130,13 +150,13 @@ func simulateHandleStatusEx_Vulnerable(peerID string, status *wemixapi.WemixMine
 }
 
 // simulateHandleStatusEx_Hardened mirrors the current production
-// handleStatusEx body (V1 + V3 hardening: NodeName rebinding + nil guard).
+// handleStatusEx body (V1 + V2 + V3 hardening).
 //
 // Mirror source: eth/protocols/eth/wemix_handlers.go handleStatusEx
 //
 // Returns:
 //   - panicked: any value recovered from a panic (nil if none)
-//   - dropped:  reserved for future per-peer rate-limit hardening
+//   - dropped:  true if the message was discarded by the per-peer rate limit
 func simulateHandleStatusEx_Hardened(peerID string, status *wemixapi.WemixMinerStatus, victimTD *big.Int) (panicked any, dropped bool) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -145,6 +165,17 @@ func simulateHandleStatusEx_Hardened(peerID string, status *wemixapi.WemixMinerS
 	}()
 
 	// ↓ hardened production body ↓
+
+	// Per-peer rate limit: subsequent messages from the same peer arriving
+	// within simulatedStatusExMinInterval are discarded before decode and
+	// before spawning the goroutine.
+	now := time.Now()
+	if prev, ok := simulatedStatusExLastSeen.Load(peerID); ok {
+		if t, ok2 := prev.(time.Time); ok2 && now.Sub(t) < simulatedStatusExMinInterval {
+			return nil, true
+		}
+	}
+	simulatedStatusExLastSeen.Store(peerID, now)
 
 	// Rebind NodeName from an attacker-controlled string to the verified peer.ID().
 	status.NodeName = peerID
@@ -364,6 +395,7 @@ func TestNilLatestBlockTdGuard_PreventsHandlerPanic(t *testing.T) {
 	victimTD := big.NewInt(123456)
 
 	vulnerablePanic := simulateHandleStatusEx_Vulnerable("attacker", mkNilTdStatus(), victimTD)
+	resetSimulatedRateLimitState()
 	hardenedPanic, _ := simulateHandleStatusEx_Hardened("attacker", mkNilTdStatus(), victimTD)
 
 	t.Logf("vulnerable simulator panic: %v", vulnerablePanic)
@@ -539,6 +571,7 @@ func TestNodeNameRebind_PreventsQuorumForgery(t *testing.T) {
 	runAttack := func(t *testing.T, label string, simulator roundSimulator) int {
 		t.Helper()
 		resetMiningPeers()
+		resetSimulatedRateLimitState()
 		processed, stop := runHandleMinerStatusUpdateLikeProduction(t)
 		defer stop()
 		time.Sleep(30 * time.Millisecond)
@@ -573,4 +606,291 @@ func TestNodeNameRebind_PreventsQuorumForgery(t *testing.T) {
 	reportInvariants(t, invs)
 	t.Logf("vulnerable entries=%d (>= quorum %d), hardened entries=%d",
 		vulnerableEntries, quorum, hardenedEntries)
+}
+
+// ===========================================================================
+// V2: per-peer StatusEx rate limit
+// ===========================================================================
+
+// Per-peer rate limit: subsequent calls from the same peer.ID within the
+// minimum interval are dropped. Different peer.IDs are unaffected.
+func TestPerPeerRateLimit_DropsStatusExBurst(t *testing.T) {
+	resetSimulatedRateLimitState()
+
+	const peerID = "spammer-peer-id"
+	victimTD := big.NewInt(1000)
+	mkStatus := func() *wemixapi.WemixMinerStatus {
+		return &wemixapi.WemixMinerStatus{
+			NodeName:          "irrelevant",
+			LatestBlockHeight: big.NewInt(100),
+			LatestBlockHash:   common.HexToHash("0xabcd"),
+			LatestBlockTd:     big.NewInt(1 << 60),
+			RttMs:             big.NewInt(0),
+		}
+	}
+
+	// 5 consecutive calls from the same peer.ID — only the first passes;
+	// the rest are dropped.
+	delivered := 0
+	dropped := 0
+	for i := 0; i < 5; i++ {
+		_, d := simulateHandleStatusEx_Hardened(peerID, mkStatus(), victimTD)
+		if d {
+			dropped++
+		} else {
+			delivered++
+		}
+	}
+
+	// A different peer.ID is not affected by the rate limit.
+	_, otherDropped := simulateHandleStatusEx_Hardened("other-peer-id", mkStatus(), victimTD)
+
+	invs := []invariant{
+		{id: "I1", desc: "5 burst calls from same peer.ID: only 1 delivered", ok: delivered == 1},
+		{id: "I2", desc: "5 burst calls from same peer.ID: 4 dropped", ok: dropped == 4},
+		{id: "I3", desc: "different peer.ID is unaffected by the rate limit", ok: !otherDropped},
+	}
+	reportInvariants(t, invs)
+	t.Logf("rate limit (per-peer %v): delivered=%d, dropped=%d",
+		simulatedStatusExMinInterval, delivered, dropped)
+}
+
+// ===========================================================================
+// End-to-end attack chain — pre-hardening vs hardened comparison
+// ===========================================================================
+
+// endToEndAttackScenario bundles the inputs for the nine-stage attack run.
+type endToEndAttackScenario struct {
+	attackerPeerID   string
+	idleSeconds      int
+	spoofedNames     []string
+	attackerHeight   *big.Int
+	attackerHash     common.Hash
+	canonicalHeight  int64
+	canonicalParent  common.Hash
+	victimPeerTD     *big.Int
+	tokenAcquireWait time.Duration
+}
+
+func defaultScenario() endToEndAttackScenario {
+	names := make([]string, 0, 5)
+	for i := 1; i <= 5; i++ {
+		names = append(names, fmt.Sprintf("validator-%c", 'a'+i))
+	}
+	return endToEndAttackScenario{
+		attackerPeerID:  "compromised-validator-A",
+		idleSeconds:     SyncIdleThreshold + 1,
+		spoofedNames:    names,
+		attackerHeight:  big.NewInt(99999),
+		attackerHash:    common.HexToHash("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"),
+		canonicalHeight: 1000,
+		canonicalParent: common.HexToHash(
+			"0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"),
+		victimPeerTD:     big.NewInt(1 << 30),
+		tokenAcquireWait: 150 * time.Millisecond,
+	}
+}
+
+var errInvalidWorkPredicate = errors.New("ErrInvalidWork (simulated — etcdutil.go)")
+
+// acquireTokenSyncPredicate models the byte-equality Compare predicate
+// inside acquireTokenSync.
+func acquireTokenSyncPredicate(currentWorkKeyValue, expectedPrevWork string) error {
+	if currentWorkKeyValue == expectedPrevWork {
+		return nil
+	}
+	return errInvalidWorkPredicate
+}
+
+func truncateForLog(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
+
+type stageOutcome struct {
+	idleSecondsObserved    int
+	idlePassed             bool
+	sprayCount             int
+	sprayDelivered         int
+	miningPeersByName      int
+	miningPeersByPeerID    bool
+	consensusHeight        *big.Int
+	consensusHash          common.Hash
+	quorumReached          bool
+	poisonPayload          []byte
+	honestPrevWork         []byte
+	compareErr             error
+	tokenAcquired          bool
+	subsequentSyncCheckErr error
+}
+
+func runOneRound(
+	t *testing.T,
+	label string,
+	sc endToEndAttackScenario,
+	simulator roundSimulator,
+) stageOutcome {
+	t.Helper()
+	out := stageOutcome{}
+
+	t.Logf("════════════════════════════════════════════════════════════════")
+	t.Logf("█ %s : end-to-end attack chain (9 stages)", label)
+	t.Logf("════════════════════════════════════════════════════════════════")
+
+	// Stage 1: setup
+	t.Logf("[1] 5-validator devnet, SyncIdleThreshold = %ds", SyncIdleThreshold)
+	resetMiningPeers()
+	resetSimulatedRateLimitState()
+	processed, stop := runHandleMinerStatusUpdateLikeProduction(t)
+	defer stop()
+	time.Sleep(30 * time.Millisecond)
+
+	// Stage 2: attacker identity
+	t.Logf("[2] attacker peer.ID = %q (IsPartner=true assumed)", sc.attackerPeerID)
+
+	// Stage 3: force the idle gate to pass
+	idleSince := time.Now().Add(-time.Duration(sc.idleSeconds) * time.Second)
+	latestUpdateTime.Store(idleSince)
+	out.idleSecondsObserved = int(time.Since(idleSince).Seconds())
+	out.idlePassed = out.idleSecondsObserved > SyncIdleThreshold
+	t.Logf("[3] latestUpdateTime ← %ds ago, gate pass=%v",
+		out.idleSecondsObserved, out.idlePassed)
+
+	// Stage 4: spoofed-NodeName spray
+	for _, name := range sc.spoofedNames {
+		status := &wemixapi.WemixMinerStatus{
+			NodeName:          name,
+			LatestBlockHeight: new(big.Int).Set(sc.attackerHeight),
+			LatestBlockHash:   sc.attackerHash,
+			LatestBlockTd:     big.NewInt(1 << 62),
+			RttMs:             big.NewInt(0),
+		}
+		_, dropped := simulator(sc.attackerPeerID, status, sc.victimPeerTD)
+		out.sprayCount++
+		if !dropped {
+			out.sprayDelivered++
+		}
+	}
+	t.Logf("[4] spray count=%d, delivered=%d (handler drain wait %v)",
+		out.sprayCount, out.sprayDelivered, sc.tokenAcquireWait)
+	time.Sleep(sc.tokenAcquireWait)
+
+	// Stage 5: inspect miningPeers
+	for _, name := range sc.spoofedNames {
+		if _, ok := miningPeers.Load(name); ok {
+			out.miningPeersByName++
+		}
+	}
+	_, out.miningPeersByPeerID = miningPeers.Load(sc.attackerPeerID)
+	t.Logf("[5] handler processed=%d, miningPeers: byName=%d/%d, byPeerID=%v",
+		atomic.LoadInt64(processed), out.miningPeersByName,
+		len(sc.spoofedNames), out.miningPeersByPeerID)
+
+	// Stage 6: real findConsensusBlock
+	states := make([]*wemixapi.WemixMinerStatus, 0, len(sc.spoofedNames))
+	for _, name := range sc.spoofedNames {
+		if v, ok := miningPeers.Load(name); ok {
+			if s, ok2 := v.(*wemixapi.WemixMinerStatus); ok2 {
+				states = append(states, s)
+			}
+		}
+	}
+	out.consensusHeight, out.consensusHash = findConsensusBlock(states)
+	quorum := len(sc.spoofedNames)/2 + 1
+	out.quorumReached = out.consensusHeight != nil &&
+		out.consensusHeight.Cmp(sc.attackerHeight) == 0 &&
+		out.consensusHash == sc.attackerHash
+	t.Logf("[6] findConsensusBlock(states[%d]) quorum=%d, attackerTuple=%v",
+		len(states), quorum, out.quorumReached)
+
+	// Stage 7: etcdPut payload
+	if out.quorumReached {
+		payload, err := json.Marshal(&wemixWork{
+			Height: out.consensusHeight.Int64(),
+			Hash:   out.consensusHash,
+		})
+		if err == nil {
+			out.poisonPayload = payload
+		}
+	}
+	t.Logf("[7] syncCheck etcdPut(%q, …): payloadEmpty=%v",
+		wemixWorkKey, len(out.poisonPayload) == 0)
+
+	// Stage 8: acquireTokenSync Compare predicate
+	prevWork, _ := json.Marshal(&wemixWork{
+		Height: sc.canonicalHeight,
+		Hash:   sc.canonicalParent,
+	})
+	out.honestPrevWork = prevWork
+
+	currentWorkKeyValue := string(out.poisonPayload)
+	if len(out.poisonPayload) == 0 {
+		currentWorkKeyValue = string(prevWork)
+	}
+	out.compareErr = acquireTokenSyncPredicate(currentWorkKeyValue, string(prevWork))
+	out.tokenAcquired = out.compareErr == nil
+	t.Logf("[8] etcd wemixWorkKey=%s, tokenAcquired=%v",
+		truncateForLog(currentWorkKeyValue, 64), out.tokenAcquired)
+
+	// Stage 9: subsequent syncCheck
+	out.subsequentSyncCheckErr = acquireTokenSyncPredicate(
+		currentWorkKeyValue, string(prevWork))
+	t.Logf("[9] subsequent acquireToken → %v", out.subsequentSyncCheckErr)
+	t.Logf("════════════════════════════════════════════════════════════════")
+	return out
+}
+
+func TestRegression_EndToEndAttackChain(t *testing.T) {
+	logs := captureProductionLogs(t)
+	sc := defaultScenario()
+
+	var pre, post stageOutcome
+	t.Run("vulnerable_behavior", func(t *testing.T) {
+		pre = runOneRound(t, "VULNERABLE", sc, vulnerableSimulator)
+	})
+	t.Run("hardened_behavior", func(t *testing.T) {
+		post = runOneRound(t, "HARDENED  ", sc, simulateHandleStatusEx_Hardened)
+	})
+
+	quorum := len(sc.spoofedNames)/2 + 1
+	invs := []invariant{
+		{id: "C1", desc: fmt.Sprintf("idle %ds > %ds (both rounds)",
+			sc.idleSeconds, SyncIdleThreshold), ok: pre.idlePassed && post.idlePassed},
+
+		{id: "V1", desc: "vulnerable [5]: spoofed entries >= quorum",
+			ok: pre.miningPeersByName >= quorum},
+		{id: "V2", desc: "vulnerable [6]: findConsensusBlock returns attacker tuple",
+			ok: pre.quorumReached},
+		{id: "V3", desc: "vulnerable [7]: etcdPut payload equals attacker value",
+			ok: len(pre.poisonPayload) > 0},
+		{id: "V4", desc: "vulnerable [8]: honest acquireTokenSync receives ErrInvalidWork",
+			ok: !pre.tokenAcquired && pre.compareErr != nil},
+		{id: "V5", desc: "vulnerable [9]: subsequent syncCheck also fails",
+			ok: pre.subsequentSyncCheckErr != nil},
+
+		{id: "H1", desc: "hardened [4]: rate limit drops 4 of 5 spray attempts",
+			ok: post.sprayDelivered == 1},
+		{id: "H2", desc: "hardened [5]: spoofed entries < quorum",
+			ok: post.miningPeersByName < quorum},
+		{id: "H3", desc: "hardened [5]: single entry keyed by peer.ID",
+			ok: post.miningPeersByPeerID && post.miningPeersByName == 0},
+		{id: "H4", desc: "hardened [6]: findConsensusBlock does not return attacker tuple",
+			ok: !post.quorumReached},
+		{id: "H5", desc: "hardened [7]: etcdPut never reached",
+			ok: len(post.poisonPayload) == 0},
+		{id: "H6", desc: "hardened [8]: honest acquireTokenSync succeeds",
+			ok: post.tokenAcquired && post.compareErr == nil},
+	}
+	reportInvariants(t, invs)
+
+	t.Log("─────── production log capture ───────")
+	if logs.Len() == 0 {
+		t.Log("    (no log output from the production path)")
+	} else {
+		t.Logf("\n%s", logs.String())
+	}
+	t.Log("VULNERABLE: stages 1..9 all pass → cluster-wide mining-token deadlock reproduced")
+	t.Log("HARDENED  : rate limit + NodeName rebind block quorum forgery → stages 6..9 neutralized")
 }
