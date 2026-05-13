@@ -42,6 +42,12 @@ func handleStatusEx(backend Backend, msg Decoder, peer *Peer) error {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
+	// Rebind NodeName from the attacker-controlled string in the RLP payload to
+	// the verified peer.ID(). miningPeers (wemix/sync.go) thus ends up keyed by
+	// peer.ID(), preventing a single peer from injecting multiple entries under
+	// spoofed NodeNames.
+	status.NodeName = peer.ID()
+
 	go func() {
 		if _, td := peer.Head(); status.LatestBlockTd.Cmp(td) > 0 {
 			peer.SetHead(status.LatestBlockHash, status.LatestBlockTd)
