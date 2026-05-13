@@ -340,9 +340,13 @@ func syncCheck() error {
 	// collects mining peers' latest blocks
 	nodes := admin.getNodes()
 	states := getMiners("", 5000)
-	if len(nodes) == 0 && len(nodes) != len(states) {
-		// cached governance must be out-of-date
-		log.Error("sync check: node count mismatch, aborting")
+	// The original guard `len(nodes)==0 && len(nodes)!=len(states)` was a dead
+	// branch in any healthy environment (nodes>=5). Recovered intent: if the
+	// governance cache is empty we cannot reason about quorum, so abort. The
+	// strict `nodes!=states` comparison was dropped because it false-positives
+	// on partial peer outages.
+	if len(nodes) == 0 {
+		log.Error("sync check: no governance nodes loaded, aborting", "states", len(states))
 		return nil
 	}
 
