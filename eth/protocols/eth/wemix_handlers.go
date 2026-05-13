@@ -49,7 +49,10 @@ func handleStatusEx(backend Backend, msg Decoder, peer *Peer) error {
 	status.NodeName = peer.ID()
 
 	go func() {
-		if _, td := peer.Head(); status.LatestBlockTd.Cmp(td) > 0 {
+		// Guard against a crafted StatusEx that omits LatestBlockTd: without this
+		// check Cmp() would panic on a nil *big.Int, turning a single message into
+		// a handler-goroutine DoS.
+		if _, td := peer.Head(); status.LatestBlockTd != nil && status.LatestBlockTd.Cmp(td) > 0 {
 			peer.SetHead(status.LatestBlockHash, status.LatestBlockTd)
 		}
 		wemixapi.GotStatusEx(&status)

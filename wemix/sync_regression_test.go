@@ -130,7 +130,7 @@ func simulateHandleStatusEx_Vulnerable(peerID string, status *wemixapi.WemixMine
 }
 
 // simulateHandleStatusEx_Hardened mirrors the current production
-// handleStatusEx body (V1 hardening: NodeName rebinding).
+// handleStatusEx body (V1 + V3 hardening: NodeName rebinding + nil guard).
 //
 // Mirror source: eth/protocols/eth/wemix_handlers.go handleStatusEx
 //
@@ -149,7 +149,8 @@ func simulateHandleStatusEx_Hardened(peerID string, status *wemixapi.WemixMinerS
 	// Rebind NodeName from an attacker-controlled string to the verified peer.ID().
 	status.NodeName = peerID
 
-	if status.LatestBlockTd.Cmp(victimTD) > 0 {
+	// Nil guard against a crafted StatusEx with LatestBlockTd omitted.
+	if status.LatestBlockTd != nil && status.LatestBlockTd.Cmp(victimTD) > 0 {
 		// peer.SetHead(...) — no-op in the simulator
 	}
 	wemixapi.GotStatusEx(status)
@@ -288,6 +289,91 @@ func TestRegression_SpoofedStatusExPoisonsWorkKey(t *testing.T) {
 	t.Log("Note: production now blocks this chain at handleStatusEx (NodeName rebind).")
 	t.Log("      This test bypasses the handler boundary and injects via the production goroutine directly,")
 	t.Log("      preserving the chain reproduction for regression detection.")
+}
+
+// ===========================================================================
+// V3: LatestBlockTd nil-deref guard
+// ===========================================================================
+
+// Single-message DoS reproduction: a StatusEx with LatestBlockTd=nil drives
+// the pre-hardening body into a Cmp(nil) call, which panics. The production
+// fix is a nil guard in handleStatusEx.
+func TestRegression_NilLatestBlockTdPanicsHandler(t *testing.T) {
+	logs := captureProductionLogs(t)
+
+	attackerStatus := &wemixapi.WemixMinerStatus{
+		NodeName:          "node1",
+		LatestBlockHeight: big.NewInt(99999),
+		LatestBlockHash:   common.HexToHash("0xdead"),
+		LatestBlockTd:     nil, // crafted: missing from the RLP payload
+		RttMs:             big.NewInt(0),
+	}
+	victimTD := big.NewInt(123456)
+
+	t.Logf("attacker status: LatestBlockTd=%v (nil)", attackerStatus.LatestBlockTd)
+	t.Logf("victim peer.Head() TD = %v", victimTD)
+
+	var panicValue any
+	func() {
+		defer func() { panicValue = recover() }()
+		// equivalent to the pre-hardening handleStatusEx comparison
+		if attackerStatus.LatestBlockTd.Cmp(victimTD) > 0 {
+			_ = "unreachable"
+		}
+	}()
+
+	invs := []invariant{
+		{id: "I1", desc: "attacker LatestBlockTd is nil", ok: attackerStatus.LatestBlockTd == nil},
+		{id: "I2", desc: "pre-hardening statement panics at runtime", ok: panicValue != nil},
+		{id: "I3", desc: "panic type is nil-pointer dereference",
+			ok: panicValue != nil && fmtMatchesNilDeref(panicValue)},
+	}
+	if panicValue != nil {
+		t.Logf("recovered panic value: %v", panicValue)
+	}
+	reportInvariants(t, invs)
+
+	t.Log("─────── production log capture ───────")
+	if logs.Len() == 0 {
+		t.Log("    (panic was recovered and the path does not log)")
+	} else {
+		t.Logf("\n%s", logs.String())
+	}
+	t.Log("Note: production already adds a nil guard in handleStatusEx.")
+	t.Log("      This test preserves the attack reproduction in case the guard is removed.")
+}
+
+func fmtMatchesNilDeref(v any) bool {
+	msg := fmt.Sprintf("%v", v)
+	return msg == "runtime error: invalid memory address or nil pointer dereference"
+}
+
+// Sending the same crafted payload (LatestBlockTd=nil) through both
+// simulators: only the vulnerable one panics; the hardened one's nil guard
+// blocks the panic.
+func TestNilLatestBlockTdGuard_PreventsHandlerPanic(t *testing.T) {
+	mkNilTdStatus := func() *wemixapi.WemixMinerStatus {
+		return &wemixapi.WemixMinerStatus{
+			NodeName:          "node1",
+			LatestBlockHeight: big.NewInt(99999),
+			LatestBlockHash:   common.HexToHash("0xdead"),
+			LatestBlockTd:     nil,
+			RttMs:             big.NewInt(0),
+		}
+	}
+	victimTD := big.NewInt(123456)
+
+	vulnerablePanic := simulateHandleStatusEx_Vulnerable("attacker", mkNilTdStatus(), victimTD)
+	hardenedPanic, _ := simulateHandleStatusEx_Hardened("attacker", mkNilTdStatus(), victimTD)
+
+	t.Logf("vulnerable simulator panic: %v", vulnerablePanic)
+	t.Logf("hardened simulator panic  : %v", hardenedPanic)
+
+	invs := []invariant{
+		{id: "I1", desc: "vulnerable: nil LatestBlockTd panics the handler", ok: vulnerablePanic != nil},
+		{id: "I2", desc: "hardened: nil guard prevents the panic", ok: hardenedPanic == nil},
+	}
+	reportInvariants(t, invs)
 }
 
 // ===========================================================================
