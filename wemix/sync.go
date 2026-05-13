@@ -348,20 +348,36 @@ func syncCheck() error {
 
 	// 'work' is ahead of us
 	if work != nil && work.Height > header.Number.Int64() {
-		// checks if the recorded 'work' is the latest block of any mining peer
-		exists := false
-		for _, state := range states {
-			if state.LatestBlockHeight == nil {
-				continue
-			}
-			if state.LatestBlockHeight.Int64() == work.Height && work.Hash == state.LatestBlockHash {
-				exists = true
-				break
-			}
+		// First verify that the stored work.Hash is reachable from the local chain.
+		// If reachable, treat this as the legitimate "peer is ahead of us on the
+		// canonical chain" case and keep the existing state-matching abort. If
+		// unreachable, suspect a poisoned wemixWorkKey and fall through to the
+		// findConsensusBlock rebuild path instead of trusting a single attacker
+		// state that happens to echo the poison. Pairs with the work-key
+		// self-recovery in release() so a poisoned key cannot persist.
+		workReachable := false
+		if peerHeader, herr := admin.cli.HeaderByHash(ctx, work.Hash); herr == nil && peerHeader != nil {
+			workReachable = true
 		}
-		if exists {
-			log.Error("sync check: the work is ahead of us and present", "height", work.Height, "hash", work.Hash)
-			return nil
+		if workReachable {
+			// checks if the recorded 'work' is the latest block of any mining peer
+			exists := false
+			for _, state := range states {
+				if state.LatestBlockHeight == nil {
+					continue
+				}
+				if state.LatestBlockHeight.Int64() == work.Height && work.Hash == state.LatestBlockHash {
+					exists = true
+					break
+				}
+			}
+			if exists {
+				log.Error("sync check: the work is ahead of us and present", "height", work.Height, "hash", work.Hash)
+				return nil
+			}
+		} else {
+			log.Warn("sync check: stored work hash unreachable from local chain, rebuilding via consensus",
+				"work-height", work.Height, "work-hash", work.Hash)
 		}
 	}
 
@@ -374,6 +390,15 @@ func syncCheck() error {
 		} else {
 			log.Error("sync check: no consensus block found, aborting", "work-height", work.Height, "work-hash", work.Hash)
 		}
+		return nil
+	}
+	// Before persisting to etcd, require that consensusHash is reachable from
+	// the local chain. Writing an unreachable hash into wemixWorkKey would
+	// permanently fail every validator's acquireTokenSync (ErrInvalidWork), so
+	// reject unknown hashes outright.
+	if peerHeader, herr := admin.cli.HeaderByHash(ctx, consensusHash); herr != nil || peerHeader == nil {
+		log.Error("sync check: consensus block not reachable from local chain, aborting",
+			"height", consensusHeight, "hash", consensusHash, "error", herr)
 		return nil
 	}
 	newWork := &wemixWork{
