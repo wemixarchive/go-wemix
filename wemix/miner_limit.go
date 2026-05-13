@@ -37,9 +37,16 @@ func (ma *wemixAdmin) collectMinerStates(height *big.Int) []*wemixapi.WemixMiner
 
 	var states []*wemixapi.WemixMinerStatus
 	for _, n := range e.nodes {
-		if s, ok := miningPeers.Load(n.Name); ok {
+		// miningPeers is keyed by peer.ID() (== n.Id) after the F-005 hotfix
+		// rebinds status.NodeName in handleStatusEx. Load by n.Id, then clone
+		// and restore the governance Name so downstream callers (electNextMiner)
+		// can match against next.Name without leaking peer.ID into election
+		// candidate keys.
+		if s, ok := miningPeers.Load(n.Id); ok {
 			if status, ok := s.(*wemixapi.WemixMinerStatus); ok {
-				states = append(states, status)
+				clone := status.Clone()
+				clone.NodeName = n.Name
+				states = append(states, clone)
 			}
 		}
 	}

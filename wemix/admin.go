@@ -1407,7 +1407,9 @@ func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
 			status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
 			miners = append(miners, status)
 		} else {
-			peers[node.Name] = node
+			// Key by peer.ID() (== n.Id, idv4) to match handleStatusEx's rebinding
+			// of status.NodeName to peer.ID() introduced by the F-005 hotfix.
+			peers[node.Id] = node
 			count++
 		}
 	} else {
@@ -1427,7 +1429,7 @@ func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
 				miners = append(miners, status)
 				log.Error("RequestMinerStatus Failed", "id", n.Id, "error", err)
 			} else {
-				peers[n.Name] = n
+				peers[n.Id] = n
 				count++
 			}
 		}
@@ -1446,16 +1448,21 @@ func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
 			if done {
 				continue
 			}
+			// After F-005, status.NodeName carries peer.ID() (verified hex), not
+			// the governance Name. Look up by that, then restore the friendly
+			// Name from the locally-trusted governance mapping before returning,
+			// so external callers (etcdAutoJoin, web3 ext) see stable names.
 			if n, exists := peers[status.NodeName]; exists {
 				status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
-				miners = append(miners, status)
 				if n != nil {
-					peers[status.NodeName] = nil
+					status.NodeName = n.Name
+					peers[n.Id] = nil
 					count--
 					if count <= 0 {
 						done = true
 					}
 				}
+				miners = append(miners, status)
 			}
 		case <-timer.C:
 			done = true
