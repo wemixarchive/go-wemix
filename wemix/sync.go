@@ -405,6 +405,15 @@ func syncCheck() error {
 			"height", consensusHeight, "hash", consensusHash, "error", herr)
 		return nil
 	}
+	// consensusHeight must not regress the local head. A consensus tuple
+	// pointing below header.Number indicates poisoned states echoing an old
+	// (still-reachable) hash; persisting it would push every validator's
+	// mining target backward and stall block production permanently.
+	if consensusHeight.Cmp(header.Number) < 0 {
+		log.Error("sync check: consensus height regresses local head, aborting",
+			"local", header.Number, "consensus", consensusHeight, "consensus-hash", consensusHash)
+		return nil
+	}
 	newWork := &wemixWork{
 		Height: consensusHeight.Int64(),
 		Hash:   consensusHash,

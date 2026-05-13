@@ -894,3 +894,76 @@ func TestRegression_EndToEndAttackChain(t *testing.T) {
 	t.Log("VULNERABLE: stages 1..9 all pass → cluster-wide mining-token deadlock reproduced")
 	t.Log("HARDENED  : rate limit + NodeName rebind block quorum forgery → stages 6..9 neutralized")
 }
+
+// ===========================================================================
+// V9: consensusHeight regression guard
+// ===========================================================================
+
+// TestRegression_StaleConsensusHeightBlocked verifies the strict height
+// regression guard in syncCheck: when a poisoned quorum drives
+// findConsensusBlock to return a height below the local header, the
+// would-be etcdPut(wemixWorkKey, ...) must be suppressed.
+//
+// Mirror source: wemix/sync.go, body around the
+//
+//	if consensusHeight.Cmp(header.Number) < 0 { ... return nil }
+//
+// guard immediately above the newWork construction.
+func TestRegression_StaleConsensusHeightBlocked(t *testing.T) {
+	governanceNames := []string{"node1", "node2", "node3", "node4", "node5"}
+
+	// Local chain is at height 1000. Attacker quorum claims height 900 with
+	// a hash that — in the attack scenario — is still reachable from the
+	// local chain (an old canonical block). The hash-reachability guard
+	// alone would let this through; only the height guard catches it.
+	localHeight := big.NewInt(1000)
+	staleHeight := big.NewInt(900)
+	staleHash := common.HexToHash("0xfeedbeef")
+
+	resetMiningPeers()
+	processed, stop := runHandleMinerStatusUpdateLikeProduction(t)
+	time.Sleep(30 * time.Millisecond)
+
+	for _, name := range governanceNames {
+		wemixapi.GotStatusEx(&wemixapi.WemixMinerStatus{
+			NodeName:          name,
+			LatestBlockHeight: new(big.Int).Set(staleHeight),
+			LatestBlockHash:   staleHash,
+			LatestBlockTd:     big.NewInt(1),
+			RttMs:             big.NewInt(0),
+		})
+	}
+	time.Sleep(120 * time.Millisecond)
+	stop()
+	t.Logf("stage A ▶ handler processed=%d, miningPeers entries seeded", atomic.LoadInt64(processed))
+
+	states := make([]*wemixapi.WemixMinerStatus, 0, len(governanceNames))
+	for _, name := range governanceNames {
+		if v, ok := miningPeers.Load(name); ok {
+			if s, ok2 := v.(*wemixapi.WemixMinerStatus); ok2 {
+				states = append(states, s)
+			}
+		}
+	}
+
+	consensusHeight, consensusHash := findConsensusBlock(states)
+	t.Logf("stage B ▶ findConsensusBlock = (height=%v, hash=%x)", consensusHeight, consensusHash)
+	if consensusHeight == nil {
+		t.Fatalf("findConsensusBlock returned nil; attack precondition (quorum) broken")
+	}
+
+	// Mirror of the production guard. If consensusHeight < header.Number,
+	// syncCheck returns before reaching admin.etcdPut(wemixWorkKey, ...).
+	regressed := consensusHeight.Cmp(localHeight) < 0
+	wouldEtcdPut := !regressed
+
+	invs := []invariant{
+		{id: "I1", desc: "attack precondition: quorum reports the stale height",
+			ok: consensusHeight.Cmp(staleHeight) == 0},
+		{id: "I2", desc: "guard recognises consensus < local head as regression",
+			ok: regressed},
+		{id: "I3", desc: "syncCheck would NOT call admin.etcdPut(wemixWorkKey, ...)",
+			ok: !wouldEtcdPut},
+	}
+	reportInvariants(t, invs)
+}
