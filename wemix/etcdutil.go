@@ -918,7 +918,7 @@ func (lck *WemixToken) maybeRecoverWorkKey(ctx context.Context) (newWorkJSON str
 //     view prevents the recovery from corrupting a healthy etcd value with
 //     a stale local snapshot)
 //   - otherwise (hash unreachable and we are strictly past work.Height)
-//     → correct to local head
+//                                               → correct to local head
 //
 // Trade-off documented: poison whose fake height >= localHead.Number is not
 // auto-recovered here. The syncCheck consensus PUT path (sync.go) is the
