@@ -838,14 +838,11 @@ func (lck *WemixToken) release(ctx context.Context) error {
 	}
 
 	// Work-key self-recovery (read-side): at token release time, if wemixWorkKey
-	// is unreachable from the local canonical chain *and* we are strictly past
-	// the recorded work height, correct it to the local head to break the
-	// self-recovery deadlock. The strict-ahead guard prevents a slow-syncing or
-	// minority-fork node from corrupting a healthy etcd value with its lagging
-	// local snapshot (see decideWorkKeyRecovery for the full decision body).
-	// release() is invoked only from the syncCheck defer path and runs inside
-	// the token-held critical section, so etcd transactional safety is
-	// preserved. Corrected value =
+	// is unreachable from the local canonical chain (i.e. contaminated by a
+	// quorum-forgery attack or similar), correct it to the local head to break
+	// the self-recovery deadlock. release() is invoked only from the syncCheck
+	// defer path and runs inside the token-held critical section, so etcd
+	// transactional safety is preserved. Corrected value =
 	//   { Height: localHead.Number, Hash: localHead.Hash() }
 	// — aligned with the prevWork predicate of the next
 	// acquireTokenSync(localHead.Number+1, localHead.Hash).
@@ -867,69 +864,19 @@ func (lck *WemixToken) release(ctx context.Context) error {
 }
 
 // maybeRecoverWorkKey returns the new (JSON-encoded) value and doCorrect=true
-// when wemixWorkKey is unreachable from the local canonical chain *and* the
-// local head is strictly ahead of the recorded work height. When safety cannot
-// be ensured (etcd lookup failure, JSON unmarshal failure, local head
-// unavailable, or local head not strictly ahead), it returns doCorrect=false
-// and skips the correction.
+// when wemixWorkKey is unreachable from the local canonical chain. When safety
+// cannot be ensured (etcd lookup failure, JSON unmarshal failure, local head
+// unavailable), it returns doCorrect=false and skips the correction.
 //
-// Invoked only from release(). The decision body is delegated to
-// decideWorkKeyRecovery so that it can be exercised by regression tests
-// without spinning up a real ethclient.
+// Invoked only from release(). Decision rules:
+//   - etcdGet failure / empty value           → skip (safety first)
+//   - JSON unmarshal failure                  → skip (handled by syncCheck body)
+//   - work.Hash == zeroHash                   → skip (could be a valid initial state)
+//   - HeaderByHash succeeds                   → skip (reachable = healthy)
+//   - HeaderByHash fails + local head usable  → correct to local head
 func (lck *WemixToken) maybeRecoverWorkKey(ctx context.Context) (newWorkJSON string, doCorrect bool) {
 	workValue, err := lck.admin.etcdGet(wemixWorkKey)
-	if err != nil {
-		return "", false
-	}
-	lookupByHash := func(h common.Hash) (number *big.Int, ok bool) {
-		header, herr := lck.admin.cli.HeaderByHash(ctx, h)
-		if herr != nil || header == nil {
-			return nil, false
-		}
-		return header.Number, true
-	}
-	lookupLocalHead := func() (number *big.Int, hash common.Hash, ok bool) {
-		header, herr := lck.admin.cli.HeaderByNumber(ctx, nil)
-		if herr != nil || header == nil {
-			return nil, common.Hash{}, false
-		}
-		return header.Number, header.Hash(), true
-	}
-	return decideWorkKeyRecovery(workValue, lookupByHash, lookupLocalHead)
-}
-
-// decideWorkKeyRecovery is the pure decision body for maybeRecoverWorkKey.
-// Inputs:
-//   - workValue: raw etcd value at wemixWorkKey ("" if absent).
-//   - lookupByHash(h): canonical-chain header lookup; returns (number, true)
-//     iff the header is locally known.
-//   - lookupLocalHead(): local canonical-chain head; returns (number, hash, true)
-//     on success.
-//
-// Decision rules:
-//   - empty workValue / unmarshal failure       → skip (safety first)
-//   - work.Hash == zeroHash                     → skip (valid initial state)
-//   - hash reachable AND height matches header  → skip (truly healthy)
-//   - hash reachable BUT height inconsistent    → fall through (treat as poison)
-//   - hash unreachable AND local head missing   → skip (cannot prove safety)
-//   - hash unreachable AND work.Height >=
-//     localHead.Number                          → skip (we may be slow-syncing
-//     or on a minority fork; refusing to "correct" downward to our lagging
-//     view prevents the recovery from corrupting a healthy etcd value with
-//     a stale local snapshot)
-//   - otherwise (hash unreachable and we are strictly past work.Height)
-//                                               → correct to local head
-//
-// Trade-off documented: poison whose fake height >= localHead.Number is not
-// auto-recovered here. The syncCheck consensus PUT path (sync.go) is the
-// primary corrective channel for that case once honest peers re-publish
-// reachable states.
-func decideWorkKeyRecovery(
-	workValue string,
-	lookupByHash func(common.Hash) (number *big.Int, ok bool),
-	lookupLocalHead func() (number *big.Int, hash common.Hash, ok bool),
-) (newWorkJSON string, doCorrect bool) {
-	if workValue == "" {
+	if err != nil || workValue == "" {
 		return "", false
 	}
 	var work wemixWork
@@ -940,36 +887,25 @@ func decideWorkKeyRecovery(
 	if work.Hash == zeroHash {
 		return "", false
 	}
-	if num, ok := lookupByHash(work.Hash); ok && num != nil {
-		if num.Int64() == work.Height {
-			return "", false
-		}
-		// hash is locally known but at a different height than recorded — the
-		// (height, hash) tuple is internally inconsistent, treat as poison and
-		// fall through to the local-head correction path.
+	if header, herr := lck.admin.cli.HeaderByHash(ctx, work.Hash); herr == nil && header != nil {
+		return "", false
 	}
-	localNum, localHash, localOK := lookupLocalHead()
-	if !localOK || localNum == nil {
+	localHead, lherr := lck.admin.cli.HeaderByNumber(ctx, nil)
+	if lherr != nil || localHead == nil {
 		log.Warn("release: wemixWorkKey unreachable but local head unavailable, skipping recovery",
 			"work-hash", work.Hash)
 		return "", false
 	}
-	if work.Height >= localNum.Int64() {
-		log.Warn("release: wemixWorkKey unreachable but at or beyond local head, skipping recovery (possible slow sync / fork)",
-			"work-height", work.Height, "work-hash", work.Hash,
-			"local-height", localNum.Int64())
-		return "", false
-	}
 	correctedBytes, merr := json.Marshal(&wemixWork{
-		Height: localNum.Int64(),
-		Hash:   localHash,
+		Height: localHead.Number.Int64(),
+		Hash:   localHead.Hash(),
 	})
 	if merr != nil {
 		return "", false
 	}
 	log.Warn("release: wemixWorkKey unreachable, correcting to local head",
 		"stale-height", work.Height, "stale-hash", work.Hash,
-		"new-height", localNum.Int64(), "new-hash", localHash)
+		"new-height", localHead.Number.Int64(), "new-hash", localHead.Hash())
 	return string(correctedBytes), true
 }
 
