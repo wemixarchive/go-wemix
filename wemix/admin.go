@@ -1407,9 +1407,7 @@ func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
 			status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
 			miners = append(miners, status)
 		} else {
-			// Key by peer.ID() (== n.Id, idv4) to match handleStatusEx's rebinding
-			// of status.NodeName to peer.ID() introduced by the F-005 hotfix.
-			peers[node.Id] = node
+			peers[node.Name] = node
 			count++
 		}
 	} else {
@@ -1429,7 +1427,7 @@ func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
 				miners = append(miners, status)
 				log.Error("RequestMinerStatus Failed", "id", n.Id, "error", err)
 			} else {
-				peers[n.Id] = n
+				peers[n.Name] = n
 				count++
 			}
 		}
@@ -1448,21 +1446,16 @@ func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
 			if done {
 				continue
 			}
-			// After F-005, status.NodeName carries peer.ID() (verified hex), not
-			// the governance Name. Look up by that, then restore the friendly
-			// Name from the locally-trusted governance mapping before returning,
-			// so external callers (etcdAutoJoin, web3 ext) see stable names.
 			if n, exists := peers[status.NodeName]; exists {
 				status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
+				miners = append(miners, status)
 				if n != nil {
-					status.NodeName = n.Name
-					peers[n.Id] = nil
+					peers[status.NodeName] = nil
 					count--
 					if count <= 0 {
 						done = true
 					}
 				}
-				miners = append(miners, status)
 			}
 		case <-timer.C:
 			done = true
@@ -1554,6 +1547,18 @@ func verifyBlockRewards(height *big.Int) interface{} {
 	return r
 }
 
+func NodeNameForPeerID(id string) (string, bool) {
+	if admin == nil {
+		return "", false
+	}
+	admin.lock.Lock()
+	defer admin.lock.Unlock()
+	if n, ok := admin.nodes[id]; ok {
+		return n.Name, true
+	}
+	return "", false
+}
+
 func init() {
 	wemixminer.AmPartnerFunc = AmPartner
 	wemixminer.IsPartnerFunc = IsPartner
@@ -1569,6 +1574,7 @@ func init() {
 	wemixminer.AcquireMiningTokenFunc = acquireMiningToken
 	wemixminer.ReleaseMiningTokenFunc = releaseMiningToken
 	wemixminer.HasMiningTokenFunc = hasMiningToken
+	wemixminer.NodeNameForPeerIDFunc = NodeNameForPeerID
 
 	wemixapi.Info = Info
 	wemixapi.GetMiners = getMiners

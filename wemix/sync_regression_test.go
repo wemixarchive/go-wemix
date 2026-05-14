@@ -119,6 +119,10 @@ const simulatedStatusExMinInterval = 5 * time.Second
 // touching production state.
 var simulatedStatusExLastSeen sync.Map
 
+func registeredNodeNameForTestPeerID(peerID string) string {
+	return "registered-" + peerID
+}
+
 // resetSimulatedRateLimitState clears the simulator's per-peer rate-limit
 // cache. Call this at the start of any scenario that reuses peer IDs across
 // rounds, otherwise the previous round's timestamps leak into the next.
@@ -177,8 +181,10 @@ func simulateHandleStatusEx_Hardened(peerID string, status *wemixapi.WemixMinerS
 	}
 	simulatedStatusExLastSeen.Store(peerID, now)
 
-	// Rebind NodeName from an attacker-controlled string to the verified peer.ID().
-	status.NodeName = peerID
+	// Replace the attacker-controlled name with the governance-registered name
+	// for the verified peer. In this simulator the registered name is derived
+	// from peerID to keep the production trust boundary explicit.
+	status.NodeName = registeredNodeNameForTestPeerID(peerID)
 
 	// Nil guard against a crafted StatusEx with LatestBlockTd omitted.
 	if status.LatestBlockTd != nil && status.LatestBlockTd.Cmp(victimTD) > 0 {
@@ -197,7 +203,7 @@ func vulnerableSimulator(peerID string, status *wemixapi.WemixMinerStatus, victi
 }
 
 // ===========================================================================
-// V1: NodeName ↔ peer.ID() binding
+// V1: StatusEx NodeName validation
 // ===========================================================================
 
 // Full attack chain reproduction (PRE-FIX mirror): spoofed StatusEx → forged
@@ -545,8 +551,8 @@ func TestRegression_AttackerReinfectsAfterManualClear(t *testing.T) {
 }
 
 // Quorum-forgery defense: when an attacker sprays N spoofed NodeNames, the
-// hardened path keys every entry by peer.ID (so at most 1 entry survives).
-// Result: post-hardening miningPeers drops below quorum.
+// hardened path stores every accepted status under the attacker's registered
+// node name. Result: post-hardening miningPeers drops below quorum.
 func TestNodeNameRebind_PreventsQuorumForgery(t *testing.T) {
 	attackerHeight := big.NewInt(99999)
 	attackerHash := common.HexToHash("0xdeadbeef")
@@ -588,9 +594,9 @@ func TestNodeNameRebind_PreventsQuorumForgery(t *testing.T) {
 				named++
 			}
 		}
-		_, byPeerID := miningPeers.Load(attackerPeerID)
-		t.Logf("[%s] processed=%d, byGovName=%d, byPeerID=%v",
-			label, atomic.LoadInt64(processed), named, byPeerID)
+		_, byRegisteredName := miningPeers.Load(registeredNodeNameForTestPeerID(attackerPeerID))
+		t.Logf("[%s] processed=%d, byGovName=%d, byRegisteredName=%v",
+			label, atomic.LoadInt64(processed), named, byRegisteredName)
 		return named
 	}
 
@@ -710,20 +716,20 @@ func truncateForLog(s string, max int) string {
 }
 
 type stageOutcome struct {
-	idleSecondsObserved    int
-	idlePassed             bool
-	sprayCount             int
-	sprayDelivered         int
-	miningPeersByName      int
-	miningPeersByPeerID    bool
-	consensusHeight        *big.Int
-	consensusHash          common.Hash
-	quorumReached          bool
-	poisonPayload          []byte
-	honestPrevWork         []byte
-	compareErr             error
-	tokenAcquired          bool
-	subsequentSyncCheckErr error
+	idleSecondsObserved         int
+	idlePassed                  bool
+	sprayCount                  int
+	sprayDelivered              int
+	miningPeersByName           int
+	miningPeersByRegisteredName bool
+	consensusHeight             *big.Int
+	consensusHash               common.Hash
+	quorumReached               bool
+	poisonPayload               []byte
+	honestPrevWork              []byte
+	compareErr                  error
+	tokenAcquired               bool
+	subsequentSyncCheckErr      error
 }
 
 func runOneRound(
@@ -783,10 +789,10 @@ func runOneRound(
 			out.miningPeersByName++
 		}
 	}
-	_, out.miningPeersByPeerID = miningPeers.Load(sc.attackerPeerID)
-	t.Logf("[5] handler processed=%d, miningPeers: byName=%d/%d, byPeerID=%v",
+	_, out.miningPeersByRegisteredName = miningPeers.Load(registeredNodeNameForTestPeerID(sc.attackerPeerID))
+	t.Logf("[5] handler processed=%d, miningPeers: byName=%d/%d, byRegisteredName=%v",
 		atomic.LoadInt64(processed), out.miningPeersByName,
-		len(sc.spoofedNames), out.miningPeersByPeerID)
+		len(sc.spoofedNames), out.miningPeersByRegisteredName)
 
 	// Stage 6: real findConsensusBlock
 	states := make([]*wemixapi.WemixMinerStatus, 0, len(sc.spoofedNames))
@@ -874,8 +880,8 @@ func TestRegression_EndToEndAttackChain(t *testing.T) {
 			ok: post.sprayDelivered == 1},
 		{id: "H2", desc: "hardened [5]: spoofed entries < quorum",
 			ok: post.miningPeersByName < quorum},
-		{id: "H3", desc: "hardened [5]: single entry keyed by peer.ID",
-			ok: post.miningPeersByPeerID && post.miningPeersByName == 0},
+		{id: "H3", desc: "hardened [5]: single entry keyed by registered node name",
+			ok: post.miningPeersByRegisteredName && post.miningPeersByName == 0},
 		{id: "H4", desc: "hardened [6]: findConsensusBlock does not return attacker tuple",
 			ok: !post.quorumReached},
 		{id: "H5", desc: "hardened [7]: etcdPut never reached",
