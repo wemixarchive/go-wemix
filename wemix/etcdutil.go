@@ -837,76 +837,17 @@ func (lck *WemixToken) release(ctx context.Context) error {
 		return err
 	}
 
-	// Work-key self-recovery (read-side): at token release time, if wemixWorkKey
-	// is unreachable from the local canonical chain (i.e. contaminated by a
-	// quorum-forgery attack or similar), correct it to the local head to break
-	// the self-recovery deadlock. release() is invoked only from the syncCheck
-	// defer path and runs inside the token-held critical section, so etcd
-	// transactional safety is preserved. Corrected value =
-	//   { Height: localHead.Number, Hash: localHead.Hash() }
-	// — aligned with the prevWork predicate of the next
-	// acquireTokenSync(localHead.Number+1, localHead.Hash).
-	correctedWork, doCorrect := lck.maybeRecoverWorkKey(ctx)
-
 	tx := lck.admin.etcdCli.Txn(ctx)
-	thenOps := []clientv3.Op{clientv3.OpDelete(lck.Key)}
-	if doCorrect {
-		thenOps = append(thenOps, clientv3.OpPut(wemixWorkKey, correctedWork))
-	}
 	txresp, err := tx.If(
 		clientv3.Compare(clientv3.Value(lck.Key), "=", string(value)),
-	).Then(thenOps...).Commit()
+	).Then(
+		clientv3.OpDelete(lck.Key),
+	).Commit()
 
 	if err == nil && !txresp.Succeeded {
 		return ErrExists
 	}
 	return err
-}
-
-// maybeRecoverWorkKey returns the new (JSON-encoded) value and doCorrect=true
-// when wemixWorkKey is unreachable from the local canonical chain. When safety
-// cannot be ensured (etcd lookup failure, JSON unmarshal failure, local head
-// unavailable), it returns doCorrect=false and skips the correction.
-//
-// Invoked only from release(). Decision rules:
-//   - etcdGet failure / empty value           → skip (safety first)
-//   - JSON unmarshal failure                  → skip (handled by syncCheck body)
-//   - work.Hash == zeroHash                   → skip (could be a valid initial state)
-//   - HeaderByHash succeeds                   → skip (reachable = healthy)
-//   - HeaderByHash fails + local head usable  → correct to local head
-func (lck *WemixToken) maybeRecoverWorkKey(ctx context.Context) (newWorkJSON string, doCorrect bool) {
-	workValue, err := lck.admin.etcdGet(wemixWorkKey)
-	if err != nil || workValue == "" {
-		return "", false
-	}
-	var work wemixWork
-	if err := json.Unmarshal([]byte(workValue), &work); err != nil {
-		return "", false
-	}
-	var zeroHash common.Hash
-	if work.Hash == zeroHash {
-		return "", false
-	}
-	if header, herr := lck.admin.cli.HeaderByHash(ctx, work.Hash); herr == nil && header != nil {
-		return "", false
-	}
-	localHead, lherr := lck.admin.cli.HeaderByNumber(ctx, nil)
-	if lherr != nil || localHead == nil {
-		log.Warn("release: wemixWorkKey unreachable but local head unavailable, skipping recovery",
-			"work-hash", work.Hash)
-		return "", false
-	}
-	correctedBytes, merr := json.Marshal(&wemixWork{
-		Height: localHead.Number.Int64(),
-		Hash:   localHead.Hash(),
-	})
-	if merr != nil {
-		return "", false
-	}
-	log.Warn("release: wemixWorkKey unreachable, correcting to local head",
-		"stale-height", work.Height, "stale-hash", work.Hash,
-		"new-height", localHead.Number.Int64(), "new-hash", localHead.Hash())
-	return string(correctedBytes), true
 }
 
 func (lck *WemixToken) lockedPut(ctx context.Context, key, value, prev string) error {
