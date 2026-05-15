@@ -407,9 +407,20 @@ func syncCheck() error {
 	// the local chain. Writing an unreachable hash into wemixWorkKey would
 	// permanently fail every validator's acquireTokenSync (ErrInvalidWork), so
 	// reject unknown hashes outright.
-	if peerHeader, herr := admin.cli.HeaderByHash(ctx, consensusHash); herr != nil || peerHeader == nil {
+	peerHeader, herr := admin.cli.HeaderByHash(ctx, consensusHash)
+	if herr != nil || peerHeader == nil {
 		log.Error("sync check: consensus block not reachable from local chain, aborting",
 			"height", consensusHeight, "hash", consensusHash, "error", herr)
+		return nil
+	}
+	// Verify that consensusHash and consensusHeight are a consistent pair.
+	// A real hash echoed under a fake height (quorum-tampered
+	// findConsensusBlock output) would otherwise pass the reachability check
+	// and poison wemixWorkKey with an internally inconsistent value.
+	if peerHeader.Number.Cmp(consensusHeight) != 0 {
+		log.Error("sync check: consensus hash/height pair mismatch, suspected tampering, aborting",
+			"claimed-height", consensusHeight, "actual-height", peerHeader.Number,
+			"hash", consensusHash)
 		return nil
 	}
 	// consensusHeight must not regress the local head. A consensus tuple
