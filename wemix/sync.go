@@ -352,37 +352,44 @@ func syncCheck() error {
 
 	// 'work' is ahead of us
 	if work != nil && work.Height > header.Number.Int64() {
-		// First verify that the stored work.Hash is reachable from the local chain.
-		// If reachable, treat this as the legitimate "peer is ahead of us on the
-		// canonical chain" case and keep the existing state-matching abort. If
-		// unreachable, suspect a poisoned wemixWorkKey and fall through to the
-		// findConsensusBlock rebuild path instead of trusting a single attacker
-		// state that happens to echo the poison. Pairs with the work-key
-		// self-recovery in release() so a poisoned key cannot persist.
-		workReachable := false
-		if peerHeader, herr := admin.cli.HeaderByHash(ctx, work.Hash); herr == nil && peerHeader != nil {
-			workReachable = true
-		}
-		if workReachable {
-			// checks if the recorded 'work' is the latest block of any mining peer
-			exists := false
-			for _, state := range states {
-				if state.LatestBlockHeight == nil {
-					continue
-				}
-				if state.LatestBlockHeight.Int64() == work.Height && work.Hash == state.LatestBlockHash {
-					exists = true
-					break
-				}
+		// Detect catch-up via a single peer-state echo to silence the
+		// rebuild-path log noise that a reachability-only gate previously
+		// emitted every cycle (HeaderByHash(work.Hash) is guaranteed to
+		// return NotFound while we are still importing).
+		//
+		// Counting matches to require quorum was considered but does not
+		// fundamentally resist poison: a single connected malicious peer
+		// can echo any value, so any quorum size short of all-honest is
+		// still influenced by one attacker message. Given that limit, the
+		// policy here is side-effect minimization — quiet the legitimate
+		// catch-up case and leave poison recovery to the downstream
+		// consensus rebuild plus its reachability and regression guards.
+		// Operator intervention remains the backstop for the byzantine
+		// case.
+		exist := false
+		for _, state := range states {
+			if state.LatestBlockHeight == nil {
+				continue
 			}
-			if exists {
-				log.Error("sync check: the work is ahead of us and present", "height", work.Height, "hash", work.Hash)
-				return nil
+			if state.LatestBlockHeight.Int64() == work.Height &&
+				work.Hash == state.LatestBlockHash {
+				exist = true
+				break
 			}
-		} else {
-			log.Warn("sync check: stored work hash unreachable from local chain, rebuilding via consensus",
-				"work-height", work.Height, "work-hash", work.Hash)
 		}
+		if exist {
+			log.Debug("sync check: catching up to cluster head",
+				"local", header.Number, "work-height", work.Height,
+				"work-hash", work.Hash, "states", len(states))
+			return nil
+		}
+		// No peer state echoes the stored value: either the cluster moved
+		// past it (legitimate stale) or it was poisoned. Both route through
+		// the findConsensusBlock rebuild below; the downstream reachability
+		// check and regression guard reject unsafe writes.
+		log.Warn("sync check: work-key not echoed by any peer, rebuilding via consensus",
+			"work-height", work.Height, "work-hash", work.Hash,
+			"states", len(states))
 	}
 
 	// work record doesn't exist or recorded block doesn't exist
