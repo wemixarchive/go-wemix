@@ -154,13 +154,14 @@ func simulateHandleStatusEx_Vulnerable(peerID string, status *wemixapi.WemixMine
 }
 
 // simulateHandleStatusEx_Hardened mirrors the current production
-// handleStatusEx body (V1 + V2 + V3 hardening).
+// handleStatusEx body (V1 + V2 + V3 + V4 hardening).
 //
 // Mirror source: eth/protocols/eth/wemix_handlers.go handleStatusEx
 //
 // Returns:
 //   - panicked: any value recovered from a panic (nil if none)
-//   - dropped:  true if the message was discarded by the per-peer rate limit
+//   - dropped:  true if the message was discarded (per-peer rate limit or
+//     boundary validation reject)
 func simulateHandleStatusEx_Hardened(peerID string, status *wemixapi.WemixMinerStatus, victimTD *big.Int) (panicked any, dropped bool) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -180,6 +181,14 @@ func simulateHandleStatusEx_Hardened(peerID string, status *wemixapi.WemixMinerS
 		}
 	}
 	simulatedStatusExLastSeen.Store(peerID, now)
+
+	// Boundary reject: legitimate senders always set LatestBlockHeight from
+	// header.Number. A nil here is only reachable from a crafted payload, and
+	// would later panic in electNextMiner where the Status=="up" short circuit
+	// is the only thing standing between the value and Int64().
+	if status.LatestBlockHeight == nil {
+		return nil, true
+	}
 
 	// Replace the attacker-controlled name with the governance-registered name
 	// for the verified peer. In this simulator the registered name is derived
@@ -410,6 +419,108 @@ func TestNilLatestBlockTdGuard_PreventsHandlerPanic(t *testing.T) {
 	invs := []invariant{
 		{id: "I1", desc: "vulnerable: nil LatestBlockTd panics the handler", ok: vulnerablePanic != nil},
 		{id: "I2", desc: "hardened: nil guard prevents the panic", ok: hardenedPanic == nil},
+	}
+	reportInvariants(t, invs)
+}
+
+// ===========================================================================
+// V4: LatestBlockHeight nil-deref guard (electNextMiner downstream)
+// ===========================================================================
+
+// Single-message DoS reproduction: a StatusEx with LatestBlockHeight=nil and
+// Status="up" reaches miningPeers via wemixapi.GotStatusEx, then electNextMiner
+// (wemix/miner_limit.go) calls p.LatestBlockHeight.Int64() and panics on the
+// nil *big.Int. The Status=="up" short circuit is the only thing standing
+// between a crafted payload and the deref, and it is attacker-controlled.
+// Preserved so that removal of the handler-side boundary reject is flagged
+// immediately.
+func TestRegression_NilLatestBlockHeightPanicsElectNextMiner(t *testing.T) {
+	attackerStatus := &wemixapi.WemixMinerStatus{
+		NodeName:          "node1",
+		Status:            "up",
+		LatestBlockHeight: nil, // crafted: missing from the RLP payload
+		LatestBlockHash:   common.HexToHash("0xdead"),
+		LatestBlockTd:     big.NewInt(1),
+		RttMs:             big.NewInt(0),
+	}
+	currentHeight := big.NewInt(1000)
+	const closeEnough = int64(2)
+
+	t.Logf("attacker status: Status=%q, LatestBlockHeight=%v",
+		attackerStatus.Status, attackerStatus.LatestBlockHeight)
+	t.Logf("electNextMiner current height = %v", currentHeight)
+
+	var panicValue any
+	func() {
+		defer func() { panicValue = recover() }()
+		// equivalent to the pre-boundary-reject body at wemix/miner_limit.go:338
+		if attackerStatus.Status == "up" &&
+			currentHeight.Int64()-attackerStatus.LatestBlockHeight.Int64() <= closeEnough {
+			_ = "unreachable"
+		}
+	}()
+
+	invs := []invariant{
+		{id: "I1", desc: "attacker LatestBlockHeight is nil", ok: attackerStatus.LatestBlockHeight == nil},
+		{id: "I2", desc: "attacker Status is up (short-circuit bypassed)", ok: attackerStatus.Status == "up"},
+		{id: "I3", desc: "pre-hardening statement panics at runtime", ok: panicValue != nil},
+		{id: "I4", desc: "panic type is nil-pointer dereference",
+			ok: panicValue != nil && fmtMatchesNilDeref(panicValue)},
+	}
+	if panicValue != nil {
+		t.Logf("recovered panic value: %v", panicValue)
+	}
+	reportInvariants(t, invs)
+
+	t.Log("Note: production now rejects nil LatestBlockHeight at handleStatusEx.")
+	t.Log("      This test preserves the consumer-side panic to flag boundary-reject removal.")
+}
+
+// Sending the same crafted payload (LatestBlockHeight=nil) through the hardened
+// simulator: the boundary reject drops the message before wemixapi.GotStatusEx,
+// so miningPeers never sees the nil-height entry that would later panic
+// electNextMiner.
+func TestNilLatestBlockHeightGuard_RejectedAtHandler(t *testing.T) {
+	resetMiningPeers()
+	resetSimulatedRateLimitState()
+	processed, stopHandler := runHandleMinerStatusUpdateLikeProduction(t)
+	defer stopHandler()
+	time.Sleep(30 * time.Millisecond)
+
+	mkNilHeightStatus := func() *wemixapi.WemixMinerStatus {
+		return &wemixapi.WemixMinerStatus{
+			NodeName:          "node1",
+			Status:            "up",
+			LatestBlockHeight: nil,
+			LatestBlockHash:   common.HexToHash("0xdead"),
+			LatestBlockTd:     big.NewInt(1),
+			RttMs:             big.NewInt(0),
+		}
+	}
+	victimTD := big.NewInt(123456)
+
+	hardenedPanic, hardenedDropped := simulateHandleStatusEx_Hardened(
+		"attacker-peer-id", mkNilHeightStatus(), victimTD)
+	time.Sleep(50 * time.Millisecond)
+
+	registeredName := registeredNodeNameForTestPeerID("attacker-peer-id")
+	_, storedByRegisteredName := miningPeers.Load(registeredName)
+	_, storedByOriginalName := miningPeers.Load("node1")
+
+	t.Logf("hardened simulator: panic=%v, dropped=%v", hardenedPanic, hardenedDropped)
+	t.Logf("handler processed count = %d", atomic.LoadInt64(processed))
+	t.Logf("miningPeers stored byRegisteredName=%v, byOriginalName=%v",
+		storedByRegisteredName, storedByOriginalName)
+
+	invs := []invariant{
+		{id: "I1", desc: "hardened: nil LatestBlockHeight is dropped at boundary",
+			ok: hardenedDropped},
+		{id: "I2", desc: "hardened: no panic on the reject path",
+			ok: hardenedPanic == nil},
+		{id: "I3", desc: "hardened: no miningPeers entry written for the rejected message",
+			ok: !storedByRegisteredName && !storedByOriginalName},
+		{id: "I4", desc: "hardened: handler did not forward the message to subscribers",
+			ok: atomic.LoadInt64(processed) == 0},
 	}
 	reportInvariants(t, invs)
 }

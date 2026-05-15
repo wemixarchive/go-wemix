@@ -67,6 +67,16 @@ func handleStatusEx(backend Backend, msg Decoder, peer *Peer) error {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
+	// Every legitimate sender constructs StatusEx via getMinerStatus, which
+	// always sets LatestBlockHeight from header.Number. A nil here is only
+	// reachable from a crafted payload, and would later panic at
+	// wemix/miner_limit.go's electNextMiner where the Status=="up" short
+	// circuit is the only thing standing between the value and Int64().
+	// Reject at the boundary so downstream consumers can rely on non-nil.
+	if status.LatestBlockHeight == nil {
+		return fmt.Errorf("%w: nil LatestBlockHeight from %v", errDecode, peer.ID())
+	}
+
 	// Replace the attacker-controlled NodeName in the payload with the
 	// governance-registered name for the verified peer.
 	nodeName, ok := wemixminer.NodeNameForPeerID(peer.ID())
