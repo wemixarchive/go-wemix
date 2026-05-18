@@ -2,23 +2,10 @@ package eth
 
 import (
 	"fmt"
-	"sync"
-	"time"
 
 	wemixapi "github.com/ethereum/go-ethereum/wemix/api"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
-
-// Per-peer minimum interval between accepted StatusEx messages. Bounds the
-// goroutine/CPU cost from a single compromised partner flooding StatusEx and
-// the (height, hash) churn in miningPeers. SyncIdleThreshold is 30s and the
-// block interval is ~15s, so 5s is well above any legitimate cadence.
-const statusExMinInterval = 5 * time.Second
-
-// statusExLastSeen maps peer.ID() -> time.Time of the last accepted StatusEx.
-// Bounded by the registered partner set (governance-controlled), so no
-// eviction is needed; stale entries are harmless.
-var statusExLastSeen sync.Map
 
 func handleGetPendingTxs(backend Backend, msg Decoder, peer *Peer) error {
 	// not supported, just ignore it.
@@ -50,17 +37,6 @@ func handleStatusEx(backend Backend, msg Decoder, peer *Peer) error {
 	if !wemixminer.AmPartner() || !wemixminer.IsPartner(peer.ID()) {
 		return nil
 	}
-
-	// Drop StatusEx arriving faster than statusExMinInterval from the same peer.
-	// Performed before Decode so the spammer pays the I/O cost but we don't pay
-	// the decode + goroutine-spawn cost.
-	now := time.Now()
-	if prev, ok := statusExLastSeen.Load(peer.ID()); ok {
-		if t, ok2 := prev.(time.Time); ok2 && now.Sub(t) < statusExMinInterval {
-			return nil
-		}
-	}
-	statusExLastSeen.Store(peer.ID(), now)
 
 	var status wemixapi.WemixMinerStatus
 	if err := msg.Decode(&status); err != nil {

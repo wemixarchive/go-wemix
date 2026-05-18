@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -110,27 +109,8 @@ func reportInvariants(t *testing.T, invs []invariant) {
 // handleStatusEx body mirrors — eth/protocols/eth/wemix_handlers.go
 // ---------------------------------------------------------------------------
 
-// simulatedStatusExMinInterval mirrors production statusExMinInterval
-// (wemix_handlers.go). Used by simulateHandleStatusEx_Hardened.
-const simulatedStatusExMinInterval = 5 * time.Second
-
-// simulatedStatusExLastSeen mirrors production statusExLastSeen. A separate
-// map is used so simulator state can be reset between rounds without
-// touching production state.
-var simulatedStatusExLastSeen sync.Map
-
 func registeredNodeNameForTestPeerID(peerID string) string {
 	return "registered-" + peerID
-}
-
-// resetSimulatedRateLimitState clears the simulator's per-peer rate-limit
-// cache. Call this at the start of any scenario that reuses peer IDs across
-// rounds, otherwise the previous round's timestamps leak into the next.
-func resetSimulatedRateLimitState() {
-	simulatedStatusExLastSeen.Range(func(k, _ any) bool {
-		simulatedStatusExLastSeen.Delete(k)
-		return true
-	})
 }
 
 // simulateHandleStatusEx_Vulnerable mirrors handleStatusEx as it existed
@@ -154,14 +134,14 @@ func simulateHandleStatusEx_Vulnerable(peerID string, status *wemixapi.WemixMine
 }
 
 // simulateHandleStatusEx_Hardened mirrors the current production
-// handleStatusEx body (V1 + V2 + V3 + V4 hardening).
+// handleStatusEx body (NodeName rebinding + nil guards).
 //
 // Mirror source: eth/protocols/eth/wemix_handlers.go handleStatusEx
 //
 // Returns:
 //   - panicked: any value recovered from a panic (nil if none)
-//   - dropped:  true if the message was discarded (per-peer rate limit or
-//     boundary validation reject)
+//   - dropped:  true if the message was discarded by a boundary validation
+//     reject (e.g., nil LatestBlockHeight)
 func simulateHandleStatusEx_Hardened(peerID string, status *wemixapi.WemixMinerStatus, victimTD *big.Int) (panicked any, dropped bool) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -170,17 +150,6 @@ func simulateHandleStatusEx_Hardened(peerID string, status *wemixapi.WemixMinerS
 	}()
 
 	// ↓ hardened production body ↓
-
-	// Per-peer rate limit: subsequent messages from the same peer arriving
-	// within simulatedStatusExMinInterval are discarded before decode and
-	// before spawning the goroutine.
-	now := time.Now()
-	if prev, ok := simulatedStatusExLastSeen.Load(peerID); ok {
-		if t, ok2 := prev.(time.Time); ok2 && now.Sub(t) < simulatedStatusExMinInterval {
-			return nil, true
-		}
-	}
-	simulatedStatusExLastSeen.Store(peerID, now)
 
 	// Boundary reject: legitimate senders always set LatestBlockHeight from
 	// header.Number. A nil here is only reachable from a crafted payload, and
@@ -410,7 +379,6 @@ func TestNilLatestBlockTdGuard_PreventsHandlerPanic(t *testing.T) {
 	victimTD := big.NewInt(123456)
 
 	vulnerablePanic := simulateHandleStatusEx_Vulnerable("attacker", mkNilTdStatus(), victimTD)
-	resetSimulatedRateLimitState()
 	hardenedPanic, _ := simulateHandleStatusEx_Hardened("attacker", mkNilTdStatus(), victimTD)
 
 	t.Logf("vulnerable simulator panic: %v", vulnerablePanic)
@@ -482,7 +450,6 @@ func TestRegression_NilLatestBlockHeightPanicsElectNextMiner(t *testing.T) {
 // electNextMiner.
 func TestNilLatestBlockHeightGuard_RejectedAtHandler(t *testing.T) {
 	resetMiningPeers()
-	resetSimulatedRateLimitState()
 	processed, stopHandler := runHandleMinerStatusUpdateLikeProduction(t)
 	defer stopHandler()
 	time.Sleep(30 * time.Millisecond)
@@ -552,7 +519,6 @@ func TestNodeNameRebind_PreventsQuorumForgery(t *testing.T) {
 	runAttack := func(t *testing.T, label string, simulator roundSimulator) int {
 		t.Helper()
 		resetMiningPeers()
-		resetSimulatedRateLimitState()
 		processed, stop := runHandleMinerStatusUpdateLikeProduction(t)
 		defer stop()
 		time.Sleep(30 * time.Millisecond)
@@ -587,53 +553,6 @@ func TestNodeNameRebind_PreventsQuorumForgery(t *testing.T) {
 	reportInvariants(t, invs)
 	t.Logf("vulnerable entries=%d (>= quorum %d), hardened entries=%d",
 		vulnerableEntries, quorum, hardenedEntries)
-}
-
-// ===========================================================================
-// V2: per-peer StatusEx rate limit
-// ===========================================================================
-
-// Per-peer rate limit: subsequent calls from the same peer.ID within the
-// minimum interval are dropped. Different peer.IDs are unaffected.
-func TestPerPeerRateLimit_DropsStatusExBurst(t *testing.T) {
-	resetSimulatedRateLimitState()
-
-	const peerID = "spammer-peer-id"
-	victimTD := big.NewInt(1000)
-	mkStatus := func() *wemixapi.WemixMinerStatus {
-		return &wemixapi.WemixMinerStatus{
-			NodeName:          "irrelevant",
-			LatestBlockHeight: big.NewInt(100),
-			LatestBlockHash:   common.HexToHash("0xabcd"),
-			LatestBlockTd:     big.NewInt(1 << 60),
-			RttMs:             big.NewInt(0),
-		}
-	}
-
-	// 5 consecutive calls from the same peer.ID — only the first passes;
-	// the rest are dropped.
-	delivered := 0
-	dropped := 0
-	for i := 0; i < 5; i++ {
-		_, d := simulateHandleStatusEx_Hardened(peerID, mkStatus(), victimTD)
-		if d {
-			dropped++
-		} else {
-			delivered++
-		}
-	}
-
-	// A different peer.ID is not affected by the rate limit.
-	_, otherDropped := simulateHandleStatusEx_Hardened("other-peer-id", mkStatus(), victimTD)
-
-	invs := []invariant{
-		{id: "I1", desc: "5 burst calls from same peer.ID: only 1 delivered", ok: delivered == 1},
-		{id: "I2", desc: "5 burst calls from same peer.ID: 4 dropped", ok: dropped == 4},
-		{id: "I3", desc: "different peer.ID is unaffected by the rate limit", ok: !otherDropped},
-	}
-	reportInvariants(t, invs)
-	t.Logf("rate limit (per-peer %v): delivered=%d, dropped=%d",
-		simulatedStatusExMinInterval, delivered, dropped)
 }
 
 // ===========================================================================
@@ -723,7 +642,6 @@ func runOneRound(
 	// Stage 1: setup
 	t.Logf("[1] 5-validator devnet, SyncIdleThreshold = %ds", SyncIdleThreshold)
 	resetMiningPeers()
-	resetSimulatedRateLimitState()
 	processed, stop := runHandleMinerStatusUpdateLikeProduction(t)
 	defer stop()
 	time.Sleep(30 * time.Millisecond)
@@ -851,8 +769,6 @@ func TestRegression_EndToEndAttackChain(t *testing.T) {
 		{id: "V5", desc: "vulnerable [9]: subsequent syncCheck also fails",
 			ok: pre.subsequentSyncCheckErr != nil},
 
-		{id: "H1", desc: "hardened [4]: rate limit drops 4 of 5 spray attempts",
-			ok: post.sprayDelivered == 1},
 		{id: "H2", desc: "hardened [5]: spoofed entries < quorum",
 			ok: post.miningPeersByName < quorum},
 		{id: "H3", desc: "hardened [5]: single entry keyed by registered node name",
@@ -873,7 +789,7 @@ func TestRegression_EndToEndAttackChain(t *testing.T) {
 		t.Logf("\n%s", logs.String())
 	}
 	t.Log("VULNERABLE: stages 1..9 all pass → cluster-wide mining-token deadlock reproduced")
-	t.Log("HARDENED  : rate limit + NodeName rebind block quorum forgery → stages 6..9 neutralized")
+	t.Log("HARDENED  : NodeName rebind blocks quorum forgery → stages 6..9 neutralized")
 }
 
 // ===========================================================================
