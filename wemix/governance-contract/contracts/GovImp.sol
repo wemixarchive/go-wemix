@@ -622,8 +622,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         if (removeStakerIdx != memberLength) {
             address endStaker = stakers[memberLength];
             stakers[removeStakerIdx] = endStaker;
-            stakers[memberLength] = ZERO;
-            stakerIdx[oldStaker] = 0;
             stakerIdx[endStaker] = removeStakerIdx;
 
             // Reward can differ from oldStaker after a same-staker self-change.
@@ -632,8 +630,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             require(removeRewardIdx != 0, "Invalid reward index");
             address endReward = rewards[memberLength];
             rewards[removeRewardIdx] = endReward;
-            rewards[memberLength] = ZERO;
-            rewardIdx[oldReward] = 0;
             rewardIdx[endReward] = removeRewardIdx;
 
             // Voter can also differ from oldStaker after a same-staker self-change.
@@ -642,17 +638,18 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             require(removeVoterIdx != 0, "Invalid voter index");
             address endVoter = voters[memberLength];
             voters[removeVoterIdx] = endVoter;
-            voters[memberLength] = ZERO;
-            voterIdx[oldVoter] = 0;
             voterIdx[endVoter] = removeVoterIdx;
-        } else {
-            stakers[memberLength] = ZERO;
-            stakerIdx[oldStaker] = 0;
-            rewards[memberLength] = ZERO;
-            rewardIdx[oldReward] = 0;
-            voters[memberLength] = ZERO;
-            voterIdx[oldVoter] = 0;
         }
+        // Clear the last element slot and remove the old mappings
+        stakers[memberLength] = ZERO;
+        stakerIdx[oldStaker] = 0;
+
+        rewards[memberLength] = ZERO;
+        rewardIdx[oldReward] = 0;
+
+        voters[memberLength] = ZERO;
+        voterIdx[oldVoter] = 0;
+
         memberLength = memberLength - 1;
 
         // Remove node
