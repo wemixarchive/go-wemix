@@ -1547,6 +1547,18 @@ func verifyBlockRewards(height *big.Int) interface{} {
 	return r
 }
 
+func NodeNameForPeerID(id string) (string, bool) {
+	if admin == nil {
+		return "", false
+	}
+	admin.lock.Lock()
+	defer admin.lock.Unlock()
+	if n, ok := admin.nodes[id]; ok {
+		return n.Name, true
+	}
+	return "", false
+}
+
 func init() {
 	wemixminer.AmPartnerFunc = AmPartner
 	wemixminer.IsPartnerFunc = IsPartner
@@ -1562,6 +1574,7 @@ func init() {
 	wemixminer.AcquireMiningTokenFunc = acquireMiningToken
 	wemixminer.ReleaseMiningTokenFunc = releaseMiningToken
 	wemixminer.HasMiningTokenFunc = hasMiningToken
+	wemixminer.NodeNameForPeerIDFunc = NodeNameForPeerID
 
 	wemixapi.Info = Info
 	wemixapi.GetMiners = getMiners

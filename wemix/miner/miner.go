@@ -27,6 +27,7 @@ var (
 	AcquireMiningTokenFunc      func(height *big.Int, parentHash common.Hash) (bool, error)
 	ReleaseMiningTokenFunc      func(height *big.Int, hash, parentHash common.Hash) error
 	HasMiningTokenFunc          func() bool
+	NodeNameForPeerIDFunc       func(id string) (string, bool)
 )
 
 func IsPartner(id string) bool {
@@ -143,6 +144,13 @@ func GetBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 	} else {
 		return GetBlockBuildParametersFunc(height)
 	}
+}
+
+func NodeNameForPeerID(id string) (string, bool) {
+	if NodeNameForPeerIDFunc == nil {
+		return "", false
+	}
+	return NodeNameForPeerIDFunc(id)
 }
 
 // EOF
