@@ -3457,3 +3457,184 @@ contract Test {
 		require.True(t, new(big.Int).Sub(balance, beforeBalance).Sign() == 0)
 	})
 }
+
+func TestGov_IndexCorruptionAfterRemoveMember(t *testing.T) {
+	var (
+		gov *Governance
+
+		// member B
+		memberB        = getTxOpt(t, "memberB")
+		memberB_Reward = getTxOpt(t, "memberB_Reward")
+		memberB_Voter  = getTxOpt(t, "memberB_Voter")
+		memberB_Node   = nodeInfo{
+			name:  []byte("name1"),
+			enode: hexutil.MustDecode("0x777777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a0"),
+			ip:    []byte("127.0.0.2"),
+			port:  big.NewInt(8542),
+		}
+
+		// member C
+		memberC      = getTxOpt(t, "memberC")
+		memberC_Node = nodeInfo{
+			name:  []byte("name2"),
+			enode: hexutil.MustDecode("0x888777777711c39f35f516fa664deaaaa13e85b2f7493f37f6144d86991ec012937307647bd3b9a82abe2974e1407241d54947bbb39763a4cac9f77166ad92a1"),
+			ip:    []byte("127.0.0.3"),
+			port:  big.NewInt(8542),
+		}
+
+		callOpts = new(bind.CallOpts)
+	)
+
+	// setup for test
+	log.Root().SetHandler(log.LvlFilterHandler(log.Lvl(0), log.StreamHandler(os.Stdout, log.TerminalFormat(true))))
+	gov = NewGovernance(t).DeployContracts(t)
+	require.NoError(t, gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, towei(2_000_000), &memberB.From)))
+	require.NoError(t, gov.ExpectedOk(TransferCoin(gov.backend, gov.owner, towei(2_000_000), &memberC.From)))
+
+	// staking for member B
+	memberB.Value = LOCK_AMOUNT
+	require.NoError(t, gov.ExpectedOk(gov.StakingImp.Transact(memberB, "deposit")))
+	memberB.Value = nil
+
+	// proposal to add member B
+	gov.nodeInfos = append(gov.nodeInfos, memberB_Node)
+	memeberB_info := MemberInfo{
+		Staker:     memberB.From,
+		Voter:      memberB.From,
+		Reward:     memberB.From,
+		Name:       memberB_Node.name,
+		Enode:      memberB_Node.enode,
+		Ip:         memberB_Node.ip,
+		Port:       memberB_Node.port,
+		LockAmount: LOCK_AMOUNT,
+		Memo:       []byte("memo1"),
+		Duration:   big.NewInt(86400),
+	}
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", memeberB_info)))
+
+	// vote for member B
+	ballotIdx := getBallotIdx(t, gov)
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, true)))
+
+	memberBIdx := getMemberIdx(t, gov, memberB.From)
+	checkGovMember(t, gov, memberBIdx, memeberB_info)
+
+	// staking for member C
+	memberC.Value = LOCK_AMOUNT
+	require.NoError(t, gov.ExpectedOk(gov.StakingImp.Transact(memberC, "deposit")))
+	memberC.Value = nil
+
+	// proposal to add member C
+	gov.nodeInfos = append(gov.nodeInfos, memberC_Node)
+	memberC_info := MemberInfo{
+		Staker:     memberC.From,
+		Voter:      memberC.From,
+		Reward:     memberC.From,
+		Name:       memberC_Node.name,
+		Enode:      memberC_Node.enode,
+		Ip:         memberC_Node.ip,
+		Port:       memberC_Node.port,
+		LockAmount: LOCK_AMOUNT,
+		Memo:       []byte("memo2"),
+		Duration:   big.NewInt(86400),
+	}
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToAddMember", memberC_info)))
+
+	// vote for member C (member B is already a member)
+	ballotIdx = getBallotIdx(t, gov)
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, true)))
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(memberB, "vote", ballotIdx, true)))
+
+	memberCIdx := getMemberIdx(t, gov, memberC.From)
+	checkGovMember(t, gov, memberCIdx, memberC_info)
+
+	// change member B's reward address
+	memberB_info := MemberInfo{
+		Staker:     memberB.From,
+		Voter:      memberB_Voter.From,
+		Reward:     memberB_Reward.From,
+		Name:       memberB_Node.name,
+		Enode:      memberB_Node.enode,
+		Ip:         memberB_Node.ip,
+		Port:       memberB_Node.port,
+		LockAmount: LOCK_AMOUNT,
+		Memo:       []byte("change memberB reward addr"),
+		Duration:   big.NewInt(86400),
+	}
+	// Self-change by old staker is finalized immediately without a normal vote
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(memberB, "addProposalToChangeMember", memberB_info, memberB.From, big.NewInt(0), big.NewInt(0))))
+
+	checkGovMember(t, gov, memberBIdx, memberB_info)
+	{
+		var isVoter, isReward bool
+		gov.GovImp.Call(callOpts, &[]interface{}{&isVoter}, "isVoter", memberB.From)
+		require.False(t, isVoter)
+		gov.GovImp.Call(callOpts, &[]interface{}{&isReward}, "isReward", memberB.From)
+		require.False(t, isReward)
+	}
+
+	// remove member B
+	targetIdx := new(big.Int).Set(memberBIdx)
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "addProposalToRemoveMember", memberB.From, LOCK_AMOUNT, []byte("remove"), big.NewInt(86400), LOCK_AMOUNT, big.NewInt(0))))
+	ballotIdx = getBallotIdx(t, gov)
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(gov.owner, "vote", ballotIdx, true)))
+	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(memberC, "vote", ballotIdx, true)))
+
+	checkGovMember(t, gov, big.NewInt(0), memberB_info)
+	checkGovMember(t, gov, targetIdx, memberC_info)
+}
+
+func checkGovMember(t *testing.T, gov *Governance, idx *big.Int, info MemberInfo) {
+	var callOpts = new(bind.CallOpts)
+
+	// 1. Mapping table verification (Address -> Index)
+	var stakerIdx, voterIdx, rewardIdx, nodeIdx *big.Int
+	gov.GovImp.Call(callOpts, &[]interface{}{&stakerIdx}, "stakerIdx", info.Staker)
+	gov.GovImp.Call(callOpts, &[]interface{}{&voterIdx}, "voterIdx", info.Voter)
+	gov.GovImp.Call(callOpts, &[]interface{}{&rewardIdx}, "rewardIdx", info.Reward)
+	gov.GovImp.Call(callOpts, &[]interface{}{&nodeIdx}, "getNodeIdxFromMember", info.Staker)
+
+	// The provided idx must match all mapping indexes
+	require.True(t, idx.Cmp(stakerIdx) == 0)
+	require.True(t, idx.Cmp(voterIdx) == 0)
+	require.True(t, idx.Cmp(rewardIdx) == 0)
+	require.True(t, idx.Cmp(nodeIdx) == 0)
+
+	if idx.Sign() == 0 {
+		return
+	}
+
+	var (
+		staker, voter, reward common.Address
+		name, enode, ip       []byte
+		port                  *big.Int
+	)
+
+	gov.GovImp.Call(callOpts, &[]interface{}{&staker}, "getMember", idx)
+	require.Equal(t, info.Staker, staker)
+
+	gov.GovImp.Call(callOpts, &[]interface{}{&voter}, "getVoter", idx)
+	require.Equal(t, info.Voter, voter)
+
+	gov.GovImp.Call(callOpts, &[]interface{}{&reward}, "getReward", idx)
+	require.Equal(t, info.Reward, reward)
+
+	getNode := []interface{}{}
+	gov.GovImp.Call(callOpts, &getNode, "getNode", idx)
+	require.Len(t, getNode, 4)
+	name, enode, ip, port = getNode[0].([]byte), getNode[1].([]byte), getNode[2].([]byte), getNode[3].(*big.Int)
+	require.Equal(t, info.Name, name)
+	require.Equal(t, info.Enode, enode)
+	require.Equal(t, info.Ip, ip)
+	require.True(t, info.Port.Cmp(port) == 0)
+}
+func getMemberIdx(t *testing.T, gov *Governance, staker common.Address) *big.Int {
+	var idx *big.Int
+	require.NoError(t, gov.GovImp.Call(new(bind.CallOpts), &[]interface{}{&idx}, "stakerIdx", staker))
+	return idx
+}
+func getBallotIdx(t *testing.T, gov *Governance) *big.Int {
+	var length *big.Int
+	require.NoError(t, gov.GovImp.Call(new(bind.CallOpts), &[]interface{}{&length}, "ballotLength"))
+	return length
+}

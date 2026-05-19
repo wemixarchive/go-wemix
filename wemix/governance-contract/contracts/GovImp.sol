@@ -615,55 +615,63 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         }
 
         // Remove voting and reward member
-        uint256 removeIdx = stakerIdx[oldStaker];
-        address endAddr = stakers[memberLength];
-        address oldVoter = voters[removeIdx];
-        address oldReward = rewards[removeIdx];
+        uint256 removeStakerIdx = stakerIdx[oldStaker];
+        address oldVoter = voters[removeStakerIdx];
+        address oldReward = rewards[removeStakerIdx];
 
-        if (stakerIdx[oldStaker] != memberLength) {
-            (stakers[removeIdx], stakers[memberLength], stakerIdx[oldStaker], stakerIdx[endAddr]) = (
-                stakers[memberLength],
-                ZERO,
-                0,
-                stakerIdx[oldStaker]
-            );
-            removeIdx = rewardIdx[oldStaker];
-            endAddr = rewards[memberLength];
-            (rewards[removeIdx], rewards[memberLength], rewardIdx[oldReward], rewardIdx[endAddr]) = (
-                rewards[memberLength],
-                ZERO,
-                0,
-                rewardIdx[oldReward]
-            );
-            removeIdx = voterIdx[oldStaker];
-            endAddr = voters[memberLength];
-            (voters[removeIdx], voters[memberLength], voterIdx[oldVoter], voterIdx[endAddr]) = (voters[memberLength], ZERO, 0, voterIdx[oldVoter]);
-        } else {
-            stakers[memberLength] = ZERO;
-            stakerIdx[oldStaker] = 0;
-            rewards[memberLength] = ZERO;
-            rewardIdx[oldReward] = 0;
-            voters[memberLength] = ZERO;
-            voterIdx[oldVoter] = 0;
+        if (removeStakerIdx != memberLength) {
+            address endStaker = stakers[memberLength];
+            stakers[removeStakerIdx] = endStaker;
+            stakerIdx[endStaker] = removeStakerIdx;
+
+            // Reward can differ from oldStaker after a same-staker self-change.
+            // Remove reward through the actual reward key read from the removed index.
+            uint256 removeRewardIdx = rewardIdx[oldReward];
+            require(removeRewardIdx != 0, "Invalid reward index");
+            address endReward = rewards[memberLength];
+            rewards[removeRewardIdx] = endReward;
+            rewardIdx[endReward] = removeRewardIdx;
+
+            // Voter can also differ from oldStaker after a same-staker self-change.
+            // Remove voter through the actual voter key read from the removed index.
+            uint256 removeVoterIdx = voterIdx[oldVoter];
+            require(removeVoterIdx != 0, "Invalid voter index");
+            address endVoter = voters[memberLength];
+            voters[removeVoterIdx] = endVoter;
+            voterIdx[endVoter] = removeVoterIdx;
         }
-        memberLength = memberLength - 1;
-        // Remove node
+        // Clear the last element slot and remove the old mappings
+        stakers[memberLength] = ZERO;
+        stakerIdx[oldStaker] = 0;
 
-        Node storage node = nodes[removeIdx];
+        rewards[memberLength] = ZERO;
+        rewardIdx[oldReward] = 0;
+
+        voters[memberLength] = ZERO;
+        voterIdx[oldVoter] = 0;
+
+        memberLength = memberLength - 1;
+
+        // Remove node
+        // The node index is independent from the staker, reward, and voter indexes.
+        // Bind the storage pointer only after loading the real node index.
+        uint256 removeNodeIdx = nodeIdxFromMember[oldStaker];
+        require(removeNodeIdx != 0, "Invalid node index");
+        Node storage node = nodes[removeNodeIdx];
         checkNodeEnode[node.enode] = false;
         checkNodeName[node.name] = false;
         checkNodeIpPort[keccak256(abi.encodePacked(node.ip, node.port))] = false;
-        if (nodeIdxFromMember[oldStaker] != nodeLength) {
-            removeIdx = nodeIdxFromMember[oldStaker];
-            endAddr = nodeToMember[nodeLength];
+
+        if (removeNodeIdx != nodeLength) {
+            address endMember = nodeToMember[nodeLength];
 
             node.name = nodes[nodeLength].name;
             node.enode = nodes[nodeLength].enode;
             node.ip = nodes[nodeLength].ip;
             node.port = nodes[nodeLength].port;
 
-            nodeToMember[removeIdx] = endAddr;
-            nodeIdxFromMember[endAddr] = removeIdx;
+            nodeToMember[removeNodeIdx] = endMember;
+            nodeIdxFromMember[endMember] = removeNodeIdx;
         }
         nodeToMember[nodeLength] = ZERO;
         nodeIdxFromMember[oldStaker] = 0;
