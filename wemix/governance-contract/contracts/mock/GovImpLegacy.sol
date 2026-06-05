@@ -1,18 +1,35 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "./abstract/BallotEnums.sol";
-import "./abstract/EnvConstants.sol";
-import "./abstract/AGov.sol";
+// =============================================================================
+// TEST-ONLY MOCK — DO NOT DEPLOY TO PRODUCTION.
+//
+// GovImpLegacy is a byte-for-byte copy of GovImp.sol *before* the CertiK W1G
+// fixes (W1G-01/02/03/04) were applied. It exists so the Go test suite can:
+//   1. deploy the UNFIXED implementation behind the real Gov proxy,
+//   2. build up a realistic on-chain ledger (multiple stakers, some with a
+//      self-separated staker/voter/reward), and
+//   3. reproduce each vulnerability on that ledger (the "red" proof),
+//   4. then upgrade the proxy to the fixed GovImp and show the same attack is
+//      now blocked while normal operation keeps working (the "green" proof).
+//
+// The storage layout is IDENTICAL to GovImp (same AGov base, same trailing
+// state vars + __gap), which is what makes the proxy upgrade state-preserving.
+// Only the four fix sites differ from GovImp — they are marked "LEGACY:" below.
+// =============================================================================
 
-import "./interface/IBallotStorage.sol";
-import "./interface/IEnvStorage.sol";
-import "./interface/IStaking.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "../abstract/BallotEnums.sol";
+import "../abstract/EnvConstants.sol";
+import "../abstract/AGov.sol";
+
+import "../interface/IBallotStorage.sol";
+import "../interface/IEnvStorage.sol";
+import "../interface/IStaking.sol";
 
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, UUPSUpgradeable {
+contract GovImpLegacy is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, UUPSUpgradeable {
     enum VariableTypes {
         Invalid,
         Int,
@@ -33,11 +50,9 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     event MemberChanged(address indexed oldAddr, address indexed newAddr, address indexed newVoter);
     event EnvChanged(bytes32 envName, uint256 envType, bytes envVal);
     event MemberUpdated(address indexed addr, address indexed voter);
-    // added for case that ballot's result could not be applicable.
     event NotApplicable(uint256 indexed ballotId, string reason);
 
     event SetProposalTimePeriod(uint256 newPeriod);
-    // added for announced that migration gov data
     event GovDataMigrated(address indexed from);
 
     struct MemberInfo {
@@ -131,7 +146,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         __Ownable_init();
         setRegistry(registry);
 
-        // _initialized = true;
         modifiedBlock = block.number;
 
         // Lock
@@ -139,8 +153,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
 
         require(lockAmount >= getMinStaking() && getMaxStaking() >= lockAmount, "Invalid lock amount");
 
-        // []{uint staker, uint voter, uint reward, bytes name, bytes enode, bytes ip, uint port}
-        // 32 bytes, 32 bytes, 32 bytes, [32 bytes, <data>] * 3, 32 bytes
         address staker;
         address voter;
         address reward;
@@ -219,7 +231,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             node.enode = enode;
             node.ip = ip;
             node.port = port;
-            // checkNodeInfo[getNodeInfoHash(enode, ip, port)] = true;
             checkNodeName[name] = true;
             checkNodeEnode[enode] = true;
             checkNodeIpPort[keccak256(abi.encodePacked(ip, port))] = true;
@@ -231,7 +242,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         nodeLength = idx;
     }
 
-    //Add member address = staker address = voter address
     function addProposalToAddMember(
         MemberInfo memory info
     ) external onlyGovMem checkTimePeriod checkLockedAmount checkMemberInfo(info) returns (uint256 ballotIdx) {
@@ -260,9 +270,8 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         uint256 slashing
     ) external onlyGovMem checkTimePeriod checkLockedAmount returns (uint256 ballotIdx) {
         require(staker != ZERO, "Invalid address");
-        // W1G-04: target must be a real staker key, not a voter-only address (stakerIdx==0).
-        // Revert string kept as "Non-member" to preserve the existing external interface.
-        require(isStaker(staker), "Non-member");
+        // LEGACY (pre W1G-04): isMember admits voter-only addresses (stakerIdx==0).
+        require(isMember(staker), "Non-member");
         require(getMemberLength() > 1, "Cannot remove a sole member");
         require(lockedBalanceOf(staker) >= lockAmount, "Insufficient balance that can be unlocked.");
         ballotIdx = ballotLength + 1;
@@ -292,14 +301,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         ballotLength = ballotIdx;
     }
 
-    // voter A, staker A -> voter B, staker B Ok with voting
-    // voter A, staker B -> voter C, staker C Ok with voting
-    // voter A, staker B -> voter A, staker A Ok with voting
-    // voter A call : voter A, staker A -> voter A, staker B X
-    // staker A call : voter A, staker A-> voter B, staker A Ok without voting
-    // only staker A call : voter B, staker A, reward C -> voter B, staker A, reward D Ok without voting only (voter can not change reward)
-    // staker only change own info
-    // voter can propose and vote anything
     function addProposalToChangeMember(
         MemberInfo memory newInfo,
         address oldStaker,
@@ -307,9 +308,8 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         uint256 slashing
     ) external onlyGovMem checkTimePeriod checkLockedAmount checkMemberInfo(newInfo) returns (uint256 ballotIdx) {
         require(oldStaker != ZERO, "Invalid old Address");
-        // W1G-04: target must be a real staker key, not a voter-only address (stakerIdx==0).
-        // Revert string kept as "Non-member" to preserve the existing external interface.
-        require(isStaker(oldStaker), "Non-member");
+        // LEGACY (pre W1G-04): isMember admits voter-only addresses (stakerIdx==0).
+        require(isMember(oldStaker), "Non-member");
 
         require(
             (voters[stakerIdx[oldStaker]] == newInfo.voter ||
@@ -322,10 +322,8 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         );
         // For exit
         if (msg.sender == oldStaker && oldStaker == newInfo.staker) {
-            // Change member enviroment, finalized
             require(unlockAmount == 0 && slashing == 0, "Invalid proposal");
         } else if (oldStaker != newInfo.staker /* && msg.sender != oldStaker */) {
-            // Propose Change or Exit member by other.
             require(unlockAmount + slashing <= getMinStaking(), "Invalid amount: (unlockAmount + slashing) must be equal or low to minStaking");
         }
 
@@ -341,7 +339,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         updateBallotMemo(ballotIdx, newInfo.memo);
         createBallotForExit(ballotIdx, unlockAmount, slashing);
         ballotLength = ballotIdx;
-        // 요청자 == 변경할 voting 주소
         if (msg.sender == oldStaker && oldStaker == newInfo.staker) {
             (, , uint256 duration) = getBallotPeriod(ballotIdx);
             startBallot(ballotIdx, block.timestamp, block.timestamp + duration);
@@ -356,7 +353,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     ) external onlyGovMem checkTimePeriod checkLockedAmount returns (uint256 ballotIdx) {
         require(newGovAddr != ZERO, "Implementation cannot be zero");
         require(newGovAddr != _getImplementation(), "Same contract address");
-        //check newGov has proxiableUUID
         try IERC1822Proxiable(newGovAddr).proxiableUUID() returns (bytes32 slot) {
             require(slot == _IMPLEMENTATION_SLOT, "ERC1967Upgrade: unsupported proxiableUUID");
         } catch {
@@ -381,7 +377,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         bytes memory memo,
         uint256 duration
     ) external onlyGovMem checkTimePeriod checkLockedAmount returns (uint256 ballotIdx) {
-        // require(envName != 0, "Invalid name");
         require(uint256(VariableTypes.Int) <= envType && envType <= uint256(VariableTypes.String), "Invalid type");
         require(checkVariableCondition(envName, envVal), "Invalid value");
 
@@ -400,14 +395,10 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     }
 
     function vote(uint256 ballotIdx, bool approval) external nonReentrant onlyGovMem checkLockedAmount {
-        // Check if some ballot is in progress
         require(checkUnfinalized(), "Expired");
 
-        // Check if the ballot can be voted
         uint256 ballotType = checkVotable(ballotIdx);
-        // Vote
         createVote(ballotIdx, approval);
-        // Finalize
         (, uint256 accept, uint256 reject) = getBallotVotingInfo(ballotIdx);
         uint256 threshold = getThreshold();
         if (accept >= threshold || reject >= threshold || (accept + reject) == 10000) {
@@ -441,16 +432,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             (, uint256 endTime, ) = getBallotPeriod(ballotInVoting);
             if (state == uint256(BallotStates.InProgress)) {
                 if (endTime < block.timestamp) return false;
-                // require(endTime > block.timestamp, "Expired");
-                // require(ballotIdx == ballotInVoting, "Now in voting with different ballot");
-                // if (endTime < block.timestamp) {
-
-                //     finalizeBallot(ballotInVoting, uint256(BallotStates.Rejected));
-                //     ballotInVoting = 0;
-                //     // console.log("vote is finalized %s", ballotInVoting);
-                // } else if (ballotIdx != ballotInVoting) {
-                //     revert("Now in voting with different ballot");
-                // }
             }
         }
         return true;
@@ -476,10 +457,8 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             }
             ballotInVoting = ballotIdx;
         } else if (state == uint256(BallotStates.InProgress)) {
-            // Nothing to do
             require(ballotIdx == ballotInVoting, "Now in voting with different ballot");
         } else {
-            // canceled
             revert("Expired");
         }
         return ballotType;
@@ -488,7 +467,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     function createVote(uint256 ballotIdx, bool approval) private {
         uint256 voteIdx = voteLength + 1;
         address staker = getStakerAddr(msg.sender);
-        uint256 weight = 10000 / getMemberLength(); //IStaking(getStakingAddress()).calcVotingWeightWithScaleFactor(staker, 10000);
+        uint256 weight = 10000 / getMemberLength();
         uint256 decision = approval ? uint256(DecisionTypes.Accept) : uint256(DecisionTypes.Reject);
         IBallotStorage(getBallotStorageAddress()).createVote(voteIdx, ballotIdx, staker, decision, weight);
         voteLength = voteIdx;
@@ -542,12 +521,10 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             uint256 lockAmount
         ) = getBallotMember(ballotIdx);
         if (isMember(newStaker)) {
-            // new staker is already a member or a voter/
             emit NotApplicable(ballotIdx, "Already a member");
             return false;
         }
         if (isReward(newReward)) {
-            // new staker is already a member or a voter/
             emit NotApplicable(ballotIdx, "Already a rewarder");
             return false;
         }
@@ -568,13 +545,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             return false;
         }
 
-        // W1G-01: re-validate node uniqueness at execution time.
-        // Creation-time checkNodeInfoAdd does not protect against a second queued
-        // proposal carrying the same node metadata, since markers are only set here.
-        if (!checkNodeInfoAdd(name, enode, ip, port)) {
-            emit NotApplicable(ballotIdx, "Duplicated node info");
-            return false;
-        }
+        // LEGACY (pre W1G-01): NO execution-time node-uniqueness re-validation here.
 
         lock(newStaker, lockAmount);
 
@@ -595,7 +566,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         node.enode = enode;
         node.ip = ip;
         node.port = port;
-        // checkNodeInfo[getNodeInfoHash(enode, ip, port)] = true;
         checkNodeName[name] = true;
         checkNodeEnode[enode] = true;
         checkNodeIpPort[keccak256(abi.encodePacked(ip, port))] = true;
@@ -617,17 +587,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             emit NotApplicable(ballotIdx, "Not already a member");
             return; // Non-member. it is abnormal case, but passed
         }
-        // W1G-04: reject voter-only (index-0) identifiers before mutating member state.
-        if (stakerIdx[oldStaker] == 0 || nodeIdxFromMember[oldStaker] == 0) {
-            emit NotApplicable(ballotIdx, "Not already a member");
-            return;
-        }
-        // W1G-02: never let a stale ballot drop the member count to zero
-        // (creation enforces getMemberLength() > 1, re-check at execution).
-        if (getMemberLength() <= 1) {
-            emit NotApplicable(ballotIdx, "Cannot remove a sole member");
-            return;
-        }
+        // LEGACY (pre W1G-04 / W1G-02): no voter-only guard, no >1 re-check here.
 
         // Remove voting and reward member
         uint256 removeStakerIdx = stakerIdx[oldStaker];
@@ -639,23 +599,18 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             stakers[removeStakerIdx] = endStaker;
             stakerIdx[endStaker] = removeStakerIdx;
 
-            // Reward can differ from oldStaker after a same-staker self-change.
-            // Remove reward through the actual reward key read from the removed index.
             uint256 removeRewardIdx = rewardIdx[oldReward];
             require(removeRewardIdx != 0, "Invalid reward index");
             address endReward = rewards[memberLength];
             rewards[removeRewardIdx] = endReward;
             rewardIdx[endReward] = removeRewardIdx;
 
-            // Voter can also differ from oldStaker after a same-staker self-change.
-            // Remove voter through the actual voter key read from the removed index.
             uint256 removeVoterIdx = voterIdx[oldVoter];
             require(removeVoterIdx != 0, "Invalid voter index");
             address endVoter = voters[memberLength];
             voters[removeVoterIdx] = endVoter;
             voterIdx[endVoter] = removeVoterIdx;
         }
-        // Clear the last element slot and remove the old mappings
         stakers[memberLength] = ZERO;
         stakerIdx[oldStaker] = 0;
 
@@ -668,8 +623,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         memberLength = memberLength - 1;
 
         // Remove node
-        // The node index is independent from the staker, reward, and voter indexes.
-        // Bind the storage pointer only after loading the real node index.
         uint256 removeNodeIdx = nodeIdxFromMember[oldStaker];
         require(removeNodeIdx != 0, "Invalid node index");
         Node storage node = nodes[removeNodeIdx];
@@ -693,7 +646,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         delete nodes[nodeLength];
         nodeLength = nodeLength - 1;
         modifiedBlock = block.number;
-        // Unlock and transfer remained to governance
         transferLockedAndUnlock(ballotIdx, oldStaker);
 
         emit MemberRemoved(oldStaker, oldVoter);
@@ -718,21 +670,16 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
 
         if (!isMember(oldStaker)) {
             emit NotApplicable(ballotIdx, "Old address is not a member");
-            return false; // Non-member. it is abnormal case.
-        }
-        // W1G-04: member must be identified by a real staker key; reject voter-only
-        // (index-0) addresses so changeMember never writes into the sentinel slot 0.
-        if (stakerIdx[oldStaker] == 0 || nodeIdxFromMember[oldStaker] == 0) {
-            emit NotApplicable(ballotIdx, "Old address is not a member");
             return false;
         }
+        // LEGACY (pre W1G-04): no voter-only (stakerIdx==0) guard here.
 
         //old staker
         uint256 memberIdx = stakerIdx[oldStaker];
         if (oldStaker != newStaker) {
             if (isMember(newStaker)) {
                 emit NotApplicable(ballotIdx, "new address is already a member");
-                return false; // already member. it is abnormal case.
+                return false;
             }
             if (newStaker != newVoter && newStaker != newReward) {
                 emit NotApplicable(ballotIdx, "Invalid voter address");
@@ -753,11 +700,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         {
             Node memory node = nodes[nodeIdx];
 
-            if (
-                //if node info is not same
-                // node info can not duplicate
-                !checkNodeInfoChange(name, enode, ip, port, node)
-            ) {
+            if (!checkNodeInfoChange(name, enode, ip, port, node)) {
                 emit NotApplicable(ballotIdx, "Duplicated node info");
                 return false;
             }
@@ -780,9 +723,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         return true;
     }
 
-    // isMember=> isStaker and isVoter
-    // vote => onlyVoter, staker can change voter without voting, default = staker == voter
-    // voter can change staker with voting.(changeMember)
     function changeMember(uint256 ballotIdx, bool self) private returns (bool) {
         if (!self) {
             fromValidBallot(ballotIdx, uint256(BallotTypes.MemberChange));
@@ -801,7 +741,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         ) = getBallotMember(ballotIdx);
         if (!isMember(oldStaker)) {
             emit NotApplicable(ballotIdx, "Old address is not a member");
-            return false; // Non-member. it is abnormal case.
+            return false;
         }
 
         if (!checkChangeMember(ballotIdx, self, oldStaker, newStaker, newVoter, newReward, name, enode, ip, port, lockAmount)) return false;
@@ -809,7 +749,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         //old staker
         uint256 memberIdx = stakerIdx[oldStaker];
         if (oldStaker != newStaker) {
-            // Change member
             stakers[memberIdx] = newStaker;
             stakerIdx[newStaker] = memberIdx;
             stakerIdx[oldStaker] = 0;
@@ -830,7 +769,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             node.ip = ip;
             node.port = port;
             modifiedBlock = block.number;
-            // checkNodeInfo[getNodeInfoHash(enode, ip, port)] = true;
             checkNodeName[name] = true;
             checkNodeEnode[enode] = true;
             checkNodeIpPort[keccak256(abi.encodePacked(ip, port))] = true;
@@ -858,7 +796,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             nodeIdxFromMember[newStaker] = nodeIdx;
             nodeIdxFromMember[oldStaker] = 0;
 
-            // Unlock and transfer remained to governance
             transferLockedAndUnlock(ballotIdx, oldStaker);
 
             emit MemberChanged(oldStaker, newStaker, newVoter);
@@ -891,7 +828,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         emit EnvChanged(envKey, envType, envVal);
     }
 
-    //------------------ Code reduction for creation gas
     function createBallotForMember(uint256 id, uint256 bType, address creator, address oAddr, MemberInfo memory info) private {
         IBallotStorage(getBallotStorageAddress()).createBallotForMember(
             id, // ballot id
@@ -976,17 +912,12 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     }
 
     function lockedBalanceOf(address addr) private view returns (uint256) {
-        // IStaking staking = IStaking(getStakingAddress()).lockedBalanceOf(addr);
         return IStaking(getStakingAddress()).lockedBalanceOf(addr);
     }
 
     function availableBalanceOf(address addr) private view returns (uint256) {
         return IStaking(getStakingAddress()).availableBalanceOf(addr);
     }
-
-    //------------------ Code reduction end
-
-    //====NXTMeta=====/
 
     function _authorizeUpgrade(address newImplementation) internal override onlyGovMem {}
 
@@ -1006,9 +937,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     }
 
     function checkNodeInfoAdd(bytes memory name, bytes memory enode, bytes memory ip, uint port) internal view returns (bool check) {
-        //Enode can not be duplicated
-        //IP:port can not be duplicated
-        //Name can not be duplicated
         check = true;
         if (checkNodeEnode[enode]) check = false;
         if (checkNodeName[name]) check = false;
@@ -1024,9 +952,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         uint port,
         Node memory nodeInfo
     ) internal view returns (bool check) {
-        //Enode can not be duplicated
-        //IP:port can not be duplicated
-        //Name can not be duplicated
         check = true;
         if ((keccak256(nodeInfo.enode) != keccak256(enode) && checkNodeEnode[enode])) check = false;
         if ((keccak256(nodeInfo.name) != keccak256(name) && checkNodeName[name])) check = false;
@@ -1038,25 +963,13 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
     uint256 public proposal_time_period;
     mapping(address => uint256) public lastAddProposalTime;
 
-    // //For a node duplicate check
-    // // testnet value is here
-    // // mapping(bytes32=>bool) internal checkNodeInfo;
-    // mapping(bytes=>bool) internal checkNodeName;
-    // mapping(bytes=>bool) internal checkNodeEnode;
-    // mapping(bytes32=>bool) internal checkNodeIpPort;
-
-    /**
-     * @dev This empty reserved space is put in place to allow future versions to add new
-     * variables without shifting down storage in the inheritance chain.
-     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
-     */
     uint256[46] private __gap;
 
     function reInit() external reinitializer(2) onlyOwner {
         unchecked {
-            // W1G-03: node/member storage is 1-indexed; iterate 1..getMemberLength() inclusive
-            // so the last node is marked and the empty nodes[0] sentinel is never touched.
-            for (uint256 i = 1; i <= getMemberLength(); i++) {
+            // LEGACY (pre W1G-03): 0-indexed, exclusive upper bound. Marks the
+            // empty nodes[0] sentinel and skips the last real node nodes[N].
+            for (uint256 i = 0; i < getMemberLength(); i++) {
                 Node memory node = nodes[i];
                 checkNodeName[node.name] = true;
                 checkNodeEnode[node.enode] = true;
@@ -1079,7 +992,7 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         __ReentrancyGuard_init();
         __Ownable_init();
 
-        GovImp ogov = GovImp(oldGov);
+        GovImpLegacy ogov = GovImpLegacy(oldGov);
         setRegistry(address(ogov.reg()));
         modifiedBlock = block.number;
         transferOwnership(ogov.owner());
@@ -1096,10 +1009,10 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
 
                 Node memory node;
                 (node.name, node.enode, node.ip, node.port) = ogov.getNode(i);
-                // W1G-03: validate against markers set by previously imported nodes.
-                // checkNodeInfoChange(.., node) compares the node to itself and always passes;
-                // checkNodeInfoAdd checks the markers directly so real duplicates are caught.
-                require(checkNodeInfoAdd(node.name, node.enode, node.ip, node.port), "node info is duplicated");
+                // LEGACY (pre W1G-03): dead check — checkNodeInfoChange(.., node)
+                // compares node to itself, so every field reads as "unchanged"
+                // and the function always returns true. Duplicates are NOT caught.
+                require(checkNodeInfoChange(node.name, node.enode, node.ip, node.port, node), "node info is duplicated");
                 checkNodeName[node.name] = true;
                 checkNodeEnode[node.enode] = true;
                 checkNodeIpPort[keccak256(abi.encodePacked(node.ip, node.port))] = true;
@@ -1119,8 +1032,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
 
         return 0;
     }
-
-    // Critical
 
     function upgradeTo(address) external override {
         revert("Invalid access");
