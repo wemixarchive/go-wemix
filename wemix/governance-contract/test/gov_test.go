@@ -3743,43 +3743,6 @@ func TestW1G03_MigrateFromLegacyIntegrity(t *testing.T) {
 	w1gCheckMemberOn(t, newGov, big.NewInt(2), infoB)
 }
 
-// W1G-03 (reInit): reInit backfills node-uniqueness markers across 1..N.
-// After reInit, every member node (including the LAST one) must remain
-// uniqueness-protected.
-//
-// Teeth limitation: the 1..N (vs buggy 0..N-1) loop only changes observable
-// behaviour when markers start empty (a pre-marker in-place upgrade). In a fresh
-// deploy addMember already sets markers, so even a buggy 0-indexed reInit that
-// skips the last node leaves that node's marker set — this test alone cannot
-// distinguish the buggy reInit from the fixed one. It is therefore a smoke test
-// (reInit runs and does not corrupt uniqueness on a fresh deploy); the
-// off-by-one's actual teeth live in TestW1G03_PreMarker_ReInitOffByOne_RedThenGreen,
-// which uses the GovImpPreMarker fixture (empty markers) to make the skip observable.
-func TestW1G03_ReInitPreservesNodeUniqueness(t *testing.T) {
-	gov := NewGovernance(t).DeployContracts(t)
-	owner := gov.owner
-	B := getTxOpt(t, "w1g03_ri_B")
-	nodeB := nodeInfo{[]byte("w1g03r-B"), w1gEnode("34343434"), []byte("127.0.0.41"), big.NewInt(8542)}
-
-	w1gFundAndStake(t, gov, B)
-	infoB := w1gInfo(B.From, B.From, B.From, nodeB, "add B")
-	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(owner, "addProposalToAddMember", infoB)))
-	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(owner, "vote", getBallotIdx(t, gov), true)))
-	require.Equal(t, int64(2), w1gMemberLength(t, gov)) // B is the last node here (index 2)
-
-	// reInit (reinitializer(2), owner-only) must not revert
-	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(owner, "reInit")))
-
-	// node uniqueness still enforced after reInit: reusing the LAST member's enode is rejected
-	C := getTxOpt(t, "w1g03_ri_C")
-	w1gFundAndStake(t, gov, C)
-	dupOfB := w1gInfo(C.From, C.From, C.From, nodeInfo{[]byte("w1g03r-C"), nodeB.enode, []byte("127.0.0.42"), big.NewInt(8542)}, "dup enode of B")
-	ExpectedRevert(t,
-		gov.ExpectedFail(gov.GovImp.Transact(owner, "addProposalToAddMember", dupOfB)),
-		"Duplicated node info",
-	)
-}
-
 // ============================================================================
 // W1G-03 (migrate) — dead duplicate-check.  RED on legacy, GREEN on fixed.
 //
