@@ -62,12 +62,32 @@ func NewGovernance(t *testing.T) *Governance {
 	}
 }
 
+// DeployContracts deploys the full governance stack with the production GovImp
+// as the initial implementation behind the Gov proxy.
 func (g *Governance) DeployContracts(t *testing.T) *Governance {
+	return g.deployContracts(t, compiled.GovImp)
+}
+
+// DeployContractsLegacy deploys the same stack but with the UNFIXED GovImpLegacy
+// mock as the initial implementation, so a test can build a pre-fix ledger and
+// then upgrade the proxy to the fixed GovImp (see upgradeGovImpl).
+func (g *Governance) DeployContractsLegacy(t *testing.T) *Governance {
+	return g.deployContracts(t, compiled.GovImpLegacy)
+}
+
+// DeployContractsPreMarker deploys the stack with the GovImpPreMarker mock
+// (unfixed AND not maintaining node-uniqueness markers) as the initial impl,
+// used to give W1G-03's reInit off-by-one observable teeth.
+func (g *Governance) DeployContractsPreMarker(t *testing.T) *Governance {
+	return g.deployContracts(t, compiled.GovImpPreMarker)
+}
+
+func (g *Governance) deployContracts(t *testing.T, govImpl *bindContract) *Governance {
 	// deploy registry
 	registry, Registry, err := g.Deploy(compiled.Registry.Deploy(g.backend, g.owner))
 	require.NoError(t, err)
-	// deploy impls
-	govImp, _, err := g.Deploy(compiled.GovImp.Deploy(g.backend, g.owner))
+	// deploy impls (the gov implementation is selectable: production or a mock)
+	govImp, _, err := g.Deploy(govImpl.Deploy(g.backend, g.owner))
 	require.NoError(t, err)
 	ncpExitImp, _, err := g.Deploy(compiled.NCPExitImp.Deploy(g.backend, g.owner))
 	require.NoError(t, err)
@@ -239,6 +259,7 @@ func init() {
 type compiledContract struct {
 	Registry,
 	Gov, GovImp,
+	GovImpLegacy, GovImpPreMarker, // test-only mocks (contracts/mock)
 	NCPExit, NCPExitImp,
 	Staking, StakingImp,
 	BallotStorage, BallotStorageImp,
@@ -250,6 +271,8 @@ func (c *compiledContract) Compile(root string) {
 		filepath.Join(root, "Registry.sol"),
 		filepath.Join(root, "Gov.sol"),
 		filepath.Join(root, "GovImp.sol"),
+		filepath.Join(root, "mock", "GovImpLegacy.sol"),
+		filepath.Join(root, "mock", "GovImpPreMarker.sol"),
 		filepath.Join(root, "NCPExit.sol"),
 		filepath.Join(root, "NCPExitImp.sol"),
 		filepath.Join(root, "Staking.sol"),
@@ -266,6 +289,10 @@ func (c *compiledContract) Compile(root string) {
 		} else if c.Gov, err = newBindContract(contracts["Gov"]); err != nil {
 			panic(err)
 		} else if c.GovImp, err = newBindContract(contracts["GovImp"]); err != nil {
+			panic(err)
+		} else if c.GovImpLegacy, err = newBindContract(contracts["GovImpLegacy"]); err != nil {
+			panic(err)
+		} else if c.GovImpPreMarker, err = newBindContract(contracts["GovImpPreMarker"]); err != nil {
 			panic(err)
 		} else if c.NCPExit, err = newBindContract(contracts["NCPExit"]); err != nil {
 			panic(err)
