@@ -3710,7 +3710,7 @@ func TestW1G02_Legacy_EmptyGovernance_RedThenGreen(t *testing.T) {
 // that already holds duplicate node metadata, which the uniqueness-enforcing
 // contracts cannot produce; that case needs a mock legacy and is out of scope here.
 func TestW1G03_MigrateFromLegacyIntegrity(t *testing.T) {
-	gov := NewGovernance(t).DeployContracts(t) // legacy gov, owner = member 1
+	gov := NewGovernance(t).DeployContractsLegacy(t) // legacy gov, owner = member 1
 	owner := gov.owner
 	B := getTxOpt(t, "w1g03_mig_B")
 	nodeB := nodeInfo{[]byte("w1g03m-B"), w1gEnode("12121212"), []byte("127.0.0.31"), big.NewInt(8542)}
@@ -3749,8 +3749,12 @@ func TestW1G03_MigrateFromLegacyIntegrity(t *testing.T) {
 //
 // Teeth limitation: the 1..N (vs buggy 0..N-1) loop only changes observable
 // behaviour when markers start empty (a pre-marker in-place upgrade). In a fresh
-// deploy addMember already sets markers, so this test confirms reInit runs and
-// does not corrupt uniqueness; the off-by-one's teeth need a pre-marker fixture.
+// deploy addMember already sets markers, so even a buggy 0-indexed reInit that
+// skips the last node leaves that node's marker set — this test alone cannot
+// distinguish the buggy reInit from the fixed one. It is therefore a smoke test
+// (reInit runs and does not corrupt uniqueness on a fresh deploy); the
+// off-by-one's actual teeth live in TestW1G03_PreMarker_ReInitOffByOne_RedThenGreen,
+// which uses the GovImpPreMarker fixture (empty markers) to make the skip observable.
 func TestW1G03_ReInitPreservesNodeUniqueness(t *testing.T) {
 	gov := NewGovernance(t).DeployContracts(t)
 	owner := gov.owner
@@ -3761,7 +3765,7 @@ func TestW1G03_ReInitPreservesNodeUniqueness(t *testing.T) {
 	infoB := w1gInfo(B.From, B.From, B.From, nodeB, "add B")
 	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(owner, "addProposalToAddMember", infoB)))
 	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(owner, "vote", getBallotIdx(t, gov), true)))
-	require.Equal(t, int64(2), w1gMemberLength(t, gov)) // owner is the last node here
+	require.Equal(t, int64(2), w1gMemberLength(t, gov)) // B is the last node here (index 2)
 
 	// reInit (reinitializer(2), owner-only) must not revert
 	require.NoError(t, gov.ExpectedOk(gov.GovImp.Transact(owner, "reInit")))
@@ -3856,7 +3860,7 @@ func TestW1G03_Legacy_MigrateDeadCheck_RedThenGreen(t *testing.T) {
 // legacy gov must survive migration with all three index maps still pointing at
 // the same slot. This exercises the migrate path (distinct from the changeGov
 // upgrade path) on a separated ledger — the "ledger preservation" concern of
-// 검증 2 — using the fixed migrateFromLegacy on a clean (non-duplicate) source.
+// Check 2 — using the fixed migrateFromLegacy on a clean (non-duplicate) source.
 // ============================================================================
 func TestW1G03_Legacy_MigratePreservesSeparation(t *testing.T) {
 	gov := NewGovernance(t).DeployContractsLegacy(t)
@@ -4246,7 +4250,7 @@ func TestW1G04_Legacy_Slot0Poison_RedThenGreen(t *testing.T) {
 // ==========================================================================
 
 // ============================================================================
-// 검증 2 / 3 / 5 — Legacy ledger -> upgrade -> exercise EVERY core flow.
+// Checks 2 / 3 / 5 — Legacy ledger -> upgrade -> exercise EVERY core flow.
 //
 // Builds a 3-member legacy ledger where member B has a self-separated
 // staker/voter/reward, upgrades the proxy to the fixed GovImp, then drives
@@ -4313,7 +4317,7 @@ func TestW1G_LegacyUpgrade_FullLifecycle(t *testing.T) {
 	require.Equal(t, int64(4), w1gMemberLength(t, gov))
 
 	// ====================================================================
-	// FLOW 2 — 검증 5: oldStaker identification on the FIXED contract.
+	// FLOW 2 — Check 5: oldStaker identification on the FIXED contract.
 	//   (a) passing the separated VOTER address Bv as oldStaker -> "Non-member"
 	//   (b) passing the real STAKER address B as oldStaker -> OK (self-update)
 	// ====================================================================
@@ -4376,7 +4380,7 @@ func TestW1G_LegacyUpgrade_FullLifecycle(t *testing.T) {
 }
 
 // ============================================================================
-// 검증 2 보강 — voter-driven ENV and GOV proposals.
+// Check 2 (supplement) — voter-driven ENV and GOV proposals.
 //
 // Complements the FullLifecycle test (where the separated voter drives add /
 // change / remove). Here the separated voter key Bv ALSO proposes — and helps
