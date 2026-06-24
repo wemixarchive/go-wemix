@@ -37,6 +37,7 @@ var (
 	ErrInvalidTxType        = errors.New("transaction type not valid in this context")
 	ErrTxTypeNotSupported   = errors.New("transaction type not supported")
 	ErrGasFeeCapTooLow      = errors.New("fee cap less than base fee")
+	ErrInvalidFeePayer      = errors.New("fee delegation: invalid feePayer")
 	errShortTypedTx         = errors.New("typed transaction too short")
 )
 
@@ -709,9 +710,17 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 		accessList: tx.AccessList(),
 		isFake:     false,
 	}
-	// fee delegation
-	if tx.FeePayer() != nil {
-		msg.feePayer = tx.FeePayer()
+	// For fee-delegated tx, verify that FeePayer is set and that
+	// FV/FR/FS recover to the claimed feePayer address.
+	if tx.Type() == FeeDelegateDynamicFeeTxType {
+		if tx.FeePayer() == nil {
+			return msg, ErrInvalidFeePayer
+		}
+		feePayer, err := FeePayer(NewFeeDelegateSigner(s.ChainID()), tx)
+		if err != nil || feePayer != *tx.FeePayer() {
+			return msg, ErrInvalidFeePayer
+		}
+		msg.feePayer = &feePayer
 	}
 	// If baseFee provided, set gasPrice to effectiveGasPrice.
 	if baseFee != nil {
