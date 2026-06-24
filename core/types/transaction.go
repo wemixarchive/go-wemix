@@ -713,12 +713,9 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 	// For fee-delegated tx, verify that FeePayer is set and that
 	// FV/FR/FS recover to the claimed feePayer address.
 	if tx.Type() == FeeDelegateDynamicFeeTxType {
-		if tx.FeePayer() == nil {
-			return msg, ErrInvalidFeePayer
-		}
-		feePayer, err := FeePayer(NewFeeDelegateSigner(s.ChainID()), tx)
-		if err != nil || feePayer != *tx.FeePayer() {
-			return msg, ErrInvalidFeePayer
+		feePayer, err := RecoverFeePayer(s.ChainID(), tx)
+		if err != nil {
+			return msg, err
 		}
 		msg.feePayer = &feePayer
 	}
@@ -745,6 +742,19 @@ func (m Message) IsFake() bool           { return m.isFake }
 
 // fee delegation
 func (m Message) FeePayer() *common.Address { return m.feePayer }
+
+// RecoverFeePayer recovers the feePayer address from FV/FR/FS and verifies it
+// matches the claimed FeePayer address. Assumes tx is a fee-delegated transaction.
+func RecoverFeePayer(chainID *big.Int, tx *Transaction) (common.Address, error) {
+	if tx.FeePayer() == nil {
+		return common.Address{}, ErrInvalidFeePayer
+	}
+	feePayer, err := FeePayer(NewFeeDelegateSigner(chainID), tx)
+	if err != nil || feePayer != *tx.FeePayer() {
+		return common.Address{}, ErrInvalidFeePayer
+	}
+	return feePayer, nil
+}
 
 // copyAddressPtr copies an address.
 func copyAddressPtr(a *common.Address) *common.Address {
