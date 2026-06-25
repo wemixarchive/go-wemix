@@ -37,6 +37,7 @@ var (
 	ErrInvalidTxType        = errors.New("transaction type not valid in this context")
 	ErrTxTypeNotSupported   = errors.New("transaction type not supported")
 	ErrGasFeeCapTooLow      = errors.New("fee cap less than base fee")
+	ErrFeePayerNotSet       = errors.New("fee delegation: feePayer not set")
 	ErrInvalidFeePayer      = errors.New("fee delegation: invalid feePayer")
 	errShortTypedTx         = errors.New("typed transaction too short")
 )
@@ -747,7 +748,7 @@ func (m Message) FeePayer() *common.Address { return m.feePayer }
 // matches the claimed FeePayer address. Assumes tx is a fee-delegated transaction.
 func RecoverFeePayer(chainID *big.Int, tx *Transaction) (common.Address, error) {
 	if tx.FeePayer() == nil {
-		return common.Address{}, ErrInvalidFeePayer
+		return common.Address{}, ErrFeePayerNotSet
 	}
 	feePayer, err := FeePayer(NewFeeDelegateSigner(chainID), tx)
 	if err != nil || feePayer != *tx.FeePayer() {
