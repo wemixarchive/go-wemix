@@ -55,3 +55,12 @@ vendor/*
 # Wemix
 /wemix/admin_abi.go
 /wemix/governance_abi.go
+
+# Sensitive files (do not commit)
+.env
+.env.*
+*.pem
+*.key
+.aws/
+.azure/
+.ssh/
