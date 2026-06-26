@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -530,4 +531,90 @@ func assertEqual(orig *Transaction, cpy *Transaction) error {
 		}
 	}
 	return nil
+}
+
+func TestRecoverFeePayer(t *testing.T) {
+	chainID := big.NewInt(1112)
+
+	senderKey, _ := crypto.GenerateKey()
+	feePayerKey, _ := crypto.GenerateKey()
+	attackerKey, _ := crypto.GenerateKey()
+
+	feePayerAddr := crypto.PubkeyToAddress(feePayerKey.PublicKey)
+
+	signedTx, err := SignTx(NewTx(&DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     0,
+		GasTipCap: big.NewInt(1),
+		GasFeeCap: big.NewInt(1),
+		Gas:       21000,
+		To:        &feePayerAddr,
+		Value:     big.NewInt(0),
+	}), NewLondonSigner(chainID), senderKey)
+	if err != nil {
+		t.Fatalf("SignTx (sender): %v", err)
+	}
+	senderTx := signedTx.inner.(*DynamicFeeTx)
+
+	tests := []struct {
+		name            string
+		feePayerAddr    *common.Address
+		feePayerSignKey *ecdsa.PrivateKey
+		wantErr         error
+	}{
+		{
+			name:            "ValidSignature",
+			feePayerAddr:    &feePayerAddr,
+			feePayerSignKey: feePayerKey,
+		},
+		{
+			name:    "NilFeePayerWithoutSignature",
+			wantErr: ErrFeePayerNotSet,
+		},
+		{
+			name:            "NilFeePayerWithSignature",
+			feePayerSignKey: feePayerKey,
+			wantErr:         ErrFeePayerNotSet,
+		},
+		{
+			name:            "ValidFeePayerWithoutSignature",
+			feePayerAddr:    &feePayerAddr,
+			feePayerSignKey: nil,
+			wantErr:         ErrInvalidFeePayer,
+		},
+		{
+			name:            "AddressMismatch",
+			feePayerAddr:    &feePayerAddr,
+			feePayerSignKey: attackerKey,
+			wantErr:         ErrInvalidFeePayer,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fdTx := NewTx(&FeeDelegateDynamicFeeTx{
+				SenderTx: *senderTx,
+				FeePayer: tt.feePayerAddr,
+				FV:       new(big.Int),
+				FR:       new(big.Int),
+				FS:       new(big.Int),
+			})
+			if tt.feePayerSignKey != nil {
+				fdTx, err = SignTx(fdTx, NewFeeDelegateSigner(chainID), tt.feePayerSignKey)
+				if err != nil {
+					t.Fatalf("SignTx (feePayer): %v", err)
+				}
+			}
+			recovered, err := RecoverFeePayer(chainID, fdTx)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("expected error %v, got %v", tt.wantErr, err)
+				return
+			}
+			if tt.wantErr == nil {
+				if recovered != feePayerAddr {
+					t.Errorf("recovered address mismatch: got %s, want %s", recovered.Hex(), feePayerAddr.Hex())
+				}
+			}
+		})
+	}
 }
