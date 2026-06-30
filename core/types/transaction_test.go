@@ -535,36 +535,82 @@ func assertEqual(orig *Transaction, cpy *Transaction) error {
 
 func TestRecoverFeePayer(t *testing.T) {
 	chainID := big.NewInt(1112)
-
-	senderKey, _ := crypto.GenerateKey()
 	feePayerKey, _ := crypto.GenerateKey()
 	attackerKey, _ := crypto.GenerateKey()
-
 	feePayerAddr := crypto.PubkeyToAddress(feePayerKey.PublicKey)
 
-	signedTx, err := SignTx(NewTx(&DynamicFeeTx{
-		ChainID:   chainID,
-		Nonce:     0,
-		GasTipCap: big.NewInt(1),
-		GasFeeCap: big.NewInt(1),
-		Gas:       21000,
-		To:        &feePayerAddr,
-		Value:     big.NewInt(0),
-	}), NewLondonSigner(chainID), senderKey)
-	if err != nil {
-		t.Fatalf("SignTx (sender): %v", err)
-	}
-	senderTx := signedTx.inner.(*DynamicFeeTx)
+	signedSenderTx := setupSenderTx(t, chainID, feePayerAddr)
+	senderTx := signedSenderTx.inner.(*DynamicFeeTx)
+	tests := getFeePayerTestCases(&feePayerAddr, feePayerKey, attackerKey)
 
-	tests := []struct {
-		name            string
-		feePayerAddr    *common.Address
-		feePayerSignKey *ecdsa.PrivateKey
-		wantErr         error
-	}{
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fdTx := setupFeeDelegateTx(t, chainID, *senderTx, tt.feePayerAddr, tt.feePayerSignKey)
+			recovered, err := RecoverFeePayer(chainID, fdTx)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("expected error %v, got %v", tt.wantErr, err)
+				return
+			}
+			if tt.wantErr == nil {
+				if recovered != feePayerAddr {
+					t.Errorf("recovered address mismatch: got %s, want %s", recovered.Hex(), feePayerAddr.Hex())
+				}
+			}
+		})
+	}
+}
+
+func TestAsMessageFeeDelegation(t *testing.T) {
+	chainID := big.NewInt(1112)
+	feePayerKey, _ := crypto.GenerateKey()
+	attackerKey, _ := crypto.GenerateKey()
+	feePayerAddr := crypto.PubkeyToAddress(feePayerKey.PublicKey)
+
+	signedSenderTx := setupSenderTx(t, chainID, feePayerAddr)
+	senderTx := signedSenderTx.inner.(*DynamicFeeTx)
+
+	// 1. Verify that a non-fee-delegated transaction passes AsMessage validation without error.
+	t.Run("NonFeeDelegateTx", func(t *testing.T) {
+		msg, err := signedSenderTx.AsMessage(NewFeeDelegateSigner(chainID), nil)
+		if err != nil {
+			t.Errorf("expected no error for non-fee-delegated tx, got %v", err)
+		}
+		if msg.FeePayer() != nil {
+			t.Errorf("expected nil FeePayer for non-fee-delegated tx, got %v", msg.FeePayer())
+		}
+	})
+
+	// 2. Verify fee-delegated transaction cases.
+	tests := getFeePayerTestCases(&feePayerAddr, feePayerKey, attackerKey)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fdTx := setupFeeDelegateTx(t, chainID, *senderTx, tt.feePayerAddr, tt.feePayerSignKey)
+			msg, err := fdTx.AsMessage(NewFeeDelegateSigner(chainID), nil)
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("AsMessage expected error %v, got %v", tt.wantErr, err)
+			}
+			if tt.wantErr == nil {
+				if msg.FeePayer() == nil || *msg.FeePayer() != feePayerAddr {
+					t.Errorf("msg.FeePayer mismatch: got %v, want %v", msg.FeePayer(), feePayerAddr)
+				}
+			}
+		})
+	}
+}
+
+type feePayerTestCase struct {
+	name            string
+	feePayerAddr    *common.Address
+	feePayerSignKey *ecdsa.PrivateKey
+	wantErr         error
+}
+
+// getFeePayerTestCases returns shared test cases for fee-delegation tests.
+func getFeePayerTestCases(feePayerAddr *common.Address, feePayerKey, attackerKey *ecdsa.PrivateKey) []feePayerTestCase {
+	return []feePayerTestCase{
 		{
 			name:            "ValidSignature",
-			feePayerAddr:    &feePayerAddr,
+			feePayerAddr:    feePayerAddr,
 			feePayerSignKey: feePayerKey,
 		},
 		{
@@ -578,43 +624,53 @@ func TestRecoverFeePayer(t *testing.T) {
 		},
 		{
 			name:            "ValidFeePayerWithoutSignature",
-			feePayerAddr:    &feePayerAddr,
+			feePayerAddr:    feePayerAddr,
 			feePayerSignKey: nil,
 			wantErr:         ErrInvalidFeePayer,
 		},
 		{
 			name:            "AddressMismatch",
-			feePayerAddr:    &feePayerAddr,
+			feePayerAddr:    feePayerAddr,
 			feePayerSignKey: attackerKey,
 			wantErr:         ErrInvalidFeePayer,
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fdTx := NewTx(&FeeDelegateDynamicFeeTx{
-				SenderTx: *senderTx,
-				FeePayer: tt.feePayerAddr,
-				FV:       new(big.Int),
-				FR:       new(big.Int),
-				FS:       new(big.Int),
-			})
-			if tt.feePayerSignKey != nil {
-				fdTx, err = SignTx(fdTx, NewFeeDelegateSigner(chainID), tt.feePayerSignKey)
-				if err != nil {
-					t.Fatalf("SignTx (feePayer): %v", err)
-				}
-			}
-			recovered, err := RecoverFeePayer(chainID, fdTx)
-			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("expected error %v, got %v", tt.wantErr, err)
-				return
-			}
-			if tt.wantErr == nil {
-				if recovered != feePayerAddr {
-					t.Errorf("recovered address mismatch: got %s, want %s", recovered.Hex(), feePayerAddr.Hex())
-				}
-			}
-		})
+// setupSenderTx generates a signed DynamicFeeTx for testing fee-delegated transactions.
+func setupSenderTx(t *testing.T, chainID *big.Int, feePayerAddr common.Address) *Transaction {
+	senderKey, _ := crypto.GenerateKey()
+
+	signedTx, err := SignTx(NewTx(&DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     0,
+		GasTipCap: big.NewInt(1),
+		GasFeeCap: big.NewInt(1),
+		Gas:       21000,
+		To:        &feePayerAddr,
+		Value:     big.NewInt(0),
+	}), NewLondonSigner(chainID), senderKey)
+	if err != nil {
+		t.Fatalf("setupSenderTx: SignTx (sender): %v", err)
 	}
+	return signedTx
+}
+
+// setupFeeDelegateTx constructs and optionally signs a FeeDelegateDynamicFeeTx for testing.
+func setupFeeDelegateTx(t *testing.T, chainID *big.Int, senderTx DynamicFeeTx, feePayerAddr *common.Address, feePayerSignKey *ecdsa.PrivateKey) *Transaction {
+	fdTx := NewTx(&FeeDelegateDynamicFeeTx{
+		SenderTx: senderTx,
+		FeePayer: feePayerAddr,
+		FV:       new(big.Int),
+		FR:       new(big.Int),
+		FS:       new(big.Int),
+	})
+	if feePayerSignKey != nil {
+		var err error
+		fdTx, err = SignTx(fdTx, NewFeeDelegateSigner(chainID), feePayerSignKey)
+		if err != nil {
+			t.Fatalf("setupFeeDelegateTx: SignTx (feePayer): %v", err)
+		}
+	}
+	return fdTx
 }
