@@ -568,10 +568,11 @@ func TestAsMessageFeeDelegation(t *testing.T) {
 
 	signedSenderTx := setupSenderTx(t, chainID, feePayerAddr)
 	senderTx := signedSenderTx.inner.(*DynamicFeeTx)
+	signer := NewLondonSigner(chainID)
 
 	// 1. Verify that a non-fee-delegated transaction passes AsMessage validation without error.
 	t.Run("NonFeeDelegateTx", func(t *testing.T) {
-		msg, err := signedSenderTx.AsMessage(NewFeeDelegateSigner(chainID), nil)
+		msg, err := signedSenderTx.AsMessage(signer, nil)
 		if err != nil {
 			t.Errorf("expected no error for non-fee-delegated tx, got %v", err)
 		}
@@ -585,7 +586,7 @@ func TestAsMessageFeeDelegation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fdTx := setupFeeDelegateTx(t, chainID, *senderTx, tt.feePayerAddr, tt.feePayerSignKey)
-			msg, err := fdTx.AsMessage(NewFeeDelegateSigner(chainID), nil)
+			msg, err := fdTx.AsMessage(signer, nil)
 			if !errors.Is(err, tt.wantErr) {
 				t.Errorf("AsMessage expected error %v, got %v", tt.wantErr, err)
 			}
