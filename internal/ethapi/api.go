@@ -1919,10 +1919,6 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 		// Ensure only eip155 signed transactions are submitted if EIP155Required is set.
 		return common.Hash{}, errors.New("only replay-protected (EIP-155) transactions allowed over RPC")
 	}
-	// fee delegation
-	if tx.Type() == types.FeeDelegateDynamicFeeTxType && tx.FeePayer() == nil {
-		return common.Hash{}, errors.New("FeePayer address is null")
-	}
 	if err := b.SendTx(ctx, tx); err != nil {
 		return common.Hash{}, err
 	}
@@ -1931,16 +1927,6 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 	from, err := types.Sender(signer, tx)
 	if err != nil {
 		return common.Hash{}, err
-	}
-	// fee delegation
-	if tx.Type() == types.FeeDelegateDynamicFeeTxType {
-		feePayer, err := types.FeePayer(types.NewFeeDelegateSigner(b.ChainConfig().ChainID), tx)
-		if err != nil {
-			return common.Hash{}, err
-		}
-		if feePayer != *tx.FeePayer() {
-			return common.Hash{}, errors.New("FeePayer Signature error")
-		}
 	}
 
 	if tx.To() == nil {
