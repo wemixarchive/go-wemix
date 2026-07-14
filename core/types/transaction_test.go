@@ -675,3 +675,62 @@ func setupFeeDelegateTx(t *testing.T, chainID *big.Int, senderTx DynamicFeeTx, f
 	}
 	return fdTx
 }
+
+// TestSetSenderTxAccessListPreserved verifies that SetSenderTx correctly copies a non-empty
+// AccessList so that sender/feePayer signature recovery succeeds on the RPC assembly path.
+func TestSetSenderTxAccessListPreserved(t *testing.T) {
+	chainID := big.NewInt(1112)
+	senderKey, _ := crypto.GenerateKey()
+	feePayerKey, _ := crypto.GenerateKey()
+	feePayerAddr := crypto.PubkeyToAddress(feePayerKey.PublicKey)
+
+	al := AccessList{{
+		Address:     common.HexToAddress("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"),
+		StorageKeys: []common.Hash{common.HexToHash("0x01")},
+	}}
+
+	signedSenderTx, err := SignTx(NewTx(&DynamicFeeTx{
+		ChainID:    chainID,
+		Nonce:      0,
+		GasTipCap:  big.NewInt(1),
+		GasFeeCap:  big.NewInt(1),
+		Gas:        21000,
+		To:         &feePayerAddr,
+		Value:      big.NewInt(0),
+		AccessList: al,
+	}), NewLondonSigner(chainID), senderKey)
+	if err != nil {
+		t.Fatalf("SignTx (sender): %v", err)
+	}
+
+	senderTx := signedSenderTx.inner.(*DynamicFeeTx)
+	// Replicate the RPC assembly path: construct an empty FeeDelegateDynamicFeeTx and
+	// populate it via SetSenderTx, as done in transaction_args.go and api.go.
+	fd := &FeeDelegateDynamicFeeTx{FeePayer: &feePayerAddr}
+	fd.SetSenderTx(*senderTx)
+
+	if !reflect.DeepEqual(fd.SenderTx.AccessList, al) {
+		t.Fatalf("AccessList not preserved: got %v, want %v", fd.SenderTx.AccessList, al)
+	}
+
+	fdTx, err := SignTx(NewTx(fd), NewFeeDelegateSigner(chainID), feePayerKey)
+	if err != nil {
+		t.Fatalf("SignTx (feePayer): %v", err)
+	}
+
+	recoveredSender, err := NewLondonSigner(chainID).Sender(fdTx)
+	if err != nil {
+		t.Fatalf("sender recovery failed: %v", err)
+	}
+	if recoveredSender != crypto.PubkeyToAddress(senderKey.PublicKey) {
+		t.Errorf("sender mismatch: got %s, want %s", recoveredSender.Hex(), crypto.PubkeyToAddress(senderKey.PublicKey).Hex())
+	}
+
+	recoveredFeePayer, err := RecoverFeePayer(chainID, fdTx)
+	if err != nil {
+		t.Fatalf("feePayer recovery failed: %v", err)
+	}
+	if recoveredFeePayer != feePayerAddr {
+		t.Errorf("feePayer mismatch: got %s, want %s", recoveredFeePayer.Hex(), feePayerAddr.Hex())
+	}
+}
