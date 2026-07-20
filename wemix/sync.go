@@ -31,7 +31,7 @@ type coinbaseEnodeEntry struct {
 const (
 	wemixWorkKey      = "work"
 	wemixTokenKey     = "token"
-	MiningTokenTTL    = 10 // seconds
+	MiningTokenTTL    = 10 // seconds; must be >= 2 to ensure the syncCheck peer collection timeout (MiningTokenTTL/2) is > 0.
 	SyncIdleThreshold = 30 // seconds
 )
 
@@ -338,8 +338,11 @@ func syncCheck() error {
 	}
 
 	// collects mining peers' latest blocks
+	// getMiners timeout must be shorter than MiningTokenTTL to ensure etcdPut and subsequent operations
+	// complete while the token is still held. if the token expires first, another node may advance
+	// work before etcdPut, causing a stale overwrite. MiningTokenTTL/2 leaves headroom for those operations.
 	nodes := admin.getNodes()
-	states := getMiners("", 5000)
+	states := getMiners("", MiningTokenTTL/2)
 	// The original guard `len(nodes)==0 && len(nodes)!=len(states)` was a dead
 	// branch in any healthy environment (nodes>=5). Recovered intent: if the
 	// governance cache is empty we cannot reason about quorum, so abort. The
