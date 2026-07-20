@@ -439,10 +439,12 @@ func syncCheck() error {
 		Height: consensusHeight.Int64(),
 		Hash:   consensusHash,
 	}
+	// reset work only if the token is still held to prevent a stale overwrite
 	if newWorkData, err := json.Marshal(newWork); err != nil {
 		panic("failed to marshal work data")
-	} else {
-		admin.etcdPut(wemixWorkKey, string(newWorkData))
+	} else if err = admin.etcdResetWork(token, string(newWorkData)); err != nil {
+		log.Error("sync check: token expired or superseded, aborting work reset", "error", err)
+		return err
 	}
 	log.Error("sync check: found consensus block, setting work", "height", consensusHeight, "hash", consensusHash, "error", err)
 	return err
