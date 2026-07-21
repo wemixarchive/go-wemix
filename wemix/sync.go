@@ -439,7 +439,9 @@ func syncCheck() error {
 		Height: consensusHeight.Int64(),
 		Hash:   consensusHash,
 	}
-	// reset work only if the token is still held to prevent a stale overwrite
+	// reset work only if the token is still held to prevent a stale overwrite.
+	// WARNING: do not call renew() between acquire and this call: renew updates Till,
+	// causing token to diverge from the value stored in etcd and failing the CAS.
 	if newWorkData, err := json.Marshal(newWork); err != nil {
 		panic("failed to marshal work data")
 	} else if err = admin.etcdResetWork(token, string(newWorkData)); err != nil {
