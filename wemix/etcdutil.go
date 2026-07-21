@@ -622,6 +622,34 @@ func (ma *wemixAdmin) etcdGet(key string) (string, error) {
 	}
 }
 
+// resets work only while the given token is still held
+func (ma *wemixAdmin) etcdResetWork(token *WemixToken, newWork string) error {
+	if !ma.etcdIsReady() {
+		return ErrNotRunning
+	}
+	lockValue, err := json.Marshal(token)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(),
+		ma.etcd.Server.Cfg.ReqTimeout())
+	defer cancel()
+	txresp, err := ma.etcdCli.Txn(ctx).If(
+		clientv3.Compare(clientv3.Value(wemixTokenKey), "=", string(lockValue)),
+	).Then(
+		clientv3.OpPut(wemixWorkKey, newWork),
+	).Else(
+		clientv3.OpGet(wemixTokenKey),
+	).Commit()
+	if err != nil {
+		return err
+	}
+	if !txresp.Succeeded {
+		return ErrInvalidToken
+	}
+	return nil
+}
+
 // compare & swap, do put only if previous value matches
 func (ma *wemixAdmin) etcdPut2(key, value, prev string) error {
 	if !ma.etcdIsReady() {
