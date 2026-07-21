@@ -54,6 +54,15 @@ var (
 )
 
 func (s *WemixMinerStatus) Clone() *WemixMinerStatus {
+	// RLP payloads that omit *big.Int fields decode to nil, and
+	// new(big.Int).Set(nil) panics. Copy each field nil-safely so a single
+	// crafted StatusEx cannot crash the handler goroutine.
+	safeBig := func(b *big.Int) *big.Int {
+		if b == nil {
+			return nil
+		}
+		return new(big.Int).Set(b)
+	}
 	return &WemixMinerStatus{
 		NodeName:          s.NodeName,
 		Enode:             s.Enode,
@@ -62,10 +71,10 @@ func (s *WemixMinerStatus) Clone() *WemixMinerStatus {
 		Status:            s.Status,
 		Miner:             s.Miner,
 		MiningPeers:       s.MiningPeers,
-		LatestBlockHeight: new(big.Int).Set(s.LatestBlockHeight),
+		LatestBlockHeight: safeBig(s.LatestBlockHeight),
 		LatestBlockHash:   s.LatestBlockHash,
-		LatestBlockTd:     new(big.Int).Set(s.LatestBlockTd),
-		RttMs:             new(big.Int).Set(s.RttMs),
+		LatestBlockTd:     safeBig(s.LatestBlockTd),
+		RttMs:             safeBig(s.RttMs),
 	}
 }
 

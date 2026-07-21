@@ -709,9 +709,14 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 		accessList: tx.AccessList(),
 		isFake:     false,
 	}
-	// fee delegation
-	if tx.FeePayer() != nil {
-		msg.feePayer = tx.FeePayer()
+	// For fee-delegated tx, verify that FeePayer is set and that
+	// FV/FR/FS recover to the claimed feePayer address.
+	if tx.Type() == FeeDelegateDynamicFeeTxType {
+		feePayer, err := RecoverFeePayer(s.ChainID(), tx)
+		if err != nil {
+			return msg, err
+		}
+		msg.feePayer = &feePayer
 	}
 	// If baseFee provided, set gasPrice to effectiveGasPrice.
 	if baseFee != nil {

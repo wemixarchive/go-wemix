@@ -31,7 +31,7 @@ type coinbaseEnodeEntry struct {
 const (
 	wemixWorkKey      = "work"
 	wemixTokenKey     = "token"
-	MiningTokenTTL    = 10 // seconds
+	MiningTokenTTL    = 10 // seconds; must be >= 2 to ensure the syncCheck peer collection timeout (MiningTokenTTL/2) is > 0.
 	SyncIdleThreshold = 30 // seconds
 )
 
@@ -338,31 +338,61 @@ func syncCheck() error {
 	}
 
 	// collects mining peers' latest blocks
+	// getMiners timeout must be shorter than MiningTokenTTL to ensure etcdPut and subsequent operations
+	// complete while the token is still held. if the token expires first, another node may advance
+	// work before etcdPut, causing a stale overwrite. MiningTokenTTL/2 leaves headroom for those operations.
 	nodes := admin.getNodes()
-	states := getMiners("", 5000)
-	if len(nodes) == 0 && len(nodes) != len(states) {
-		// cached governance must be out-of-date
-		log.Error("sync check: node count mismatch, aborting")
+	states := getMiners("", MiningTokenTTL/2)
+	// The original guard `len(nodes)==0 && len(nodes)!=len(states)` was a dead
+	// branch in any healthy environment (nodes>=5). Recovered intent: if the
+	// governance cache is empty we cannot reason about quorum, so abort. The
+	// strict `nodes!=states` comparison was dropped because it false-positives
+	// on partial peer outages.
+	if len(nodes) == 0 {
+		log.Error("sync check: no governance nodes loaded, aborting", "states", len(states))
 		return nil
 	}
 
 	// 'work' is ahead of us
 	if work != nil && work.Height > header.Number.Int64() {
-		// checks if the recorded 'work' is the latest block of any mining peer
-		exists := false
+		// Detect catch-up via a single peer-state echo to silence the
+		// rebuild-path log noise that a reachability-only gate previously
+		// emitted every cycle (HeaderByHash(work.Hash) is guaranteed to
+		// return NotFound while we are still importing).
+		//
+		// Counting matches to require quorum was considered but does not
+		// fundamentally resist poison: a single connected malicious peer
+		// can echo any value, so any quorum size short of all-honest is
+		// still influenced by one attacker message. Given that limit, the
+		// policy here is side-effect minimization — quiet the legitimate
+		// catch-up case and leave poison recovery to the downstream
+		// consensus rebuild plus its reachability and regression guards.
+		// Operator intervention remains the backstop for the byzantine
+		// case.
+		exist := false
 		for _, state := range states {
 			if state.LatestBlockHeight == nil {
 				continue
 			}
-			if state.LatestBlockHeight.Int64() == work.Height && work.Hash == state.LatestBlockHash {
-				exists = true
+			if state.LatestBlockHeight.Int64() == work.Height &&
+				work.Hash == state.LatestBlockHash {
+				exist = true
 				break
 			}
 		}
-		if exists {
-			log.Error("sync check: the work is ahead of us and present", "height", work.Height, "hash", work.Hash)
+		if exist {
+			log.Debug("sync check: catching up to cluster head",
+				"local", header.Number, "work-height", work.Height,
+				"work-hash", work.Hash, "states", len(states))
 			return nil
 		}
+		// No peer state echoes the stored value: either the cluster moved
+		// past it (legitimate stale) or it was poisoned. Both route through
+		// the findConsensusBlock rebuild below; the downstream reachability
+		// check and regression guard reject unsafe writes.
+		log.Warn("sync check: work-key not echoed by any peer, rebuilding via consensus",
+			"work-height", work.Height, "work-hash", work.Hash,
+			"states", len(states))
 	}
 
 	// work record doesn't exist or recorded block doesn't exist
@@ -376,14 +406,47 @@ func syncCheck() error {
 		}
 		return nil
 	}
+	// Before persisting to etcd, require that consensusHash is reachable from
+	// the local chain. Writing an unreachable hash into wemixWorkKey would
+	// permanently fail every validator's acquireTokenSync (ErrInvalidWork), so
+	// reject unknown hashes outright.
+	peerHeader, herr := admin.cli.HeaderByHash(ctx, consensusHash)
+	if herr != nil || peerHeader == nil {
+		log.Error("sync check: consensus block not reachable from local chain, aborting",
+			"height", consensusHeight, "hash", consensusHash, "error", herr)
+		return nil
+	}
+	// Verify that consensusHash and consensusHeight are a consistent pair.
+	// A real hash echoed under a fake height (quorum-tampered
+	// findConsensusBlock output) would otherwise pass the reachability check
+	// and poison wemixWorkKey with an internally inconsistent value.
+	if peerHeader.Number.Cmp(consensusHeight) != 0 {
+		log.Error("sync check: consensus hash/height pair mismatch, suspected tampering, aborting",
+			"claimed-height", consensusHeight, "actual-height", peerHeader.Number,
+			"hash", consensusHash)
+		return nil
+	}
+	// consensusHeight must not regress the local head. A consensus tuple
+	// pointing below header.Number indicates poisoned states echoing an old
+	// (still-reachable) hash; persisting it would push every validator's
+	// mining target backward and stall block production permanently.
+	if consensusHeight.Cmp(header.Number) < 0 {
+		log.Error("sync check: consensus height regresses local head, aborting",
+			"local", header.Number, "consensus", consensusHeight, "consensus-hash", consensusHash)
+		return nil
+	}
 	newWork := &wemixWork{
 		Height: consensusHeight.Int64(),
 		Hash:   consensusHash,
 	}
+	// reset work only if the token is still held to prevent a stale overwrite.
+	// WARNING: do not call renew() between acquire and this call: renew updates Till,
+	// causing token to diverge from the value stored in etcd and failing the CAS.
 	if newWorkData, err := json.Marshal(newWork); err != nil {
 		panic("failed to marshal work data")
-	} else {
-		admin.etcdPut(wemixWorkKey, string(newWorkData))
+	} else if err = admin.etcdResetWork(token, string(newWorkData)); err != nil {
+		log.Error("sync check: token expired or superseded, aborting work reset", "error", err)
+		return err
 	}
 	log.Error("sync check: found consensus block, setting work", "height", consensusHeight, "hash", consensusHash, "error", err)
 	return err

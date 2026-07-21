@@ -40,6 +40,7 @@ func (tx *FeeDelegateDynamicFeeTx) SetSenderTx(senderTx DynamicFeeTx) {
 	tx.SenderTx.To = senderTx.To
 	tx.SenderTx.Value = senderTx.Value
 	tx.SenderTx.Data = senderTx.Data
+	tx.SenderTx.AccessList = make(AccessList, len(senderTx.AccessList))
 	copy(tx.SenderTx.AccessList, senderTx.AccessList)
 
 	v, r, s := senderTx.rawSignatureValues()

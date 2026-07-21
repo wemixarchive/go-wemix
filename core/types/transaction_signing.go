@@ -27,7 +27,13 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var ErrInvalidChainId = errors.New("invalid chain id for signer")
+var (
+	ErrInvalidChainId = errors.New("invalid chain id for signer")
+
+	// fee delegation
+	ErrFeePayerNotSet  = errors.New("fee delegation: feePayer not set")
+	ErrInvalidFeePayer = errors.New("fee delegation: invalid feePayer")
+)
 
 // sigCache is used to cache the derived sender and contains
 // the signer used to derive it.
@@ -191,6 +197,19 @@ func FeePayer(signer Signer, tx *Transaction) (common.Address, error) {
 	}
 	tx.feePayer.Store(sigCache{signer: signer, from: addr})
 	return addr, nil
+}
+
+// RecoverFeePayer recovers the feePayer address from FV/FR/FS and verifies it
+// matches the claimed FeePayer address. Assumes tx is a fee-delegated transaction.
+func RecoverFeePayer(chainID *big.Int, tx *Transaction) (common.Address, error) {
+	if tx.FeePayer() == nil {
+		return common.Address{}, ErrFeePayerNotSet
+	}
+	feePayer, err := FeePayer(NewFeeDelegateSigner(chainID), tx)
+	if err != nil || feePayer != *tx.FeePayer() {
+		return common.Address{}, ErrInvalidFeePayer
+	}
+	return feePayer, nil
 }
 
 // Signer encapsulates transaction signature handling. The name of this type is slightly

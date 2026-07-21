@@ -391,9 +391,9 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 			return core.ErrTxTypeNotSupported
 		}
 		// Make sure the transaction is signed properly.
-		feePayer, err := types.FeePayer(types.NewFeeDelegateSigner(pool.config.ChainID), tx)
-		if *tx.FeePayer() != feePayer || err != nil {
-			return core.ErrInvalidFeePayer
+		feePayer, err := types.RecoverFeePayer(pool.config.ChainID, tx)
+		if err != nil {
+			return err
 		}
 		if currentState.GetBalance(feePayer).Cmp(tx.FeePayerCost()) < 0 {
 			return core.ErrFeePayerInsufficientFunds

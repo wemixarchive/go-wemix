@@ -260,7 +260,9 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         uint256 slashing
     ) external onlyGovMem checkTimePeriod checkLockedAmount returns (uint256 ballotIdx) {
         require(staker != ZERO, "Invalid address");
-        require(isMember(staker), "Non-member");
+        // W1G-04: target must be a real staker key, not a voter-only address (stakerIdx==0).
+        // Revert string kept as "Non-member" to preserve the existing external interface.
+        require(isStaker(staker), "Non-member");
         require(getMemberLength() > 1, "Cannot remove a sole member");
         require(lockedBalanceOf(staker) >= lockAmount, "Insufficient balance that can be unlocked.");
         ballotIdx = ballotLength + 1;
@@ -305,7 +307,9 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         uint256 slashing
     ) external onlyGovMem checkTimePeriod checkLockedAmount checkMemberInfo(newInfo) returns (uint256 ballotIdx) {
         require(oldStaker != ZERO, "Invalid old Address");
-        require(isMember(oldStaker), "Non-member");
+        // W1G-04: target must be a real staker key, not a voter-only address (stakerIdx==0).
+        // Revert string kept as "Non-member" to preserve the existing external interface.
+        require(isStaker(oldStaker), "Non-member");
 
         require(
             (voters[stakerIdx[oldStaker]] == newInfo.voter ||
@@ -509,14 +513,6 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
                 changeGov(ballotIdx);
             } else if (ballotType == uint256(BallotTypes.EnvValChange)) {
                 applyEnv(ballotIdx);
-            } else if (ballotType == uint256(BallotTypes.Execute)) {
-                _execute(ballotIdx);
-            }
-        } else {
-            if (ballotType == uint256(BallotTypes.Execute)) {
-                IBallotStorage _ballotStorage = IBallotStorage(getBallotStorageAddress());
-                (, uint256 _value, ) = _ballotStorage.getBallotExecute(ballotIdx);
-                _returnValueToCreator(_ballotStorage, ballotIdx, _value);
             }
         }
         finalizeBallot(ballotIdx, ballotState);
@@ -572,6 +568,14 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             return false;
         }
 
+        // W1G-01: re-validate node uniqueness at execution time.
+        // Creation-time checkNodeInfoAdd does not protect against a second queued
+        // proposal carrying the same node metadata, since markers are only set here.
+        if (!checkNodeInfoAdd(name, enode, ip, port)) {
+            emit NotApplicable(ballotIdx, "Duplicated node info");
+            return false;
+        }
+
         lock(newStaker, lockAmount);
 
         // Add voting and reward member
@@ -613,57 +617,76 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
             emit NotApplicable(ballotIdx, "Not already a member");
             return; // Non-member. it is abnormal case, but passed
         }
+        // W1G-04: reject voter-only (index-0) identifiers before mutating member state.
+        if (stakerIdx[oldStaker] == 0 || nodeIdxFromMember[oldStaker] == 0) {
+            emit NotApplicable(ballotIdx, "Not already a member");
+            return;
+        }
+        // W1G-02: never let a stale ballot drop the member count to zero
+        // (creation enforces getMemberLength() > 1, re-check at execution).
+        if (getMemberLength() <= 1) {
+            emit NotApplicable(ballotIdx, "Cannot remove a sole member");
+            return;
+        }
 
         // Remove voting and reward member
-        uint256 removeIdx = stakerIdx[oldStaker];
-        address endAddr = stakers[memberLength];
-        address oldVoter = voters[removeIdx];
-        address oldReward = rewards[removeIdx];
+        uint256 removeStakerIdx = stakerIdx[oldStaker];
+        address oldVoter = voters[removeStakerIdx];
+        address oldReward = rewards[removeStakerIdx];
 
-        if (stakerIdx[oldStaker] != memberLength) {
-            (stakers[removeIdx], stakers[memberLength], stakerIdx[oldStaker], stakerIdx[endAddr]) = (
-                stakers[memberLength],
-                ZERO,
-                0,
-                stakerIdx[oldStaker]
-            );
-            removeIdx = rewardIdx[oldStaker];
-            endAddr = rewards[memberLength];
-            (rewards[removeIdx], rewards[memberLength], rewardIdx[oldReward], rewardIdx[endAddr]) = (
-                rewards[memberLength],
-                ZERO,
-                0,
-                rewardIdx[oldReward]
-            );
-            removeIdx = voterIdx[oldStaker];
-            endAddr = voters[memberLength];
-            (voters[removeIdx], voters[memberLength], voterIdx[oldVoter], voterIdx[endAddr]) = (voters[memberLength], ZERO, 0, voterIdx[oldVoter]);
-        } else {
-            stakers[memberLength] = ZERO;
-            stakerIdx[oldStaker] = 0;
-            rewards[memberLength] = ZERO;
-            rewardIdx[oldReward] = 0;
-            voters[memberLength] = ZERO;
-            voterIdx[oldVoter] = 0;
+        if (removeStakerIdx != memberLength) {
+            address endStaker = stakers[memberLength];
+            stakers[removeStakerIdx] = endStaker;
+            stakerIdx[endStaker] = removeStakerIdx;
+
+            // Reward can differ from oldStaker after a same-staker self-change.
+            // Remove reward through the actual reward key read from the removed index.
+            uint256 removeRewardIdx = rewardIdx[oldReward];
+            require(removeRewardIdx != 0, "Invalid reward index");
+            address endReward = rewards[memberLength];
+            rewards[removeRewardIdx] = endReward;
+            rewardIdx[endReward] = removeRewardIdx;
+
+            // Voter can also differ from oldStaker after a same-staker self-change.
+            // Remove voter through the actual voter key read from the removed index.
+            uint256 removeVoterIdx = voterIdx[oldVoter];
+            require(removeVoterIdx != 0, "Invalid voter index");
+            address endVoter = voters[memberLength];
+            voters[removeVoterIdx] = endVoter;
+            voterIdx[endVoter] = removeVoterIdx;
         }
-        memberLength = memberLength - 1;
-        // Remove node
+        // Clear the last element slot and remove the old mappings
+        stakers[memberLength] = ZERO;
+        stakerIdx[oldStaker] = 0;
 
-        Node storage node = nodes[removeIdx];
+        rewards[memberLength] = ZERO;
+        rewardIdx[oldReward] = 0;
+
+        voters[memberLength] = ZERO;
+        voterIdx[oldVoter] = 0;
+
+        memberLength = memberLength - 1;
+
+        // Remove node
+        // The node index is independent from the staker, reward, and voter indexes.
+        // Bind the storage pointer only after loading the real node index.
+        uint256 removeNodeIdx = nodeIdxFromMember[oldStaker];
+        require(removeNodeIdx != 0, "Invalid node index");
+        Node storage node = nodes[removeNodeIdx];
         checkNodeEnode[node.enode] = false;
         checkNodeName[node.name] = false;
         checkNodeIpPort[keccak256(abi.encodePacked(node.ip, node.port))] = false;
-        if (nodeIdxFromMember[oldStaker] != nodeLength) {
-            removeIdx = nodeIdxFromMember[oldStaker];
-            endAddr = nodeToMember[nodeLength];
+
+        if (removeNodeIdx != nodeLength) {
+            address endMember = nodeToMember[nodeLength];
 
             node.name = nodes[nodeLength].name;
             node.enode = nodes[nodeLength].enode;
             node.ip = nodes[nodeLength].ip;
             node.port = nodes[nodeLength].port;
 
-            nodeToMember[removeIdx] = endAddr;
-            nodeIdxFromMember[endAddr] = removeIdx;
+            nodeToMember[removeNodeIdx] = endMember;
+            nodeIdxFromMember[endMember] = removeNodeIdx;
         }
         nodeToMember[nodeLength] = ZERO;
         nodeIdxFromMember[oldStaker] = 0;
@@ -696,6 +719,12 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
         if (!isMember(oldStaker)) {
             emit NotApplicable(ballotIdx, "Old address is not a member");
             return false; // Non-member. it is abnormal case.
+        }
+        // W1G-04: member must be identified by a real staker key; reject voter-only
+        // (index-0) addresses so changeMember never writes into the sentinel slot 0.
+        if (stakerIdx[oldStaker] == 0 || nodeIdxFromMember[oldStaker] == 0) {
+            emit NotApplicable(ballotIdx, "Old address is not a member");
+            return false;
         }
 
         //old staker
@@ -1025,7 +1054,9 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
 
     function reInit() external reinitializer(2) onlyOwner {
         unchecked {
-            for (uint256 i = 0; i < getMemberLength(); i++) {
+            // W1G-03: node/member storage is 1-indexed; iterate 1..getMemberLength() inclusive
+            // so the last node is marked and the empty nodes[0] sentinel is never touched.
+            for (uint256 i = 1; i <= getMemberLength(); i++) {
                 Node memory node = nodes[i];
                 checkNodeName[node.name] = true;
                 checkNodeEnode[node.enode] = true;
@@ -1065,7 +1096,10 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
 
                 Node memory node;
                 (node.name, node.enode, node.ip, node.port) = ogov.getNode(i);
-                require(checkNodeInfoChange(node.name, node.enode, node.ip, node.port, node), "node info is duplicated");
+                // W1G-03: validate against markers set by previously imported nodes.
+                // checkNodeInfoChange(.., node) compares the node to itself and always passes;
+                // checkNodeInfoAdd checks the markers directly so real duplicates are caught.
+                require(checkNodeInfoAdd(node.name, node.enode, node.ip, node.port), "node info is duplicated");
                 checkNodeName[node.name] = true;
                 checkNodeEnode[node.enode] = true;
                 checkNodeIpPort[keccak256(abi.encodePacked(node.ip, node.port))] = true;
@@ -1094,62 +1128,5 @@ contract GovImp is AGov, ReentrancyGuardUpgradeable, BallotEnums, EnvConstants, 
 
     function upgradeToAndCall(address, bytes memory) external payable override {
         revert("Invalid access");
-    }
-
-    // Genernal Purpose
-
-    event Executed(bool indexed success, address indexed to, uint256 value, bytes calldatas, bytes returnData);
-    event FailReturnValue(uint256 indexed ballotIdx, address indexed creator, uint256 value, bytes result);
-
-    function addProposalToExecute(
-        address _target,
-        bytes memory _calldata,
-        bytes memory _memo,
-        uint256 _duration
-    ) external payable onlyGovMem checkTimePeriod checkLockedAmount {
-        require(_target != ZERO, "target cannot be zero");
-
-        address _creator = msg.sender;
-        if (msg.value != 0) {
-            (bool _ok, ) = _creator.call{ value: 0 }("");
-            require(_ok, "creator is not payable");
-        }
-
-        uint256 _ballotIdx = ballotLength + 1;
-
-        IBallotStorage(getBallotStorageAddress()).createBallotForExecute(
-            _ballotIdx, // ballot id
-            uint256(BallotTypes.Execute), // ballot type
-            _duration,
-            _creator, // creator
-            _target,
-            msg.value,
-            _calldata
-        );
-        updateBallotMemo(_ballotIdx, _memo);
-        ballotLength = _ballotIdx;
-    }
-
-    function _execute(uint256 _ballotIdx) private {
-        fromValidBallot(_ballotIdx, uint256(BallotTypes.Execute));
-        IBallotStorage _ballotStorage = IBallotStorage(getBallotStorageAddress());
-
-        (address _target, uint256 _value, bytes memory _calldata) = _ballotStorage.getBallotExecute(_ballotIdx);
-        (bool _success, bytes memory _returnData) = _target.call{ value: _value }(_calldata);
-
-        modifiedBlock = block.number;
-        emit Executed(_success, _target, _value, _calldata, _returnData);
-
-        if (!_success) _returnValueToCreator(_ballotStorage, _ballotIdx, _value);
-    }
-
-    function _returnValueToCreator(IBallotStorage _ballotStorage, uint256 _ballotIDx, uint256 _value) private {
-        if (_value == 0) return;
-
-        (, , , address _creator, , , , , , , ) = _ballotStorage.getBallotBasic(_ballotIDx);
-        (bool _ok, bytes memory _returnData) = _creator.call{ value: _value }("");
-        if (!_ok) {
-            emit FailReturnValue(_ballotIDx, _creator, _value, _returnData);
-        }
     }
 }
