@@ -1555,14 +1555,14 @@ func (w *worker) timeIt(blockInterval int64) (timestamp uint64, till time.Time) 
 		offset = 1
 	}
 	timestamp = uint64(nowInSeconds)
-	if timestamp < parent.Number().Uint64() {
-		timestamp = parent.Number().Uint64()
+	if timestamp < parent.Time() {
+		timestamp = parent.Time()
 	}
 	switch offset {
 	case -1: // behind, i.e. too few blocks so far, need to make more
 		tms := nowInMilliSeconds + params.BlockMinBuildTime
 		if tms/1000 <= int64(parent.Time()) {
-			// make sure that no more than 2 blocks have the same timestamp
+			// Delay block completion until the next second boundary to reduce consecutive same-timestamp blocks.
 			tms = (nowInSeconds + 1) * 1000
 		}
 		till = time.Unix(tms/1e3, (tms%1e3)*1e6)
