@@ -76,7 +76,8 @@ func deployGovernanceContracts(ctx *cli.Context) error {
 	switch len(args) {
 	case 3:
 		configFile, accountFile = args[0], args[1]
-		lockAmount, ok := new(big.Int).SetString(args[2], 10)
+		var ok bool
+		lockAmount, ok = new(big.Int).SetString(args[2], 10)
 		if !ok || lockAmount.Sign() <= 0 {
 			return errInvalidArguments
 		}
