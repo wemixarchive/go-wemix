@@ -688,3 +688,40 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 		}
 	}
 }
+
+func TestTimeItTimestampLowerBound(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	engine := ethash.NewFaker()
+	defer engine.Close()
+
+	w, b := newTestWorker(t, ethashChainConfig, engine, db, 0)
+	defer w.close()
+
+	// case 1: normal clock — insert a block at current time, then verify timestamp follows nowInSeconds
+	blocks, _ := core.GenerateChain(ethashChainConfig, b.chain.Genesis(), engine, db, 1, func(i int, gen *core.BlockGen) {
+		// makeHeader sets header.Time = parent.Time() + 10 by default; subtract that base and an extra 5s
+		// to set the block timestamp slightly in the past, ensuring timestamp > parent.Time().
+		gen.OffsetTime(time.Now().Unix() - int64(b.chain.Genesis().Time()) - 10 - 5)
+	})
+	if _, err := b.chain.InsertChain(blocks); err != nil {
+		t.Fatalf("failed to insert block: %v", err)
+	}
+
+	parent := w.chain.CurrentBlock()
+	if timestamp, _ := w.timeIt(1000); timestamp <= parent.Time() {
+		t.Errorf("normal clock: timestamp %d should be greater than parent.Time %d", timestamp, parent.Time())
+	}
+
+	// case 2: parent timestamp in the future (simulates clock drift) — timestamp must be floored to parent.Time
+	futureBlocks, _ := core.GenerateChain(ethashChainConfig, blocks[0], engine, db, 1, func(i int, gen *core.BlockGen) {
+		gen.OffsetTime(3600)
+	})
+	if _, err := b.chain.InsertChain(futureBlocks); err != nil {
+		t.Fatalf("failed to insert future block: %v", err)
+	}
+
+	parent = w.chain.CurrentBlock()
+	if timestamp, _ := w.timeIt(1000); timestamp != parent.Time() {
+		t.Errorf("future parent: timestamp %d should be floored to parent.Time %d", timestamp, parent.Time())
+	}
+}
