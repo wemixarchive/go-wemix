@@ -92,11 +92,11 @@ func newTestEtcdAdmin(t *testing.T) *wemixAdmin {
 	ma.etcdCli = v3client.New(etcd.Server)
 
 	// etcdIsReady() also checks the package-level etcdReady flag.
-	prevReady := etcdReady
-	etcdReady = true
+	prevReady := etcdReady.Load()
+	etcdReady.Store(true)
 
 	t.Cleanup(func() {
-		etcdReady = prevReady
+		etcdReady.Store(prevReady)
 		if ma.etcdCli != nil {
 			ma.etcdCli.Close()
 		}

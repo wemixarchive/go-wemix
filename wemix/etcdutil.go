@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
@@ -32,7 +33,7 @@ import (
 
 var (
 	etcdLock         = &SpinLock{0}
-	etcdReady        = false
+	etcdReady        atomic.Bool
 	etcdAutoJoinLock = make(chan interface{}, 1)
 )
 
@@ -153,7 +154,7 @@ func (ma *wemixAdmin) etcdIsRunning() bool {
 }
 
 func (ma *wemixAdmin) etcdIsReady() bool {
-	return ma.etcd != nil && ma.etcdCli != nil && etcdReady
+	return ma.etcd != nil && ma.etcdCli != nil && etcdReady.Load()
 }
 
 func (ma *wemixAdmin) etcdGetCluster() string {
@@ -309,10 +310,10 @@ func etcdEventHandler() {
 	}
 	select {
 	case <-admin.etcd.Server.ReadyNotify():
-		etcdReady = true
+		etcdReady.Store(true)
 		log.Info("etcd server ready")
 	case err := <-admin.etcd.Err():
-		etcdReady = false
+		etcdReady.Store(false)
 		log.Info("etcd server failed to start", "error", err)
 		return
 	}
