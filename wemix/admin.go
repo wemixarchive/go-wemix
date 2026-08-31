@@ -120,8 +120,6 @@ type rewardParameters struct {
 }
 
 var (
-	// "Wemix Registry"
-	magic, _                  = new(big.Int).SetString("0x57656d6978205265676973747279", 0)
 	etcdClusterName           = "Wemix"
 	big0                      = big.NewInt(0)
 	nilAddress                = common.Address{}
@@ -136,9 +134,6 @@ var (
 	ErrInvalidWork    = errors.New("invalid work")
 	ErrNotFound       = errors.New("not found")
 	ErrNotRunning     = errors.New("not running")
-
-	etcdCompactFrequency = int64(100)
-	etcdCompactWindow    = int64(100)
 
 	// cached block build parameters
 	blockBuildParamsLock = &sync.Mutex{}
@@ -1112,24 +1107,6 @@ func AmHub(id string) int {
 		return 1
 	}
 	return 0
-}
-
-func (ma *wemixAdmin) pendingEmpty() bool {
-	type txpool_status struct {
-		Pending hexutil.Uint `json:"pending"`
-		Queued  hexutil.Uint `json:"queued"`
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var status txpool_status
-	if err := admin.rpcCli.CallContext(ctx, &status, "txpool_status"); err != nil {
-		log.Error("Canot get txpool.status", "error", err)
-		return false
-	}
-
-	return status.Pending == 0
 }
 
 func suggestGasPrice() *big.Int {
