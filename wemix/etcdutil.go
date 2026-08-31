@@ -361,9 +361,8 @@ func (ma *wemixAdmin) etcdInit() error {
 	if err != nil {
 		log.Error("etcd failed to initialize", "error", err)
 		return err
-	} else {
-		log.Info("etcd initialized")
 	}
+	log.Info("etcd initialized")
 
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)

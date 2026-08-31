@@ -682,12 +682,7 @@ func (ma *wemixAdmin) update() {
 }
 
 func (ma *wemixAdmin) checkMining() {
-	on := false
-	if ma.nodeInfo != nil && ma.nodeInfo.ID == admin.bootNodeId {
-		on = true
-	} else if ma.self != nil {
-		on = true
-	}
+	on := (ma.nodeInfo != nil && ma.nodeInfo.ID == admin.bootNodeId) || ma.self != nil
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
