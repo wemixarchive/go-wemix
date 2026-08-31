@@ -907,21 +907,23 @@ func (lck *WemixToken) releaseTokenSync(ctx context.Context, height *big.Int, ha
 	exists := true
 	prevWork, work, lockValue := "", "", ""
 
-	if data, err := json.Marshal(lck); err != nil {
+	data, err := json.Marshal(lck)
+	if err != nil {
 		return err
-	} else {
-		lockValue = string(data)
 	}
-	if data, err := json.Marshal(&wemixWork{Height: height.Int64() - 1, Hash: parentHash}); err != nil {
+	lockValue = string(data)
+
+	data, err = json.Marshal(&wemixWork{Height: height.Int64() - 1, Hash: parentHash})
+	if err != nil {
 		return err
-	} else {
-		prevWork = string(data)
 	}
-	if data, err := json.Marshal(&wemixWork{Height: height.Int64(), Hash: hash}); err != nil {
+	prevWork = string(data)
+
+	data, err = json.Marshal(&wemixWork{Height: height.Int64(), Hash: hash})
+	if err != nil {
 		return err
-	} else {
-		work = string(data)
 	}
+	work = string(data)
 
 again:
 	tx := lck.admin.etcdCli.Txn(ctx)
