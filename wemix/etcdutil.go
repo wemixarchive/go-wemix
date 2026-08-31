@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"math/rand"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -284,23 +283,6 @@ func (ma *wemixAdmin) etcdTransferLeadership() error {
 	return ma.etcd.Server.TransferLeadership()
 }
 
-func (ma *wemixAdmin) etcdWipe() error {
-	if ma.etcdIsRunning() {
-		ma.etcdCli.Close()
-		ma.etcd.Server.Stop()
-		ma.etcd = nil
-		ma.etcdCli = nil
-	}
-
-	if _, err := os.Stat(ma.etcdDir); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	return os.RemoveAll(ma.etcdDir)
-}
-
 func etcdEventHandler() {
 	if !admin.etcdIsRunning() {
 		return
@@ -528,28 +510,6 @@ func (ma *wemixAdmin) etcdAutoJoin() error {
 	return err
 }
 
-func (ma *wemixAdmin) etcdStop() error {
-	if !ma.etcdIsRunning() {
-		return ErrNotRunning
-	}
-	if ma.etcdCli != nil {
-		ma.etcdCli.Close()
-	}
-	if ma.etcd != nil {
-		ma.etcd.Server.HardStop()
-	}
-	ma.etcd = nil
-	ma.etcdCli = nil
-	return nil
-}
-
-func (ma *wemixAdmin) etcdIsLeader() bool {
-	if !ma.etcdIsReady() {
-		return false
-	}
-	return ma.etcd.Server.ID() == ma.etcd.Server.Leader()
-}
-
 // returns leader id and node
 func (ma *wemixAdmin) etcdLeader(locked bool) (uint64, *wemixNode) {
 	if !ma.etcdIsReady() {
@@ -644,31 +604,6 @@ func (ma *wemixAdmin) etcdResetWork(token *WemixToken, newWork string) error {
 		return ErrInvalidToken
 	}
 	return nil
-}
-
-// compare & swap, do put only if previous value matches
-func (ma *wemixAdmin) etcdPut2(key, value, prev string) error {
-	if !ma.etcdIsReady() {
-		return ErrNotRunning
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(),
-		ma.etcd.Server.Cfg.ReqTimeout())
-	defer cancel()
-
-	tx := ma.etcdCli.Txn(ctx)
-	txresp, err := tx.If(
-		clientv3.Compare(clientv3.Value(key), "=", prev),
-	).Then(
-		clientv3.OpPut(key, value),
-		clientv3.OpGet(key),
-	).Else(
-		clientv3.OpGet(key),
-	).Commit()
-	if err == nil && !txresp.Succeeded {
-		err = ErrExists
-	}
-	return err
 }
 
 func (ma *wemixAdmin) etcdDelete(key string) error {
@@ -822,39 +757,6 @@ func (lck *WemixToken) ttl() int64 {
 	return ttl
 }
 
-func (lck *WemixToken) renew(ctx context.Context, ttl int) error {
-	prev, err := json.Marshal(lck)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().Unix()
-	prevTill := lck.Till
-	lck.Till = now + int64(ttl)
-	value, err := json.Marshal(lck)
-	if err != nil {
-		return err
-	}
-
-	tx := lck.admin.etcdCli.Txn(ctx)
-	txresp, err := tx.If(
-		clientv3.Compare(clientv3.Value(lck.Key), "=", prev),
-	).Then(
-		clientv3.OpPut(lck.Key, string(value)),
-		clientv3.OpGet(lck.Key),
-	).Else(
-		clientv3.OpGet(lck.Key),
-	).Commit()
-	if err == nil && !txresp.Succeeded {
-		err = ErrExists
-	}
-	if err != nil {
-		// restore the till value upon failure
-		lck.Till = prevTill
-	}
-	return err
-}
-
 func (lck *WemixToken) release(ctx context.Context) error {
 	value, err := json.Marshal(lck)
 	if err != nil {
@@ -872,82 +774,6 @@ func (lck *WemixToken) release(ctx context.Context) error {
 		return ErrExists
 	}
 	return err
-}
-
-func (lck *WemixToken) lockedPut(ctx context.Context, key, value, prev string) error {
-	exists := true
-	lockValue, err := json.Marshal(lck)
-	if err != nil {
-		return err
-	}
-
-again:
-	tx := lck.admin.etcdCli.Txn(ctx)
-	var txIf clientv3.Txn
-	if exists {
-		txIf = tx.If(
-			clientv3.Compare(clientv3.Value(lck.Key), "=", lockValue),
-			clientv3.Compare(clientv3.Value(key), "=", prev),
-		)
-	} else {
-		txIf = tx.If(
-			clientv3.Compare(clientv3.Value(lck.Key), "=", lockValue),
-			clientv3.Compare(clientv3.Version(key), "=", 0),
-		)
-	}
-	txresp, err := txIf.Then(
-		clientv3.OpPut(key, value),
-		clientv3.OpGet(key),
-	).Else(
-		clientv3.OpGet(key),
-	).Commit()
-
-	if err == nil && !txresp.Succeeded {
-		err = ErrExists
-		if len(txresp.Responses) > 0 {
-			if rr := txresp.Responses[0].GetResponseRange(); rr.Count == 0 {
-				// if not exists, put empty string and try again
-				tx = lck.admin.etcdCli.Txn(ctx)
-				_, err := tx.If(
-					clientv3.Compare(clientv3.Version(key), "=", 0),
-				).Then(
-					clientv3.OpPut(key, ""),
-				).Commit()
-				if err == nil {
-					exists = false
-					goto again
-				}
-			}
-		}
-
-	}
-	return err
-}
-
-func (ma *wemixAdmin) ttl2(ctx context.Context, key string) (int64, error) {
-	rsp, err := ma.etcdCli.Get(ctx, key)
-	if err != nil {
-		return -1, err
-	} else if rsp.Count == 0 {
-		return -1, nil
-	}
-	lock := &WemixToken{}
-	var value []byte
-	for _, kv := range rsp.Kvs {
-		value = kv.Value
-		break
-	}
-	if e2 := json.Unmarshal(value, lock); e2 != nil {
-		err = e2
-		return -1, err
-	}
-	lock.admin = ma
-
-	ttl := lock.Till - time.Now().Unix()
-	if ttl < 0 {
-		ttl = -1
-	}
-	return ttl, nil
 }
 
 // acquire token iff we're in sync with the latest block
@@ -1145,20 +971,6 @@ again:
 		// work mismatch
 		err = ErrInvalidWork
 	}
-	return err
-}
-
-func (ma *wemixAdmin) etcdCompact(rev int64) error {
-	if !ma.etcdIsReady() {
-		return ErrNotRunning
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(),
-		ma.etcd.Server.Cfg.ReqTimeout())
-	defer cancel()
-	_, err := ma.etcdCli.Compact(ctx, rev, clientv3.WithCompactPhysical())
-	// WithCompactPhysical makes Compact wait until all compacted entries are
-	// removed from the etcd server's storage.
 	return err
 }
 
