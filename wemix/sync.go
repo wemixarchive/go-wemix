@@ -107,19 +107,17 @@ func handleMinerStatusUpdate() {
 // checks if this node is boot node that can / should generate blocks before
 // a governance gets set up.
 func isBootNodeBeforeGenesis() bool {
-	if params.ConsensusMethod == params.ConsensusPoW {
+	switch params.ConsensusMethod {
+	case params.ConsensusPoW:
 		return true
-	} else if params.ConsensusMethod == params.ConsensusETCD {
+	case params.ConsensusETCD:
 		return false
-	} else if params.ConsensusMethod == params.ConsensusPoA {
+	case params.ConsensusPoA:
 		if admin == nil {
 			return false
-		} else if admin.self == nil || len(admin.nodes) <= 0 {
-			if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
-				return true
-			} else {
-				return false
-			}
+		}
+		if admin.self == nil || len(admin.nodes) <= 0 {
+			return admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId
 		}
 	}
 	return false
