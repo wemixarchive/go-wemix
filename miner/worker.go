@@ -1603,13 +1603,19 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 		return
 	}
 	if !wemixminer.IsPoW() {
+		// Skip token acquisition while the worker is stopped (e.g. during sync).
+		// commitEx's block build & ReleaseMiningToken are gated by isRunning(),
+		// so acquiring here would leak the cluster-shared token until its Till expires.
+		if !w.isRunning() {
+			w.refreshPending(true)
+			return
+		}
+
 		ok, err := wemixminer.AcquireMiningToken(height, parent.Hash())
 		if ok {
 			log.Debug("Mining Token, successful", "height", height, "parent-hash", parent.Hash())
 		} else {
 			log.Debug("Mining Token, failure", "height", height, "parent-hash", parent.Hash(), "error", err)
-		}
-		if !ok {
 			w.refreshPending(true)
 			return
 		}
