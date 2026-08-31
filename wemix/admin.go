@@ -630,13 +630,13 @@ func (ma *wemixAdmin) update() {
 				ma.addPeer(i)
 			}
 		}
-		if len(data.addedNodes) > 0 {
+		if len(data.updatedNodes) > 0 {
 			log.Debug("Updated:\n")
 			for _, i := range data.updatedNodes {
 				log.Debug(fmt.Sprintf("%v\n", i))
 			}
 		}
-		if len(data.addedNodes) > 0 {
+		if len(data.deletedNodes) > 0 {
 			log.Debug("Deleted:\n")
 			for _, i := range data.deletedNodes {
 				log.Debug(fmt.Sprintf("%v\n", i))
