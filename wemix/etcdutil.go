@@ -594,6 +594,12 @@ func (ma *wemixAdmin) etcdPut(key, value string) (int64, error) {
 	return resp.Header.Revision, nil
 }
 
+// etcdGet retrieves the value of a single key.
+// Get is called without WithPrefix/WithRange options, so it looks up exactly one key and
+// rsp.Kvs always has at most one entry; Kvs[0] is safe after the rsp.Count == 0 guard.
+// If prefix or range queries are needed, implement a separate function — do not extend this one.
+// With WithPrefix/WithRange, multiple KVs are returned in lexicographic order; using Kvs[0]
+// would silently return only the first result, making the behavior depend on sort order.
 func (ma *wemixAdmin) etcdGet(key string) (string, error) {
 	if !ma.etcdIsReady() {
 		return "", ErrNotRunning
@@ -609,11 +615,7 @@ func (ma *wemixAdmin) etcdGet(key string) (string, error) {
 	if rsp.Count == 0 {
 		return "", ErrNotFound
 	}
-	var v string
-	for _, kv := range rsp.Kvs {
-		v = string(kv.Value)
-	}
-	return v, nil
+	return string(rsp.Kvs[0].Value), nil
 }
 
 // resets work only while the given token is still held
