@@ -446,8 +446,8 @@ func syncCheck() error {
 		log.Error("sync check: token expired or superseded, aborting work reset", "error", err)
 		return err
 	}
-	log.Error("sync check: found consensus block, setting work", "height", consensusHeight, "hash", consensusHash, "error", err)
-	return err
+	log.Info("sync check: found consensus block, setting work", "height", consensusHeight, "hash", consensusHash)
+	return nil
 }
 
 // EOF
