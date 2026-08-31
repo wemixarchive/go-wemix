@@ -417,59 +417,56 @@ func (ma *wemixAdmin) getGovData(refresh bool) (*govdata, error) {
 	}
 
 	opts := &bind.CallOpts{Context: ctx, BlockNumber: block.Number}
-	if modifiedBlock, err := ma.contracts.GovImp.ModifiedBlock(opts); err != nil {
+	modifiedBlock, err := ma.contracts.GovImp.ModifiedBlock(opts)
+	if err != nil {
 		return data, err
-	} else {
-		data.modifiedBlock = modifiedBlock.Int64()
 	}
+	data.modifiedBlock = modifiedBlock.Int64()
 
 	if !refresh && ma.modifiedBlock == data.modifiedBlock {
 		return data, nil
 	}
 
-	if blockInterval, err := ma.contracts.EnvStorageImp.GetBlockCreationTime(opts); err != nil {
-		data.blockInterval = ma.blockInterval
-	} else {
+	data.blockInterval = ma.blockInterval
+	if blockInterval, err := ma.contracts.EnvStorageImp.GetBlockCreationTime(opts); err == nil {
 		data.blockInterval = blockInterval.Int64()
 	}
 
-	if blocksPer, err := ma.contracts.EnvStorageImp.GetBlocksPer(opts); err != nil {
-		data.blocksPer = ma.blocksPer
-	} else {
+	data.blocksPer = ma.blocksPer
+	if blocksPer, err := ma.contracts.EnvStorageImp.GetBlocksPer(opts); err == nil {
 		data.blocksPer = blocksPer.Int64()
 	}
 
-	if maxIdleBlockInterval, err := ma.contracts.EnvStorageImp.GetMaxIdleBlockInterval(opts); err != nil {
-		data.maxIdleBlockInterval = int64(params.MaxIdleBlockInterval)
-	} else {
+	data.maxIdleBlockInterval = int64(params.MaxIdleBlockInterval)
+	if maxIdleBlockInterval, err := ma.contracts.EnvStorageImp.GetMaxIdleBlockInterval(opts); err == nil {
 		data.maxIdleBlockInterval = maxIdleBlockInterval.Int64()
 	}
 
-	if blockReward, err := ma.contracts.EnvStorageImp.GetBlockRewardAmount(opts); err != nil {
+	blockReward, err := ma.contracts.EnvStorageImp.GetBlockRewardAmount(opts)
+	if err != nil {
 		return data, err
-	} else {
-		data.blockReward = blockReward
 	}
+	data.blockReward = blockReward
 
-	if maxPriorityFeePerGas, err := ma.contracts.EnvStorageImp.GetMaxPriorityFeePerGas(opts); err != nil {
+	maxPriorityFeePerGas, err := ma.contracts.EnvStorageImp.GetMaxPriorityFeePerGas(opts)
+	if err != nil {
 		return data, err
-	} else {
-		data.maxPriorityFeePerGas = maxPriorityFeePerGas
 	}
+	data.maxPriorityFeePerGas = maxPriorityFeePerGas
 
-	if gasLimit, baseFeeMaxChangeRate, gasTargetPercentage, err := ma.contracts.EnvStorageImp.GetGasLimitAndBaseFee(opts); err != nil {
+	gasLimit, baseFeeMaxChangeRate, gasTargetPercentage, err := ma.contracts.EnvStorageImp.GetGasLimitAndBaseFee(opts)
+	if err != nil {
 		return data, err
-	} else {
-		data.gasLimit = gasLimit
-		data.baseFeeMaxChangeRate = baseFeeMaxChangeRate.Int64()
-		data.gasTargetPercentage = gasTargetPercentage.Int64()
 	}
+	data.gasLimit = gasLimit
+	data.baseFeeMaxChangeRate = baseFeeMaxChangeRate.Int64()
+	data.gasTargetPercentage = gasTargetPercentage.Int64()
 
-	if maxBaseFee, err := ma.contracts.EnvStorageImp.GetMaxBaseFee(opts); err != nil {
+	maxBaseFee, err := ma.contracts.EnvStorageImp.GetMaxBaseFee(opts)
+	if err != nil {
 		return data, err
-	} else {
-		data.maxBaseFee = maxBaseFee
 	}
+	data.maxBaseFee = maxBaseFee
 
 	data.nodes, err = ma.getWemixNodes(ctx, block.Number)
 	if err != nil {
@@ -980,11 +977,11 @@ func signBlock(height *big.Int, hash common.Hash) (common.Address, []byte, error
 		}
 
 		nodeId := crypto.FromECDSAPub(&prvKey.PublicKey)[1:]
-		if addr, err := enodeExists(ctx, height, contracts.GovImp, nodeId); err != nil {
+		addr, err := enodeExists(ctx, height, contracts.GovImp, nodeId)
+		if err != nil {
 			return common.Address{}, nil, err
-		} else {
-			return addr, sig, nil
 		}
+		return addr, sig, nil
 	} else if admin.nodeInfo != nil && admin.nodeInfo.ID == admin.bootNodeId {
 		return admin.bootAccount, sig, nil
 	} else {
@@ -1155,33 +1152,33 @@ func getBlockBuildParameters(height *big.Int) (blockInterval int64, maxBaseFee, 
 		env *gov.EnvStorageImp
 		gov *gov.GovImp
 	)
-	if contracts, err2 := admin.getRegGovEnvContracts(ctx, height); err2 != nil {
+	contracts, err2 := admin.getRegGovEnvContracts(ctx, height)
+	if err2 != nil {
 		err = wemixminer.ErrNotInitialized
 		return
-	} else {
-		env, gov = contracts.EnvStorageImp, contracts.GovImp
 	}
+	env, gov = contracts.EnvStorageImp, contracts.GovImp
 
 	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
 	if count, err2 := gov.GetMemberLength(opts); err2 != nil || count.Sign() == 0 {
 		err = wemixminer.ErrNotInitialized
 		return
 	}
-	if v, err2 := env.GetBlockCreationTime(opts); err2 != nil {
+	v, err2 := env.GetBlockCreationTime(opts)
+	if err2 != nil {
 		err = wemixminer.ErrNotInitialized
 		return
-	} else {
-		blockInterval = v.Int64()
 	}
+	blockInterval = v.Int64()
 
-	if GasLimit, BaseFeeMaxChangeRate, GasTargetPercentage, err2 := env.GetGasLimitAndBaseFee(opts); err2 != nil {
+	GasLimit, BaseFeeMaxChangeRate, GasTargetPercentage, err2 := env.GetGasLimitAndBaseFee(opts)
+	if err2 != nil {
 		err = wemixminer.ErrNotInitialized
 		return
-	} else {
-		gasLimit = GasLimit
-		baseFeeMaxChangeRate = BaseFeeMaxChangeRate.Int64()
-		gasTargetPercentage = GasTargetPercentage.Int64()
 	}
+	gasLimit = GasLimit
+	baseFeeMaxChangeRate = BaseFeeMaxChangeRate.Int64()
+	gasTargetPercentage = GasTargetPercentage.Int64()
 
 	if maxBaseFee, err = env.GetMaxBaseFee(opts); err != nil {
 		err = wemixminer.ErrNotInitialized
