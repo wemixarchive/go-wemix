@@ -895,7 +895,9 @@ again:
 		}
 		return nil, ErrInvalidWork
 	}
-	if lock != nil && err == nil {
+	// lock is always non-nil here: assigned unconditionally at the top of the
+	// again block; every path that returns nil does so via an early return above.
+	if err == nil {
 		etcdSyncMembership()
 	}
 	return lock, err
