@@ -189,10 +189,7 @@ func hasMiningToken() bool {
 		return true
 	}
 	lck := loadMiningToken()
-	if lck == nil || lck.ttl() < 0 {
-		return false
-	}
-	return true
+	return lck != nil && lck.ttl() >= 0
 }
 
 // finds a block that the majority of the miners have
@@ -248,21 +245,23 @@ func syncCheck() error {
 	}
 
 	secondsSinceUpdate := func() int {
-		if v := latestUpdateTime.Load(); v == nil {
+		v := latestUpdateTime.Load()
+		if v == nil {
 			latestUpdateTime.Store(time.Now())
 			return -1
-		} else if t, ok := v.(time.Time); ok {
-			return int(time.Since(t).Seconds())
-		} else {
+		}
+		t, ok := v.(time.Time)
+		if !ok {
 			panic("invalid update time")
 		}
+		return int(time.Since(t).Seconds())
 	}
 
-	if t := secondsSinceUpdate(); t <= SyncIdleThreshold {
+	t := secondsSinceUpdate()
+	if t <= SyncIdleThreshold {
 		return nil
-	} else {
-		log.Debug("sync check", "last update in seconds", t)
 	}
+	log.Debug("sync check", "last update in seconds", t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -312,12 +311,11 @@ func syncCheck() error {
 	)
 	if workData, err = admin.etcdGet(wemixWorkKey); err != nil {
 		return err
-	} else {
-		if err = json.Unmarshal([]byte(workData), work); err != nil {
-			// invalid work data
-			log.Error("sync check: ignoring invalid work", "work", workData)
-			work = nil
-		}
+	}
+	if err = json.Unmarshal([]byte(workData), work); err != nil {
+		// invalid work data
+		log.Error("sync check: ignoring invalid work", "work", workData)
+		work = nil
 	}
 
 	// if we're in sync, nothing we can do
@@ -440,9 +438,11 @@ func syncCheck() error {
 	// reset work only if the token is still held to prevent a stale overwrite.
 	// WARNING: do not call renew() between acquire and this call: renew updates Till,
 	// causing token to diverge from the value stored in etcd and failing the CAS.
-	if newWorkData, err := json.Marshal(newWork); err != nil {
+	newWorkData, err := json.Marshal(newWork)
+	if err != nil {
 		panic("failed to marshal work data")
-	} else if err = admin.etcdResetWork(token, string(newWorkData)); err != nil {
+	}
+	if err = admin.etcdResetWork(token, string(newWorkData)); err != nil {
 		log.Error("sync check: token expired or superseded, aborting work reset", "error", err)
 		return err
 	}
