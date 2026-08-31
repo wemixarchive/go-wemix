@@ -153,11 +153,7 @@ var (
 )
 
 func (n *wemixNode) eq(m *wemixNode) bool {
-	if n.Name == m.Name && n.Id == m.Id && n.Ip == m.Ip && n.Port == m.Port {
-		return true
-	} else {
-		return false
-	}
+	return n.Name == m.Name && n.Id == m.Id && n.Ip == m.Ip && n.Port == m.Port
 }
 
 // convert v5 id to v4 id
@@ -1096,11 +1092,7 @@ func IsPartner(id string) bool {
 
 	_, ok := admin.nodes[id]
 	if !ok {
-		if id == admin.bootNodeId {
-			return true
-		} else {
-			return false
-		}
+		return id == admin.bootNodeId
 	}
 
 	return true
