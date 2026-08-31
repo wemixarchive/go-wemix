@@ -1490,11 +1490,8 @@ func requirePendingTxs() bool {
 	p, _, e := admin.getTxPoolStatus()
 	if e != nil {
 		return false
-	} else if p > 0 {
-		return false
 	}
-
-	return true
+	return p == 0
 }
 
 // checks
