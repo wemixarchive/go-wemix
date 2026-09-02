@@ -725,3 +725,40 @@ func TestTimeItTimestampLowerBound(t *testing.T) {
 		t.Errorf("future parent: timestamp %d should be floored to parent.Time %d", timestamp, parent.Time())
 	}
 }
+
+func TestSkipMiningTokenAcquisitionWhenWorkerStopped(t *testing.T) {
+	oldConsensus := params.ConsensusMethod
+	params.ConsensusMethod = params.ConsensusPoA
+	defer func() { params.ConsensusMethod = oldConsensus }()
+
+	cfg := new(params.ChainConfig)
+	*cfg = *params.TestChainConfig
+	cfg.CroissantBlock = nil
+
+	w, _ := newTestWorker(t, cfg, clique.New(cliqueChainConfig.Clique, rawdb.NewMemoryDatabase()), rawdb.NewMemoryDatabase(), 0)
+	defer w.close()
+
+	var acquired int32
+	oldAcquireFunc := wemixminer.AcquireMiningTokenFunc
+	wemixminer.AcquireMiningTokenFunc = func(height *big.Int, parentHash common.Hash) (bool, error) {
+		atomic.AddInt32(&acquired, 1)
+		return true, nil
+	}
+	defer func() { wemixminer.AcquireMiningTokenFunc = oldAcquireFunc }()
+
+	// Case 1: When worker is stopped (!w.isRunning()), commitWork should skip token acquisition
+	w.stop()
+	w.commitWork(nil, false, time.Now().Unix())
+
+	if atomic.LoadInt32(&acquired) != 0 {
+		t.Errorf("AcquireMiningTokenFunc should NOT be called when worker is stopped, got count: %d", acquired)
+	}
+
+	// Case 2: When worker is running (w.isRunning()), commitWork should attempt token acquisition
+	w.start()
+	w.commitWork(nil, false, time.Now().Unix())
+
+	if atomic.LoadInt32(&acquired) != 1 {
+		t.Errorf("AcquireMiningTokenFunc SHOULD be called when worker is running, got count: %d", acquired)
+	}
+}
