@@ -495,6 +495,13 @@ func (ma *wemixAdmin) etcdAutoJoin() error {
 		}
 	}
 
+	// gap is set only when getMiners returns a non-empty list and self is found.
+	// If gap == 0, there are no peers to coordinate with, so there is nothing to schedule.
+	// Without this guard, tt = sz * gap = 0 and ct/tt panics with integer divide-by-zero.
+	if gap == 0 {
+		return ErrNotFound
+	}
+
 	// schedule it
 	tt := sz * gap
 	ct := time.Now().Unix()
