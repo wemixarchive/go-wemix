@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"math/rand"
 	"net/url"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -100,7 +99,8 @@ func (ma *wemixAdmin) etcdFixCluster(cluster string) (string, error) {
 				u, err := url.Parse(j[1])
 				if err != nil {
 					return "", err
-				} else if u.Host != host {
+				}
+				if u.Host != host {
 					bb.WriteString(i)
 				} else {
 					found = true
@@ -217,11 +217,10 @@ func (ma *wemixAdmin) etcdAddMember(name string) (string, error) {
 		log.Error("failed to add a new member",
 			"name", name, "ip", node.Ip, "port", node.Port+1, "error", err)
 		return "", err
-	} else {
-		log.Info("a new member added",
-			"name", name, "ip", node.Ip, "port", node.Port+1, "error", err)
-		return bb.String(), nil
 	}
+	log.Info("a new member added",
+		"name", name, "ip", node.Ip, "port", node.Port+1)
+	return bb.String(), nil
 }
 
 // returns new cluster string if removing the member is successful
@@ -284,25 +283,6 @@ func (ma *wemixAdmin) etcdTransferLeadership() error {
 	return ma.etcd.Server.TransferLeadership()
 }
 
-func (ma *wemixAdmin) etcdWipe() error {
-	if ma.etcdIsRunning() {
-		ma.etcdCli.Close()
-		ma.etcd.Server.Stop()
-		ma.etcd = nil
-		ma.etcdCli = nil
-	}
-
-	if _, err := os.Stat(ma.etcdDir); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		} else {
-			return err
-		}
-	} else {
-		return os.RemoveAll(ma.etcdDir)
-	}
-}
-
 func etcdEventHandler() {
 	if !admin.etcdIsRunning() {
 		return
@@ -352,7 +332,8 @@ func etcdEventHandler() {
 func (ma *wemixAdmin) etcdInit() error {
 	if ma.etcdIsRunning() {
 		return ErrAlreadyRunning
-	} else if ma.self == nil {
+	}
+	if ma.self == nil {
 		return ErrNotRunning
 	}
 
@@ -361,9 +342,8 @@ func (ma *wemixAdmin) etcdInit() error {
 	if err != nil {
 		log.Error("etcd failed to initialize", "error", err)
 		return err
-	} else {
-		log.Info("etcd initialized")
 	}
+	log.Info("etcd initialized")
 
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)
@@ -381,9 +361,8 @@ func (ma *wemixAdmin) etcdStart() error {
 	if err != nil {
 		log.Error("etcd failed to start", "error", err)
 		return err
-	} else {
-		log.Info("etcd started")
 	}
+	log.Info("etcd started")
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)
 	go etcdEventHandler()
@@ -525,34 +504,10 @@ func (ma *wemixAdmin) etcdAutoJoin() error {
 		err := ErrNotFound
 		log.Info("etcd join failed", "name", admin.self.Name, "error", err)
 		return err
-	} else {
-		err := admin.etcdJoin(state.NodeName)
-		log.Info("etcd join", "name", admin.self.Name, "server", state.NodeName, "error", err)
-		return err
 	}
-}
-
-func (ma *wemixAdmin) etcdStop() error {
-	if !ma.etcdIsRunning() {
-		return ErrNotRunning
-	}
-	if ma.etcdCli != nil {
-		ma.etcdCli.Close()
-	}
-	if ma.etcd != nil {
-		ma.etcd.Server.HardStop()
-	}
-	ma.etcd = nil
-	ma.etcdCli = nil
-	return nil
-}
-
-func (ma *wemixAdmin) etcdIsLeader() bool {
-	if !ma.etcdIsReady() {
-		return false
-	} else {
-		return ma.etcd.Server.ID() == ma.etcd.Server.Leader()
-	}
+	err := admin.etcdJoin(state.NodeName)
+	log.Info("etcd join", "name", admin.self.Name, "server", state.NodeName, "error", err)
+	return err
 }
 
 // returns leader id and node
@@ -593,13 +548,18 @@ func (ma *wemixAdmin) etcdPut(key, value string) (int64, error) {
 		ma.etcd.Server.Cfg.ReqTimeout())
 	defer cancel()
 	resp, err := ma.etcdCli.Put(ctx, key, value)
-	if err == nil {
-		return resp.Header.Revision, err
-	} else {
+	if err != nil {
 		return 0, err
 	}
+	return resp.Header.Revision, nil
 }
 
+// etcdGet retrieves the value of a single key.
+// Get is called without WithPrefix/WithRange options, so it looks up exactly one key and
+// rsp.Kvs always has at most one entry; Kvs[0] is safe after the rsp.Count == 0 guard.
+// If prefix or range queries are needed, implement a separate function — do not extend this one.
+// With WithPrefix/WithRange, multiple KVs are returned in lexicographic order; using Kvs[0]
+// would silently return only the first result, making the behavior depend on sort order.
 func (ma *wemixAdmin) etcdGet(key string) (string, error) {
 	if !ma.etcdIsReady() {
 		return "", ErrNotRunning
@@ -611,15 +571,11 @@ func (ma *wemixAdmin) etcdGet(key string) (string, error) {
 	rsp, err := ma.etcdCli.Get(ctx, key)
 	if err != nil {
 		return "", err
-	} else if rsp.Count == 0 {
-		return "", ErrNotFound
-	} else {
-		var v string
-		for _, kv := range rsp.Kvs {
-			v = string(kv.Value)
-		}
-		return v, nil
 	}
+	if rsp.Count == 0 {
+		return "", ErrNotFound
+	}
+	return string(rsp.Kvs[0].Value), nil
 }
 
 // resets work only while the given token is still held
@@ -648,31 +604,6 @@ func (ma *wemixAdmin) etcdResetWork(token *WemixToken, newWork string) error {
 		return ErrInvalidToken
 	}
 	return nil
-}
-
-// compare & swap, do put only if previous value matches
-func (ma *wemixAdmin) etcdPut2(key, value, prev string) error {
-	if !ma.etcdIsReady() {
-		return ErrNotRunning
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(),
-		ma.etcd.Server.Cfg.ReqTimeout())
-	defer cancel()
-
-	tx := ma.etcdCli.Txn(ctx)
-	txresp, err := tx.If(
-		clientv3.Compare(clientv3.Value(key), "=", prev),
-	).Then(
-		clientv3.OpPut(key, value),
-		clientv3.OpGet(key),
-	).Else(
-		clientv3.OpGet(key),
-	).Commit()
-	if err == nil && !txresp.Succeeded {
-		err = ErrExists
-	}
-	return err
 }
 
 func (ma *wemixAdmin) etcdDelete(key string) error {
@@ -826,39 +757,6 @@ func (lck *WemixToken) ttl() int64 {
 	return ttl
 }
 
-func (lck *WemixToken) renew(ctx context.Context, ttl int) error {
-	prev, err := json.Marshal(lck)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().Unix()
-	prevTill := lck.Till
-	lck.Till = now + int64(ttl)
-	value, err := json.Marshal(lck)
-	if err != nil {
-		return err
-	}
-
-	tx := lck.admin.etcdCli.Txn(ctx)
-	txresp, err := tx.If(
-		clientv3.Compare(clientv3.Value(lck.Key), "=", prev),
-	).Then(
-		clientv3.OpPut(lck.Key, string(value)),
-		clientv3.OpGet(lck.Key),
-	).Else(
-		clientv3.OpGet(lck.Key),
-	).Commit()
-	if err == nil && !txresp.Succeeded {
-		err = ErrExists
-	}
-	if err != nil {
-		// restore the till value upon failure
-		lck.Till = prevTill
-	}
-	return err
-}
-
 func (lck *WemixToken) release(ctx context.Context) error {
 	value, err := json.Marshal(lck)
 	if err != nil {
@@ -876,82 +774,6 @@ func (lck *WemixToken) release(ctx context.Context) error {
 		return ErrExists
 	}
 	return err
-}
-
-func (lck *WemixToken) lockedPut(ctx context.Context, key, value, prev string) error {
-	exists := true
-	lockValue, err := json.Marshal(lck)
-	if err != nil {
-		return err
-	}
-
-again:
-	tx := lck.admin.etcdCli.Txn(ctx)
-	var txIf clientv3.Txn
-	if exists {
-		txIf = tx.If(
-			clientv3.Compare(clientv3.Value(lck.Key), "=", lockValue),
-			clientv3.Compare(clientv3.Value(key), "=", prev),
-		)
-	} else {
-		txIf = tx.If(
-			clientv3.Compare(clientv3.Value(lck.Key), "=", lockValue),
-			clientv3.Compare(clientv3.Version(key), "=", 0),
-		)
-	}
-	txresp, err := txIf.Then(
-		clientv3.OpPut(key, value),
-		clientv3.OpGet(key),
-	).Else(
-		clientv3.OpGet(key),
-	).Commit()
-
-	if err == nil && !txresp.Succeeded {
-		err = ErrExists
-		if len(txresp.Responses) > 0 {
-			if rr := txresp.Responses[0].GetResponseRange(); rr.Count == 0 {
-				// if not exists, put empty string and try again
-				tx = lck.admin.etcdCli.Txn(ctx)
-				_, err := tx.If(
-					clientv3.Compare(clientv3.Version(key), "=", 0),
-				).Then(
-					clientv3.OpPut(key, ""),
-				).Commit()
-				if err == nil {
-					exists = false
-					goto again
-				}
-			}
-		}
-
-	}
-	return err
-}
-
-func (ma *wemixAdmin) ttl2(ctx context.Context, key string) (int64, error) {
-	rsp, err := ma.etcdCli.Get(ctx, key)
-	if err != nil {
-		return -1, err
-	} else if rsp.Count == 0 {
-		return -1, nil
-	}
-	lock := &WemixToken{}
-	var value []byte
-	for _, kv := range rsp.Kvs {
-		value = kv.Value
-		break
-	}
-	if e2 := json.Unmarshal(value, lock); e2 != nil {
-		err = e2
-		return -1, err
-	}
-	lock.admin = ma
-
-	ttl := lock.Till - time.Now().Unix()
-	if ttl < 0 {
-		ttl = -1
-	}
-	return ttl, nil
 }
 
 // acquire token iff we're in sync with the latest block
@@ -1073,7 +895,9 @@ again:
 		}
 		return nil, ErrInvalidWork
 	}
-	if lock != nil && err == nil {
+	// lock is always non-nil here: assigned unconditionally at the top of the
+	// again block; every path that returns nil does so via an early return above.
+	if err == nil {
 		etcdSyncMembership()
 	}
 	return lock, err
@@ -1083,21 +907,23 @@ func (lck *WemixToken) releaseTokenSync(ctx context.Context, height *big.Int, ha
 	exists := true
 	prevWork, work, lockValue := "", "", ""
 
-	if data, err := json.Marshal(lck); err != nil {
+	data, err := json.Marshal(lck)
+	if err != nil {
 		return err
-	} else {
-		lockValue = string(data)
 	}
-	if data, err := json.Marshal(&wemixWork{Height: height.Int64() - 1, Hash: parentHash}); err != nil {
+	lockValue = string(data)
+
+	data, err = json.Marshal(&wemixWork{Height: height.Int64() - 1, Hash: parentHash})
+	if err != nil {
 		return err
-	} else {
-		prevWork = string(data)
 	}
-	if data, err := json.Marshal(&wemixWork{Height: height.Int64(), Hash: hash}); err != nil {
+	prevWork = string(data)
+
+	data, err = json.Marshal(&wemixWork{Height: height.Int64(), Hash: hash})
+	if err != nil {
 		return err
-	} else {
-		work = string(data)
 	}
+	work = string(data)
 
 again:
 	tx := lck.admin.etcdCli.Txn(ctx)
@@ -1149,20 +975,6 @@ again:
 		// work mismatch
 		err = ErrInvalidWork
 	}
-	return err
-}
-
-func (ma *wemixAdmin) etcdCompact(rev int64) error {
-	if !ma.etcdIsReady() {
-		return ErrNotRunning
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(),
-		ma.etcd.Server.Cfg.ReqTimeout())
-	defer cancel()
-	_, err := ma.etcdCli.Compact(ctx, rev, clientv3.WithCompactPhysical())
-	// WithCompactPhysical makes Compact wait until all compacted entries are
-	// removed from the etcd server's storage.
 	return err
 }
 
