@@ -26,6 +26,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
@@ -760,5 +761,82 @@ func TestSkipMiningTokenAcquisitionWhenWorkerStopped(t *testing.T) {
 
 	if atomic.LoadInt32(&acquired) != 1 {
 		t.Errorf("AcquireMiningTokenFunc SHOULD be called when worker is running, got count: %d", acquired)
+	}
+}
+
+func TestCommitTransactionsBlockSizeLimit(t *testing.T) {
+	testCommitBlockSizeLimit(t, func(w *worker, env *environment, pending map[common.Address]types.Transactions) {
+		txs := types.NewTransactionsByPriceAndNonce(env.signer, pending, env.header.BaseFee)
+		// committedTxs may be nil: commitTransactions nil-checks before writing.
+		if err := w.commitTransactions(env, txs, nil, nil, nil); err != nil {
+			t.Fatalf("commitTransactions failed: %v", err)
+		}
+	})
+}
+
+func TestCommitTransactionsSimpleBlockSizeLimit(t *testing.T) {
+	testCommitBlockSizeLimit(t, func(w *worker, env *environment, pending map[common.Address]types.Transactions) {
+		// committedTxs must be non-nil: MarkCommitted writes to it unconditionally.
+		txs := NewTxOrderer(pending, make(map[common.Hash]*types.Transaction))
+		if err := w.commitTransactionsSimple(env, txs, nil, nil); err != nil {
+			t.Fatalf("commitTransactionsSimple failed: %v", err)
+		}
+	})
+}
+
+// testCommitBlockSizeLimit feeds an oversized set of pending transactions into the
+// given commit loop and asserts packing stops before the block exceeds the size limit.
+func testCommitBlockSizeLimit(t *testing.T, commit func(w *worker, env *environment, pending map[common.Address]types.Transactions)) {
+	w, b := newTestWorker(t, ethashChainConfig, ethash.NewFaker(), rawdb.NewMemoryDatabase(), 0)
+	defer w.close()
+
+	var (
+		limit  = uint64(params.MaxBlockSize - maxBlockSizeBufferZone)
+		key, _ = crypto.GenerateKey()
+		addr   = crypto.PubkeyToAddress(key.PublicKey)
+	)
+
+	// Gas limit set high enough that packing stops on block size, not gas.
+	header := &types.Header{
+		Number:     big.NewInt(1),
+		Difficulty: big.NewInt(1),
+		GasLimit:   105_000_000,
+		BaseFee:    big.NewInt(params.InitialBaseFee),
+		Fees:       new(big.Int),
+		Time:       1000,
+	}
+	env, err := w.makeEnv(b.chain.CurrentBlock(), header, testBankAddress)
+	if err != nil {
+		t.Fatalf("failed to make env: %v", err)
+	}
+	env.state.SetBalance(addr, math.MaxBig256)
+
+	// Emit txs until their total exceeds the limit so packing stops on size, not
+	// tx count; nonces < 128 keep every tx's RLP size identical.
+	payload200KB := make([]byte, 200*1024)
+	pending := make(map[common.Address]types.Transactions)
+	for size := uint64(header.Size()); size <= limit; {
+		tx := types.MustSignNewTx(key, env.signer, &types.LegacyTx{
+			Nonce:    uint64(len(pending[addr])),
+			To:       &testUserAddress,
+			Value:    big.NewInt(1),
+			Gas:      5_000_000,
+			GasPrice: big.NewInt(10 * params.InitialBaseFee),
+			Data:     payload200KB,
+		})
+		pending[addr] = append(pending[addr], tx)
+		size += uint64(tx.Size())
+	}
+	txSize := uint64(pending[addr][0].Size())
+
+	commit(w, env, pending)
+
+	// The block stays under the limit, and one more tx would exceed it: size (not
+	// gas or tx exhaustion) stopped packing.
+	if env.size >= limit {
+		t.Fatalf("packed block size (%d) reached or exceeded the limit (%d)", env.size, limit)
+	}
+	if env.size+txSize < limit {
+		t.Fatalf("packing stopped early, another tx would still fit (size=%d, txSize=%d, limit=%d)", env.size, txSize, limit)
 	}
 }

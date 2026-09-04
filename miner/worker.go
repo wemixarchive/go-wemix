@@ -99,6 +99,7 @@ type environment struct {
 	txs      []*types.Transaction
 	receipts []*types.Receipt
 	uncles   map[common.Hash]*types.Header
+	size     uint64 // size of the block we are building
 
 	// wemix parameters
 	till                 *time.Time // until when to block generation holds
@@ -120,6 +121,7 @@ func (env *environment) copy() *environment {
 		header:    types.CopyHeader(env.header),
 		receipts:  copyReceipts(env.receipts),
 		till:      env.till,
+		size:      env.size,
 	}
 	if env.gasPool != nil {
 		gasPool := *env.gasPool
@@ -134,6 +136,15 @@ func (env *environment) copy() *environment {
 		cpy.uncles[hash] = uncle
 	}
 	return cpy
+}
+
+// maxBlockSizeBufferZone is subtracted from params.MaxBlockSize when producing
+// blocks, to stay below the cap after auxiliary data is added into the block.
+const maxBlockSizeBufferZone = 1_000_000
+
+// txFitsSize reports whether the transaction fits into the block size limit.
+func (env *environment) txFitsSize(tx *types.Transaction) bool {
+	return env.size+uint64(tx.Size()) < params.MaxBlockSize-maxBlockSizeBufferZone
 }
 
 // unclelist returns the contained uncles as the list format.
@@ -850,6 +861,7 @@ func (w *worker) makeEnv(parent *types.Block, header *types.Header, coinbase com
 		family:    mapset.NewSet(),
 		header:    header,
 		uncles:    make(map[common.Hash]*types.Header),
+		size:      uint64(header.Size()),
 	}
 	// when 08 is processed ancestors contain 07 (quick block)
 	for _, ancestor := range w.chain.GetBlocksFromHash(parent.Hash(), 7) {
@@ -915,6 +927,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
+	env.size += uint64(tx.Size())
 
 	return receipt.Logs, nil
 }
@@ -956,6 +969,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
 		if tx == nil {
+			break
+		}
+		// Break if the transaction would exceed the block size limit.
+		if !env.txFitsSize(tx) {
 			break
 		}
 		// Break if it has enough transactions
@@ -1085,6 +1102,10 @@ func (w *worker) commitTransactionsSimple(env *environment, txs *TxOrderer, inte
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
 		if tx == nil {
+			break
+		}
+		// Break if the transaction would exceed the block size limit.
+		if !env.txFitsSize(tx) {
 			break
 		}
 		// Break if it took too long
