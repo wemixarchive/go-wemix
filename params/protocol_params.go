@@ -126,6 +126,8 @@ const (
 	MaxCodeSize        = 253952 // Maximum bytecode to permit for a contract
 	MaxTransactionSize = 262144 // Maximum transaction size
 
+	MaxBlockSize = 8_388_608 // Maximum size of an RLP-encoded block (EIP-7934)
+
 	// Precompiled contract gas prices
 
 	EcrecoverGas        uint64 = 3000 // Elliptic curve sender recovery gas price
