@@ -314,14 +314,14 @@ func syncCheck() error {
 	}
 	if err = json.Unmarshal([]byte(workData), work); err != nil {
 		// invalid work data
-		log.Error("sync check: ignoring invalid work", "work", workData)
+		log.Error("sync check: ignoring invalid work", "work", workData, "err", err)
 		work = nil
 	}
 
 	// if we're in sync, nothing we can do
 	if work != nil && work.Height == header.Number.Int64() && work.Hash == header.Hash() {
 		log.Debug("sync check: in sync", "height", work.Height, "hash", work.Hash)
-		return err
+		return nil
 	}
 
 	// we're ahead of 'work'
