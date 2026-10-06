@@ -611,3 +611,57 @@ func testGetBlockReceipts(t *testing.T, protocol uint) {
 		}
 	}
 }
+
+// testBlockGasLimit is the WEMIX mainnet block gas limit.
+const testBlockGasLimit = 105_000_000
+
+// Tests that a receipts response carrying a block whose receipts reach the
+// maximum size at testBlockGasLimit is accepted instead of dropping the peer.
+func TestLargeReceiptsResponse66(t *testing.T) { testLargeReceiptsResponse(t, ETH66) }
+func TestLargeReceiptsResponse68(t *testing.T) { testLargeReceiptsResponse(t, ETH68) }
+
+func testLargeReceiptsResponse(t *testing.T, protocol uint) {
+	t.Parallel()
+
+	backend := newTestBackend(0)
+	defer backend.close()
+
+	peer, errc := newTestPeer("peer", protocol, backend)
+	defer peer.close()
+
+	// The server keeps adding blocks while below softResponseLimit, so the worst case
+	// is just under softResponseLimit followed by one block of maximum receipts size.
+	receipts := [][]*types.Receipt{
+		{{Status: types.ReceiptStatusSuccessful, Logs: []*types.Log{{Data: make([]byte, softResponseLimit-1024)}}}},
+		{{Status: types.ReceiptStatusSuccessful, Logs: []*types.Log{{Data: make([]byte, testBlockGasLimit/params.LogDataGas)}}}},
+	}
+	// Serve the request from the remote side; the request send blocks until it is read.
+	go func() {
+		msg, err := peer.app.ReadMsg()
+		if err != nil {
+			return
+		}
+		var query GetReceiptsPacket66
+		if err := msg.Decode(&query); err != nil {
+			return
+		}
+		p2p.Send(peer.app, ReceiptsMsg, &ReceiptsPacket66{RequestId: query.RequestId, ReceiptsPacket: receipts})
+	}()
+
+	sink := make(chan *Response, 1)
+	req, err := peer.RequestReceipts([]common.Hash{{0x01}, {0x02}}, sink)
+	if err != nil {
+		t.Fatalf("failed to request receipts: %v", err)
+	}
+	defer req.Close()
+
+	select {
+	case res := <-sink:
+		if got := len(*res.Res.(*ReceiptsPacket)); got != len(receipts) {
+			t.Errorf("receipts count mismatch: have %d, want %d", got, len(receipts))
+		}
+		res.Done <- nil
+	case err := <-errc:
+		t.Fatalf("peer dropped on large receipts response: %v", err)
+	}
+}
