@@ -673,41 +673,24 @@ func (ma *wemixAdmin) update() {
 	}
 }
 
+// checkMining is called only when amPartner() is true; it starts the miner if not running.
 func (ma *wemixAdmin) checkMining() {
-	on := (ma.nodeInfo != nil && ma.nodeInfo.ID == admin.bootNodeId) || ma.self != nil
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var mining *bool
-	err := ma.rpcCli.CallContext(ctx, &mining, "eth_mining")
-	if err != nil || mining == nil {
+	var mining bool
+	if err := ma.rpcCli.CallContext(ctx, &mining, "eth_mining"); err != nil {
 		log.Error("Checking mining status", "failure", err)
 		return
 	}
-
-	if on == *mining {
+	if mining {
 		return
 	}
-	if on {
-		err := ma.rpcCli.CallContext(ctx, &mining, "miner_start", 1)
-		if err != nil {
-			log.Error("Starting miner", "failed", err)
-			return
-		}
-		log.Info("Started miner")
-	} else {
-		err := ma.rpcCli.CallContext(ctx, &mining, "miner_stop", 1)
-		if err != nil {
-			log.Error("Stopping miner", "failed", err)
-			return
-		}
-		log.Info("Stopped miner")
+	if err := ma.rpcCli.CallContext(ctx, nil, "miner_start", 1); err != nil {
+		log.Error("Starting miner", "failed", err)
+		return
 	}
-	if mining != nil && !*mining {
-		// in case we're leader, transfer leadership
-		ma.etcdTransferLeadership()
-	}
+	log.Info("Started miner")
 }
 
 func (ma *wemixAdmin) run() {
