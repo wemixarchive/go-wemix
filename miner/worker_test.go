@@ -840,3 +840,50 @@ func TestSkipMiningTokenAcquisitionWhenWorkerStopped(t *testing.T) {
 		t.Errorf("AcquireMiningTokenFunc SHOULD be called when worker is running, got count: %d", acquired)
 	}
 }
+
+// TestCommitWorkCoinbaseRace reproduces WM35-1148: setEtherbase writes
+// w.coinbase under w.mu while commitWork read it without the lock, so a
+// concurrent miner_setEtherbase could hand prepareWork a torn [20]byte.
+// The race detector is the oracle (go test -race); without -race the test
+// still checks every produced header carries one of the two written addresses.
+func TestCommitWorkCoinbaseRace(t *testing.T) {
+	const rounds = 200
+	var (
+		addrA = common.HexToAddress("0x1111111111111111111111111111111111111111")
+		addrB = common.HexToAddress("0x2222222222222222222222222222222222222222")
+	)
+	engine := ethash.NewFaker()
+	defer engine.Close()
+
+	w, _ := newTestWorker(t, ethashChainConfig, engine, rawdb.NewMemoryDatabase(), 0)
+	defer w.close()
+
+	var torn int32
+	w.newTaskHook = func(task *task) {
+		if cb := task.block.Coinbase(); cb != addrA && cb != addrB && cb != testBankAddress {
+			atomic.StoreInt32(&torn, 1)
+		}
+	}
+	w.skipSealHook = func(task *task) bool { return true }
+	w.start()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < rounds; i++ {
+			if i%2 == 0 {
+				w.setEtherbase(addrA)
+			} else {
+				w.setEtherbase(addrB)
+			}
+		}
+	}()
+	for i := 0; i < rounds; i++ {
+		w.commitWork(nil, true, time.Now().Unix())
+	}
+	<-done
+
+	if atomic.LoadInt32(&torn) != 0 {
+		t.Fatal("block built with a coinbase that was never set (torn read)")
+	}
+}
