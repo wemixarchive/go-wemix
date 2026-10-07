@@ -841,9 +841,10 @@ func TestSkipMiningTokenAcquisitionWhenWorkerStopped(t *testing.T) {
 	}
 }
 
-// TestCommitWorkCoinbaseRace reproduces WM35-1148: setEtherbase writes
-// w.coinbase under w.mu while commitWork read it without the lock, so a
-// concurrent miner_setEtherbase could hand prepareWork a torn [20]byte.
+// TestCommitWorkCoinbaseRace reproduces the coinbase data race in commitWork:
+// setEtherbase writes w.coinbase under w.mu while commitWork read it without
+// the lock, so a concurrent miner_setEtherbase could hand prepareWork a torn
+// [20]byte.
 // The race detector is the oracle (go test -race); without -race the test
 // still checks every produced header carries one of the two written addresses.
 func TestCommitWorkCoinbaseRace(t *testing.T) {
