@@ -559,14 +559,14 @@ func (ma *wemixAdmin) addPeer(node *wemixNode) error {
 		return nil
 	}
 
-	var v *bool
+	var ok bool
 	ctx, cancel := context.WithCancel(context.Background())
 	id := fmt.Sprintf("enode://%s@%s:%d", node.Enode, node.Ip, node.Port)
 	// TODO: trusted peers need more work
-	//e := ma.rpcCli.CallContext(ctx, &v, "admin_addTrustedPeer", id)
-	e := ma.rpcCli.CallContext(ctx, &v, "admin_addPeer", id)
+	//e := ma.rpcCli.CallContext(ctx, &ok, "admin_addTrustedPeer", id)
+	e := ma.rpcCli.CallContext(ctx, &ok, "admin_addPeer", id)
 	cancel()
-	if e != nil || !*v {
+	if e != nil || !ok {
 		log.Error(fmt.Sprintf("Cannot add peer %s: %v", id, e))
 	} else {
 		log.Info(fmt.Sprintf("Added %s.", id))
@@ -644,10 +644,10 @@ func (ma *wemixAdmin) update() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			var v *bool
-			err := ma.rpcCli.CallContext(ctx, &v, "miner_setGasPrice",
+			var gasPriceOk bool
+			err := ma.rpcCli.CallContext(ctx, &gasPriceOk, "miner_setGasPrice",
 				"0x"+data.maxPriorityFeePerGas.Text(16))
-			if err != nil || !*v {
+			if err != nil || !gasPriceOk {
 				log.Info("set minimum gas price failed",
 					"maxPriorityFeePerGas", data.maxPriorityFeePerGas, "error", err)
 			} else {
@@ -656,8 +656,9 @@ func (ma *wemixAdmin) update() {
 			}
 
 			if ma.self != nil && ma.self.Addr != nilAddress {
-				err = ma.rpcCli.CallContext(ctx, &v, "miner_setEtherbase", &ma.self.Addr)
-				if err != nil || !*v {
+				var coinbaseOk bool
+				err = ma.rpcCli.CallContext(ctx, &coinbaseOk, "miner_setEtherbase", &ma.self.Addr)
+				if err != nil || !coinbaseOk {
 					log.Info("set the coinbase", "error", err)
 				} else {
 					log.Info("successfully set the coinbase")
@@ -672,41 +673,24 @@ func (ma *wemixAdmin) update() {
 	}
 }
 
+// checkMining is called only when amPartner() is true; it starts the miner if not running.
 func (ma *wemixAdmin) checkMining() {
-	on := (ma.nodeInfo != nil && ma.nodeInfo.ID == admin.bootNodeId) || ma.self != nil
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var mining *bool
-	err := ma.rpcCli.CallContext(ctx, &mining, "eth_mining")
-	if err != nil {
+	var mining bool
+	if err := ma.rpcCli.CallContext(ctx, &mining, "eth_mining"); err != nil {
 		log.Error("Checking mining status", "failure", err)
 		return
 	}
-
-	if on == *mining {
+	if mining {
 		return
 	}
-	if on {
-		err := ma.rpcCli.CallContext(ctx, &mining, "miner_start", 1)
-		if err != nil {
-			log.Error("Starting miner", "failed", err)
-			return
-		}
-		log.Info("Started miner")
-	} else {
-		err := ma.rpcCli.CallContext(ctx, &mining, "miner_stop", 1)
-		if err != nil {
-			log.Error("Stopping miner", "failed", err)
-			return
-		}
-		log.Info("Stopped miner")
+	if err := ma.rpcCli.CallContext(ctx, nil, "miner_start", 1); err != nil {
+		log.Error("Starting miner", "failed", err)
+		return
 	}
-	if mining != nil && !*mining {
-		// in case we're leader, transfer leadership
-		ma.etcdTransferLeadership()
-	}
+	log.Info("Started miner")
 }
 
 func (ma *wemixAdmin) run() {
