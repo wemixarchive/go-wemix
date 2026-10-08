@@ -48,7 +48,13 @@ var ProtocolVersions = []uint{ETH68, ETH66, ETH65}
 var protocolLengths = map[uint]uint64{ETH66: 23, ETH65: 23, ETH68: 17}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.
-const maxMessageSize = 10 * 1024 * 1024
+// It must stay below the RLPx frame limit (16 MiB) and account for the block gas
+// limit, since some message sizes such as receipts responses grow with it. Revisit
+// when raising the block gas limit.
+//
+// At the current block gas limit (105M), the largest receipts response is:
+// softResponseLimit (2 MiB) + 105M / LogDataGas (≈ 12.5 MiB) ≈ 14.5 MiB < 15 MiB
+const maxMessageSize = 15 * 1024 * 1024
 
 const (
 	// Protocol messages in eth/64
