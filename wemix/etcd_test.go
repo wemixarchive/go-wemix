@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/params"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 )
@@ -279,5 +280,80 @@ func TestEtcdResetWork_NotReady(t *testing.T) {
 	ma := &wemixAdmin{} // no etcd
 	if err := ma.etcdResetWork(&WemixToken{}, "x"); err != ErrNotRunning {
 		t.Fatalf("expected ErrNotRunning, got %v", err)
+	}
+}
+
+// useConsensusPoA makes isBootNodeBeforeGenesis false so the mining token
+// helpers talk to etcd, and restores the cached token afterwards.
+func useConsensusPoA(t *testing.T) {
+	t.Helper()
+	prevMethod := params.ConsensusMethod
+	prevToken := miningToken.Load()
+	params.ConsensusMethod = params.ConsensusPoA
+	t.Cleanup(func() {
+		params.ConsensusMethod = prevMethod
+		if prevToken == nil {
+			prevToken = &WemixToken{}
+		}
+		miningToken.Store(prevToken)
+	})
+}
+
+// TestAbandonMiningToken_DeletesOwnToken verifies that abandoning a held token
+// removes it from etcd and the local cache, so another miner can take the same
+// height right away instead of waiting for MiningTokenTTL.
+func TestAbandonMiningToken_DeletesOwnToken(t *testing.T) {
+	useConsensusPoA(t)
+	ma := newTestEtcdAdmin(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	token, err := ma.acquireToken(ctx, big.NewInt(1001), MiningTokenTTL)
+	if err != nil {
+		t.Fatalf("acquireToken failed: %v", err)
+	}
+	miningToken.Store(token)
+	if !hasMiningToken() {
+		t.Fatal("token should be held before abandon")
+	}
+
+	if err := abandonMiningToken(); err != nil {
+		t.Fatalf("abandonMiningToken failed: %v", err)
+	}
+	if hasMiningToken() {
+		t.Fatal("token still cached after abandon")
+	}
+	if _, err := ma.etcdGet(wemixTokenKey); err != ErrNotFound {
+		t.Fatalf("token key should be deleted, etcdGet err=%v", err)
+	}
+	if _, err := ma.acquireToken(ctx, big.NewInt(1001), MiningTokenTTL); err != nil {
+		t.Fatalf("same height should be acquirable right after abandon: %v", err)
+	}
+}
+
+// TestAbandonMiningToken_KeepsOtherToken verifies that a node holding a stale
+// token cannot delete a token another miner has taken since.
+func TestAbandonMiningToken_KeepsOtherToken(t *testing.T) {
+	useConsensusPoA(t)
+	ma := newTestEtcdAdmin(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	other, err := ma.acquireToken(ctx, big.NewInt(1001), MiningTokenTTL)
+	if err != nil {
+		t.Fatalf("acquireToken failed: %v", err)
+	}
+	stale := *other
+	stale.Miner = "stale-node"
+	miningToken.Store(&stale)
+
+	if err := abandonMiningToken(); err != ErrExists {
+		t.Fatalf("abandon with a foreign token value must fail with ErrExists, got %v", err)
+	}
+	if hasMiningToken() {
+		t.Fatal("local cache should be cleared even when etcd keeps the other token")
+	}
+	if _, err := ma.etcdGet(wemixTokenKey); err != nil {
+		t.Fatalf("other miner's token must remain: %v", err)
 	}
 }

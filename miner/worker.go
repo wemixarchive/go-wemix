@@ -1635,6 +1635,19 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 		ok, err := wemixminer.AcquireMiningToken(height, parent.Hash())
 		if ok {
 			log.Debug("Mining Token, successful", "height", height, "parent-hash", parent.Hash())
+			// ReleaseMiningToken runs only after a block is sealed. Every other exit
+			// (worker stopped by sync, coinbase/sign/seal errors) must give the token
+			// back, or the cluster stalls at this height until the token's Till.
+			defer func() {
+				if !wemixminer.HasMiningToken() {
+					return
+				}
+				if err := wemixminer.AbandonMiningToken(); err != nil {
+					log.Debug("Mining Token, abandon failed", "height", height, "error", err)
+				} else {
+					log.Debug("Mining Token, abandoned", "height", height)
+				}
+			}()
 		} else {
 			log.Debug("Mining Token, failure", "height", height, "parent-hash", parent.Hash(), "error", err)
 			w.refreshPending(true)
