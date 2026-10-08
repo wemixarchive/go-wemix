@@ -1515,6 +1515,7 @@ func init() {
 	wemixminer.AcquireMiningTokenFunc = acquireMiningToken
 	wemixminer.ReleaseMiningTokenFunc = releaseMiningToken
 	wemixminer.HasMiningTokenFunc = hasMiningToken
+	wemixminer.AbandonMiningTokenFunc = abandonMiningToken
 	wemixminer.NodeNameForPeerIDFunc = NodeNameForPeerID
 
 	wemixapi.Info = Info

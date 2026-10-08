@@ -183,6 +183,24 @@ func releaseMiningToken(height *big.Int, hash, parentHash common.Hash) error {
 	return err
 }
 
+// gives back the mining token without touching the work, so another miner can
+// build this height immediately instead of waiting for the token to expire
+func abandonMiningToken() error {
+	if isBootNodeBeforeGenesis() {
+		return nil
+	}
+	lck := loadMiningToken()
+	miningToken.Store(&WemixToken{})
+	if lck == nil || lck.admin == nil || lck.ttl() < 0 || !lck.admin.etcdIsRunning() {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(),
+		lck.admin.etcd.Server.Cfg.ReqTimeout())
+	defer cancel()
+	// release deletes the key only if it still holds our token value
+	return lck.release(ctx)
+}
+
 // checks the cache to see if we're holding mining token
 func hasMiningToken() bool {
 	if isBootNodeBeforeGenesis() {

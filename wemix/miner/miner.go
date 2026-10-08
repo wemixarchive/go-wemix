@@ -27,6 +27,7 @@ var (
 	AcquireMiningTokenFunc      func(height *big.Int, parentHash common.Hash) (bool, error)
 	ReleaseMiningTokenFunc      func(height *big.Int, hash, parentHash common.Hash) error
 	HasMiningTokenFunc          func() bool
+	AbandonMiningTokenFunc      func() error
 	NodeNameForPeerIDFunc       func(id string) (string, bool)
 )
 
@@ -66,6 +67,15 @@ func ReleaseMiningToken(height *big.Int, hash, parentHash common.Hash) error {
 		return ErrNotInitialized
 	}
 	return ReleaseMiningTokenFunc(height, hash, parentHash)
+}
+
+// AbandonMiningToken gives back a held mining token without recording a block,
+// so another miner can build the same height before the token expires.
+func AbandonMiningToken() error {
+	if AbandonMiningTokenFunc == nil {
+		return ErrNotInitialized
+	}
+	return AbandonMiningTokenFunc()
 }
 
 func HasMiningToken() bool {
