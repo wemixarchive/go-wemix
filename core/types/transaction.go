@@ -454,13 +454,13 @@ func Txs2TxExs(txs []*Transaction) []*TransactionEx {
 	return out
 }
 
-// Convert []*TransactionEx to []*Transaction
-func TxExs2Txs(signer Signer, txs []*TransactionEx, trustIt bool) []*Transaction {
-	var out []*Transaction
+// TxExs2Txs unwraps received extended transactions. The advertised From is
+// dropped on purpose: it is peer input, and storing it in the sender cache
+// would let Sender return an address no signature ever produced. The sender
+// is always recovered from the signature later.
+func TxExs2Txs(txs []*TransactionEx) []*Transaction {
+	out := make([]*Transaction, 0, len(txs))
 	for _, i := range txs {
-		if trustIt {
-			i.Tx.from.Store(sigCache{signer: signer, from: i.From})
-		}
 		out = append(out, i.Tx)
 	}
 	return out

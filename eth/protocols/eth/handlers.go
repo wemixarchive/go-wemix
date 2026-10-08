@@ -27,7 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
-	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
 // handleGetBlockHeaders handles Block header query, collect the requested headers and reply
@@ -915,8 +914,7 @@ func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 	f := func() error {
-		signer := types.MakeSigner(backend.Chain().Config(), backend.Chain().CurrentBlock().Number())
-		txs := types.TxExs2Txs(signer, txexs, wemixminer.IsPartner(peer.ID()))
+		txs := types.TxExs2Txs(txexs)
 		for i, tx := range txs {
 			// Validate and mark the remote transaction
 			if tx == nil {
