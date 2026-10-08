@@ -407,6 +407,11 @@ func (pool *TxPool) loop() {
 							}
 						}
 					}
+					// removeTx deletes queue[addr] and beats[addr] once the queue
+					// empties, and the lifetime check below would read both.
+					if pool.queue[addr] == nil {
+						continue
+					}
 				}
 
 				// Skip local transactions from the eviction mechanism
@@ -1611,6 +1616,15 @@ func (pool *TxPool) truncateQueue() {
 	}
 }
 
+// feePayerUnpayable reports whether tx is fee delegated and its fee payer can
+// no longer cover FeePayerCost at the current state.
+func (pool *TxPool) feePayerUnpayable(tx *types.Transaction) bool {
+	if tx.Type() != types.FeeDelegateDynamicFeeTxType || tx.FeePayer() == nil {
+		return false
+	}
+	return pool.currentState.GetBalance(*tx.FeePayer()).Cmp(tx.FeePayerCost()) < 0
+}
+
 // demoteUnexecutables removes invalid and processed transactions from the pools
 // executable/pending queue and any subsequent transactions that become unexecutable
 // are moved back into the future queue.
@@ -1636,15 +1650,29 @@ func (pool *TxPool) demoteUnexecutables() {
 		// fee delegation
 		if pool.feedelegation {
 			for _, tx := range list.Flatten() {
-				if tx.Type() == types.FeeDelegateDynamicFeeTxType && tx.FeePayer() != nil {
-					feePayer := *tx.FeePayer()
-					if pool.currentState.GetBalance(feePayer).Cmp(tx.FeePayerCost()) < 0 {
-						log.Trace("demoteUnexecutables", "hash", tx.Hash().String())
-						list.Remove(tx)
+				if pool.feePayerUnpayable(tx) {
+					log.Trace("demoteUnexecutables", "hash", tx.Hash().String())
+					// The pending list is strict, so Remove also pulls every higher
+					// nonce out of the list. Queue those back like list.Filter does,
+					// or they stay in pool.all with no list holding them.
+					if removed, invalidated := list.Remove(tx); removed {
 						drops = append(drops, tx)
+						invalids = append(invalids, invalidated...)
 					}
 				}
 			}
+			// Drop, rather than queue, the invalidated transactions whose fee payer
+			// cannot pay either. The next promoteExecutables would drop them anyway,
+			// and until then the eviction loop could find a queue holding only them.
+			requeue := invalids[:0]
+			for _, tx := range invalids {
+				if pool.feePayerUnpayable(tx) {
+					drops = append(drops, tx)
+				} else {
+					requeue = append(requeue, tx)
+				}
+			}
+			invalids = requeue
 		}
 
 		for _, tx := range drops {
