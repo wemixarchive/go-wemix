@@ -1653,12 +1653,13 @@ func (pool *TxPool) demoteUnexecutables() {
 				if pool.feePayerUnpayable(tx) {
 					log.Trace("demoteUnexecutables", "hash", tx.Hash().String())
 					// The pending list is strict, so Remove also pulls every higher
-					// nonce out of the list. Queue those back like list.Filter does,
-					// or they stay in pool.all with no list holding them.
-					if removed, invalidated := list.Remove(tx); removed {
-						drops = append(drops, tx)
-						invalids = append(invalids, invalidated...)
-					}
+					// nonce out of the list and the rest of the snapshot is gone.
+					// Queue those back like list.Filter does, or they stay in
+					// pool.all with no list holding them.
+					_, invalidated := list.Remove(tx)
+					drops = append(drops, tx)
+					invalids = append(invalids, invalidated...)
+					break
 				}
 			}
 			// Drop, rather than queue, the invalidated transactions whose fee payer
