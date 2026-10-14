@@ -1390,15 +1390,15 @@ func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
 			if done {
 				continue
 			}
-			if n, exists := peers[status.NodeName]; exists {
+			if n, exists := peers[status.NodeName]; exists && n != nil {
+				// copy before setting RttMs: the feed shares this pointer with other subscribers reading it concurrently
+				status = status.Clone()
 				status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
 				miners = append(miners, status)
-				if n != nil {
-					peers[status.NodeName] = nil
-					count--
-					if count <= 0 {
-						done = true
-					}
+				peers[status.NodeName] = nil
+				count--
+				if count <= 0 {
+					done = true
 				}
 			}
 		case <-timer.C:
