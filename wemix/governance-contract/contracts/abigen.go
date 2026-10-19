@@ -11,6 +11,9 @@ import (
 
 const pkg string = "gov"
 
+// GovImp is compiled with the solc version of the GovImp deployed on mainnet.
+const govImpSolcVersion = "0.8.2"
+
 var (
 	rootFlag = flag.String("root", "../contracts", "")
 )
@@ -19,7 +22,9 @@ func main() {
 	flag.Parse()
 	root := *rootFlag
 	outDir := filepath.Join(root, "../../bind")
-	if contracts, err := compile.Compile(root,
+	if govImp, err := compile.CompileWithVersion(govImpSolcVersion, root, filepath.Join(root, "GovImp.sol")); err != nil {
+		panic(err)
+	} else if contracts, err := compile.Compile(root,
 		filepath.Join(root, "Registry.sol"),
 		filepath.Join(root, "Gov.sol"),
 		filepath.Join(root, "GovImp.sol"),
@@ -32,6 +37,8 @@ func main() {
 		filepath.Join(root, "storage", "EnvStorage.sol"),
 		filepath.Join(root, "storage", "EnvStorageImp.sol"),
 	); err != nil {
+		panic(err)
+	} else if err := contracts.Replace(govImp, gov.GOV_IMP); err != nil {
 		panic(err)
 	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_registry_abi.go"), gov.REGISTRY); err != nil {
 		panic(err)

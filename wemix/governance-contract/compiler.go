@@ -16,11 +16,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	solcVersion string = "0.8.14"
-)
+// DefaultSolcVersion is the solc version Compile uses.
+const DefaultSolcVersion = "0.8.14"
 
+// Compile compiles sourceFiles with DefaultSolcVersion.
 func Compile(root string, sourceFiles ...string) (compiledTy, error) {
+	return CompileWithVersion(DefaultSolcVersion, root, sourceFiles...)
+}
+
+// CompileWithVersion compiles sourceFiles with the given solc version,
+// downloading the compiler if it is not cached yet.
+func CompileWithVersion(solcVersion, root string, sourceFiles ...string) (compiledTy, error) {
 	solcPath, err := solcdownloader.GetSolcBin(solcVersion)
 	if err != nil {
 		return nil, err
@@ -69,6 +75,18 @@ func Compile(root string, sourceFiles ...string) (compiledTy, error) {
 }
 
 type compiledTy map[string]*compiler.Contract
+
+// Replace overwrites the named contracts with the ones compiled in src.
+func (compiled compiledTy) Replace(src compiledTy, names ...string) error {
+	for _, name := range names {
+		contract, ok := src[name]
+		if !ok {
+			return fmt.Errorf("not found contract : %v", name)
+		}
+		compiled[name] = contract
+	}
+	return nil
+}
 
 func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...string) error {
 	var (
