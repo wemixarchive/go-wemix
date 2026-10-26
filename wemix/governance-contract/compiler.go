@@ -76,15 +76,20 @@ func CompileWithVersion(solcVersion, root string, sourceFiles ...string) (compil
 
 type compiledTy map[string]*compiler.Contract
 
-// Replace overwrites the named contracts with the ones compiled in src.
-func (compiled compiledTy) Replace(src compiledTy, names ...string) error {
-	for _, name := range names {
-		contract, ok := src[name]
-		if !ok {
-			return fmt.Errorf("not found contract : %v", name)
-		}
-		compiled[name] = contract
+// ReplaceCode overwrites dstName's bytecode with srcName's from src, keeping
+// dstName's ABI. It binds the deployed GovImpLegacy bytecode under the GovImp
+// ABI without changing the generated Go API (the two ABIs are identical).
+func (compiled compiledTy) ReplaceCode(src compiledTy, srcName, dstName string) error {
+	s, ok := src[srcName]
+	if !ok {
+		return fmt.Errorf("not found contract : %v", srcName)
 	}
+	d, ok := compiled[dstName]
+	if !ok {
+		return fmt.Errorf("not found contract : %v", dstName)
+	}
+	d.Code = s.Code
+	d.RuntimeCode = s.RuntimeCode
 	return nil
 }
 
