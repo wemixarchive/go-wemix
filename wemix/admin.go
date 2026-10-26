@@ -982,10 +982,15 @@ func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, has
 	contracts, err := admin.getRegGovEnvContracts(ctx, num)
 	if err != nil {
 		return err == wemixminer.ErrNotInitialized || errors.Is(err, ethereum.NotFound)
-	} else if count, err := contracts.GovImp.GetMemberLength(&bind.CallOpts{Context: ctx, BlockNumber: num}); err != nil || count.Sign() == 0 {
-		return err == wemixminer.ErrNotInitialized || count.Sign() == 0
 	}
 	gov := contracts.GovImp
+	count, err := gov.GetMemberLength(&bind.CallOpts{Context: ctx, BlockNumber: num})
+	if err != nil {
+		return err == wemixminer.ErrNotInitialized
+	}
+	if count.Sign() == 0 {
+		return true
+	}
 	// if minerNodeId is given, i.e. present in block header, use it,
 	// otherwise, derive it from the codebase
 	var data []byte
