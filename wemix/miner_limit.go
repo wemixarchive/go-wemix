@@ -75,6 +75,10 @@ func getCoinbaseEnodeCache(ctx context.Context, height *big.Int, gov *gov.GovImp
 	if count, err = gov.GetNodeLength(opts); err != nil {
 		return nil, err
 	}
+	// do not cache an empty node list
+	if count.Sign() <= 0 || !count.IsInt64() {
+		return nil, wemixminer.ErrNotInitialized
+	}
 	for i := int64(1); i <= count.Int64(); i++ {
 		ix := big.NewInt(i)
 		if addr, err = gov.GetReward(opts, ix); err != nil {
