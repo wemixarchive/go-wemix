@@ -43,9 +43,9 @@ func newBlockStateCallerAtParent(chain consensus.ChainHeaderReader, header *type
 		if reader, ok := db.TrieDB().DiskDB().(ethdb.Reader); ok {
 			parent = rawdb.ReadHeader(reader, header.ParentHash, number)
 		}
-	}
-	if parent == nil {
-		return nil, consensus.ErrUnknownAncestor
+		if parent == nil {
+			return nil, consensus.ErrUnknownAncestor
+		}
 	}
 	statedb, err := state.New(parent.Root, db, nil)
 	if err != nil {
