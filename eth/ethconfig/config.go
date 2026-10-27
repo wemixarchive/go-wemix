@@ -60,6 +60,12 @@ var LightClientGPO = gasprice.Config{
 	IgnorePrice:      gasprice.DefaultIgnorePrice,
 }
 
+// defaultRPCGasCap matches the Wemix genesis block gas limit, so any transaction
+// that fits in a block can still be called or estimated over RPC, while the
+// resources a single call may consume stay bounded. Raise it together with the
+// governance blockGasLimit.
+const defaultRPCGasCap = 105000000
+
 // Defaults contains default settings for use on the Ethereum main net.
 var Defaults = Config{
 	SyncMode: downloader.SnapSync,
@@ -89,7 +95,7 @@ var Defaults = Config{
 		Recommit: 3 * time.Second,
 	},
 	TxPool:        core.DefaultTxPoolConfig,
-	RPCGasCap:     0, // unlimited
+	RPCGasCap:     defaultRPCGasCap,
 	RPCEVMTimeout: 5 * time.Second,
 	GPO:           FullNodeGPO,
 	RPCTxFeeCap:   0, // unlimited
