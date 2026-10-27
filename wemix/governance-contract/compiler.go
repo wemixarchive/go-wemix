@@ -93,7 +93,8 @@ func (compiled compiledTy) ReplaceCode(src compiledTy, srcName, dstName string) 
 	return nil
 }
 
-func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...string) error {
+// Bind renders the Go binding source for the given contracts.
+func (compiled compiledTy) Bind(pkg string, contracts ...string) (string, error) {
 	var (
 		length    = len(contracts)
 		types     = make([]string, length)
@@ -106,17 +107,23 @@ func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...stri
 	for i, name := range contracts {
 		contract, ok := compiled[name]
 		if !ok {
-			return fmt.Errorf("not found contract : %v", name)
+			return "", fmt.Errorf("not found contract : %v", name)
 		}
 		types[i] = name
 		if abis[i], err = abiToString(contract); err != nil {
-			return errors.Wrap(err, name)
+			return "", errors.Wrap(err, name)
 		}
 		bytecodes[i] = contract.Code
 		sigs[i] = contract.Hashes
 	}
 
-	str, err := bind.Bind(types, abis, bytecodes, sigs, pkg, bind.LangGo, nil, nil)
+	return bind.Bind(types, abis, bytecodes, sigs, pkg, bind.LangGo, nil, nil)
+}
+
+// BindContracts renders the binding for the given contracts and writes it to filename
+// unless the file already holds identical content.
+func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...string) error {
+	str, err := compiled.Bind(pkg, contracts...)
 	if err != nil {
 		return err
 	}
