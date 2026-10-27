@@ -16,11 +16,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	solcVersion string = "0.8.14"
-)
+// DefaultSolcVersion is the solc version Compile uses.
+const DefaultSolcVersion = "0.8.14"
 
+// Compile compiles sourceFiles with DefaultSolcVersion.
 func Compile(root string, sourceFiles ...string) (compiledTy, error) {
+	return CompileWithVersion(DefaultSolcVersion, root, sourceFiles...)
+}
+
+// CompileWithVersion compiles sourceFiles with the given solc version,
+// downloading the compiler if it is not cached yet.
+func CompileWithVersion(solcVersion, root string, sourceFiles ...string) (compiledTy, error) {
 	solcPath, err := solcdownloader.GetSolcBin(solcVersion)
 	if err != nil {
 		return nil, err
@@ -69,6 +75,23 @@ func Compile(root string, sourceFiles ...string) (compiledTy, error) {
 }
 
 type compiledTy map[string]*compiler.Contract
+
+// ReplaceCode overwrites dstName's bytecode with srcName's from src, keeping
+// dstName's ABI. It binds the deployed GovImpLegacy bytecode under the GovImp
+// ABI without changing the generated Go API (the two ABIs are identical).
+func (compiled compiledTy) ReplaceCode(src compiledTy, srcName, dstName string) error {
+	s, ok := src[srcName]
+	if !ok {
+		return fmt.Errorf("not found contract : %v", srcName)
+	}
+	d, ok := compiled[dstName]
+	if !ok {
+		return fmt.Errorf("not found contract : %v", dstName)
+	}
+	d.Code = s.Code
+	d.RuntimeCode = s.RuntimeCode
+	return nil
+}
 
 func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...string) error {
 	var (
