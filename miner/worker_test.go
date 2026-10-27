@@ -20,6 +20,8 @@ import (
 	"errors"
 	"math/big"
 	"math/rand"
+	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -121,6 +123,12 @@ type testWorkerBackend struct {
 }
 
 func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, n int) *testWorkerBackend {
+	return newTestWorkerBackendWithCache(t, &core.CacheConfig{TrieDirtyDisabled: true}, chainConfig, engine, db, n)
+}
+
+// newTestWorkerBackendWithCache is newTestWorkerBackend with a caller-supplied
+// cache config, e.g. to enable snapshots so that StateDB runs a trie prefetcher.
+func newTestWorkerBackendWithCache(t *testing.T, cacheConfig *core.CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, n int) *testWorkerBackend {
 	var gspec = core.Genesis{
 		Config: chainConfig,
 		Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
@@ -139,7 +147,7 @@ func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine 
 	}
 	genesis := gspec.MustCommit(db)
 
-	chain, _ := core.NewBlockChain(db, &core.CacheConfig{TrieDirtyDisabled: true}, gspec.Config, engine, vm.Config{}, nil, nil)
+	chain, _ := core.NewBlockChain(db, cacheConfig, gspec.Config, engine, vm.Config{}, nil, nil)
 	txpool := core.NewTxPool(testTxPoolConfig, chainConfig, chain)
 
 	// Generate a small n-block chain and an uncle block for it
@@ -887,4 +895,70 @@ func TestCommitWorkCoinbaseRace(t *testing.T) {
 	if atomic.LoadInt32(&torn) != 0 {
 		t.Fatal("block built with a coinbase that was never set (torn read)")
 	}
+}
+
+// TestCommitWorkPrefetcherCleanup checks that commitWork stops the trie
+// prefetcher of its work in non-PoW mode. That work is sealed synchronously and
+// never kept in w.current, so without discard every block leaked its subfetcher
+// goroutines.
+func TestCommitWorkPrefetcherCleanup(t *testing.T) {
+	installMiningTokenHooks(t, &miningTokenModel{}, tokenHookOptions{})
+
+	cfg := new(params.ChainConfig)
+	*cfg = *params.TestChainConfig
+	cfg.CroissantBlock = nil
+
+	engine := ethash.NewFaker()
+	defer engine.Close()
+
+	// StateDB only starts a trie prefetcher when snapshots are enabled.
+	cacheConfig := &core.CacheConfig{SnapshotLimit: 256, TrieDirtyDisabled: true}
+	backend := newTestWorkerBackendWithCache(t, cacheConfig, cfg, engine, rawdb.NewMemoryDatabase(), 0)
+	defer backend.chain.Stop()
+	defer backend.txPool.Stop()
+
+	w := newWorker(testConfig, cfg, engine, backend, new(event.TypeMux), nil, false)
+	defer w.close()
+	w.setEtherbase(testBankAddress)
+	w.start()
+
+	const rounds = 3
+	for i := 0; i < rounds; i++ {
+		if err := backend.txPool.AddLocal(backend.newRandomTx(false)); err != nil {
+			t.Fatalf("round %d: failed to add tx: %v", i, err)
+		}
+		w.commitWork(nil, false, time.Now().Unix())
+	}
+	if head := w.chain.CurrentBlock().NumberU64(); head != rounds {
+		t.Fatalf("head mismatch: have %d, want %d", head, rounds)
+	}
+
+	// discard waits for each subfetcher to signal termination, but the goroutine
+	// may still be unwinding, so poll briefly instead of sampling once.
+	deadline := time.Now().Add(time.Second)
+	for {
+		count := countSubfetcherGoroutines()
+		if count == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d subfetcher goroutine(s) leaked after %d blocks", count, rounds)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// countSubfetcherGoroutines returns the number of live trie prefetcher
+// subfetcher goroutines.
+func countSubfetcherGoroutines() int {
+	buf := make([]byte, 64*1024)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	return strings.Count(string(buf), "state.(*subfetcher).loop")
 }
