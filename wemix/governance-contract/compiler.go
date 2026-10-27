@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	solcVersion string = "0.8.14"
+	solcVersion string = "0.8.6"
 )
 
 func Compile(root string, sourceFiles ...string) (compiledTy, error) {
