@@ -272,6 +272,12 @@ func (it *RDBIterator) Next() bool {
 	if it.first {
 		it.first = false
 	} else {
+		// rocksdb_iter_next is undefined on an exhausted iterator and
+		// segfaults. leveldb and memorydb return false when Next is called
+		// after exhaustion; match that by staying exhausted.
+		if C.rocksdb_iter_valid(it.it) == 0 {
+			return false
+		}
 		C.rocksdb_iter_next(it.it)
 	}
 	return C.rocksdb_iter_valid(it.it) != 0
