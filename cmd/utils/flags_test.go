@@ -20,6 +20,8 @@ package utils
 import (
 	"reflect"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/node"
 )
 
 func Test_SplitTagsFlag(t *testing.T) {
@@ -58,6 +60,26 @@ func Test_SplitTagsFlag(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := SplitTagsFlag(tt.args); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("splitTagsFlag() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRPCServed(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  node.Config
+		want bool
+	}{
+		{"no rpc", node.Config{}, false},
+		{"http", node.Config{HTTPHost: "0.0.0.0"}, true},
+		{"ws", node.Config{WSHost: "127.0.0.1"}, true},
+		{"http and ws", node.Config{HTTPHost: "0.0.0.0", WSHost: "0.0.0.0"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rpcServed(&tt.cfg); got != tt.want {
+				t.Errorf("rpcServed() = %v, want %v", got, tt.want)
 			}
 		})
 	}
