@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/wemix"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -233,6 +234,14 @@ func importChain(ctx *cli.Context) error {
 
 	chain, db := utils.MakeChain(ctx, stack)
 	defer db.Close()
+
+	// Block verification and rewards read governance state through the
+	// wemix admin, which only a running node sets up otherwise.
+	stopAdmin, err := wemix.StartOfflineAdmin(chain)
+	if err != nil {
+		utils.Fatalf("Failed to set up wemix admin: %v", err)
+	}
+	defer stopAdmin()
 
 	// Start periodically gathering memory profiles
 	var peakMemAlloc, peakMemSys uint64
