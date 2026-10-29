@@ -412,6 +412,9 @@ func (b *rdbBatch) Delete(key []byte) error {
 func (b *rdbBatch) Write() error {
 	var cerr *C.char
 	C.rocksdb_write(b.db, b.wopts, b.b, &cerr)
+	// Nothing below refers to b, so without this the GC may collect b while
+	// rocksdb_write runs and the finalizer frees the C batch under it.
+	runtime.KeepAlive(b)
 	return cerror(cerr)
 }
 
