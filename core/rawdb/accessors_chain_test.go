@@ -20,15 +20,18 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 	"math/rand"
 	"os"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"golang.org/x/crypto/sha3"
@@ -934,4 +937,113 @@ func TestHeadersRLPStorage(t *testing.T) {
 	checkSequence(0, 1)    // Only genesis
 	checkSequence(1, 1)    // Only block 1
 	checkSequence(1, 2)    // Genesis + block 1
+}
+
+// headerServeLimit mirrors the eth protocol's maxHeadersServe: the most headers
+// a peer can ask ReadHeaderRange for in one request.
+const headerServeLimit = 1024
+
+// writeAncientHeaderChain writes n blocks straight into the freezer. The header
+// of block i carries extra(i) as its Extra data, so callers control its size.
+func writeAncientHeaderChain(t *testing.T, n int, extra func(number int) []byte) ethdb.Database {
+	t.Helper()
+
+	db, err := NewDatabaseWithFreezer(NewMemoryDatabase(), t.TempDir(), "", false)
+	if err != nil {
+		t.Fatalf("failed to create database with ancient backend: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	var (
+		chain []*types.Block
+		pHash common.Hash
+	)
+	for i := 0; i < n; i++ {
+		block := types.NewBlockWithHeader(&types.Header{
+			Number:      big.NewInt(int64(i)),
+			Extra:       extra(i),
+			UncleHash:   types.EmptyUncleHash,
+			TxHash:      types.EmptyRootHash,
+			ReceiptHash: types.EmptyRootHash,
+			ParentHash:  pHash,
+		})
+		chain = append(chain, block)
+		pHash = block.Hash()
+	}
+	if _, err := WriteAncientBlocks(db, chain, make([]types.Receipts, n), big.NewInt(100)); err != nil {
+		t.Fatalf("failed to write ancient blocks: %v", err)
+	}
+	return db
+}
+
+// extraForHeaderSize returns Extra data that makes the test header of the given
+// block number encode to exactly size bytes of RLP. The number is needed because
+// its own encoding grows with its value.
+func extraForHeaderSize(t *testing.T, number, size int) []byte {
+	t.Helper()
+
+	// Probe with 256+ bytes of Extra, so its RLP length prefix is already the
+	// 3-byte form it keeps up to 64K and only the payload length changes.
+	const probe = 1024
+	encodedSize := func(extra []byte) int {
+		enc, err := rlp.EncodeToBytes(&types.Header{
+			Number:      big.NewInt(int64(number)),
+			Extra:       extra,
+			UncleHash:   types.EmptyUncleHash,
+			TxHash:      types.EmptyRootHash,
+			ReceiptHash: types.EmptyRootHash,
+		})
+		if err != nil {
+			t.Fatalf("failed to encode header: %v", err)
+		}
+		return len(enc)
+	}
+	extra := make([]byte, probe+size-encodedSize(make([]byte, probe)))
+	if got := encodedSize(extra); got != size {
+		t.Fatalf("header encodes to %d bytes, want %d", got, size)
+	}
+	return extra
+}
+
+// Tests that reading a header range sizes its freezer read buffer by a fixed
+// bound, not by the requested count.
+func TestReadHeaderRangeBoundsFreezerRead(t *testing.T) {
+	const nblocks = 2500 // nblocks * headerSizeEstimate is well above maxHeaderRangeBytes
+
+	db := writeAncientHeaderChain(t, nblocks, func(int) []byte { return []byte("test block") })
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	ReadHeaderRange(db, nblocks-1, math.MaxUint64)
+	runtime.ReadMemStats(&after)
+
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > maxHeaderRangeBytes+maxHeaderRangeBytes/2 {
+		t.Fatalf("ReadHeaderRange allocated %d bytes for an unbounded count, want at most about %d", allocated, maxHeaderRangeBytes)
+	}
+
+	// A request within the eth serve limit still returns every header.
+	if got := len(ReadHeaderRange(db, nblocks-1, headerServeLimit)); got != headerServeLimit {
+		t.Fatalf("served %d headers for a request of %d", got, headerServeLimit)
+	}
+}
+
+// Tests that the freezer read bound still fits a full serve-limit batch of
+// headers at the size ReadHeaderRange budgets for. ReadHeaderRange returns
+// nothing from the freezer unless it gets every requested item, so a bound
+// below that batch would leave such requests unanswered.
+func TestReadHeaderRangeServesFullBatchOfLargeHeaders(t *testing.T) {
+	db := writeAncientHeaderChain(t, headerServeLimit, func(number int) []byte {
+		return extraForHeaderSize(t, number, headerSizeEstimate)
+	})
+
+	headers := ReadHeaderRange(db, headerServeLimit-1, headerServeLimit)
+	if len(headers) != headerServeLimit {
+		t.Fatalf("served %d headers of %d bytes for a request of %d, want all", len(headers), headerSizeEstimate, headerServeLimit)
+	}
+	for i, header := range headers {
+		if len(header) != headerSizeEstimate {
+			t.Fatalf("header %d is %d bytes, want %d", i, len(header), headerSizeEstimate)
+		}
+	}
 }
