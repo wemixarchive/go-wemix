@@ -1683,15 +1683,14 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 		return
 	}
 	if !wemixminer.IsPoW() { // Wemix
+		// Non-PoW work is sealed synchronously and never kept in w.current, so stop its prefetcher on return.
+		defer work.discard()
 		if coinbase, err := wemixminer.GetCoinbase(work.header.Number); err == nil {
 			work.coinbase = coinbase
 		} else {
 			log.Error("Error in getting coinbase", "err", err)
 			return
 		}
-	}
-
-	if !wemixminer.IsPoW() { // Wemix
 		if !w.commitTransactionsEx(work, interrupt, start) {
 			err := w.commitEx(work, w.fullTaskHook, true, start)
 			if err != nil {
