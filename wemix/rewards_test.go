@@ -10,14 +10,17 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
+	wemixrewards "github.com/ethereum/go-ethereum/wemix/rewards"
 )
 
 func hexToBigInt(hexNum string) *big.Int {
@@ -178,10 +181,16 @@ func TestDistributeRewards(t *testing.T) {
 	}
 }
 
-func makeCalculateRewardFunc(rp *rewardParameters) func(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
-	return func(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
-		return calculateRewardsWithParams(config, rp, num, fees, addBalance)
+func makeCalculateRewardFunc(rp *rewardParameters) func(chain consensus.ChainHeaderReader, header *types.Header, db state.Database, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+	return func(chain consensus.ChainHeaderReader, header *types.Header, db state.Database, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+		return calculateRewardsWithParams(chain.Config(), rp, header.Number, header.Fees, addBalance)
 	}
+}
+
+func setCalculateRewardsFunc(t *testing.T, rp *rewardParameters) {
+	orig := wemixrewards.CalculateRewardsFunc
+	wemixrewards.CalculateRewardsFunc = makeCalculateRewardFunc(rp)
+	t.Cleanup(func() { wemixrewards.CalculateRewardsFunc = orig })
 }
 
 func makeSignBlockFunc(privateKey *ecdsa.PrivateKey) func(height *big.Int, hash common.Hash) (common.Address, []byte, error) {
@@ -261,7 +270,7 @@ func TestRewardValidation(t *testing.T) {
 		distributionMethod: []*big.Int{big.NewInt(4000), big.NewInt(1000), big.NewInt(2500), big.NewInt(2500)},
 	}
 
-	wemixminer.CalculateRewardsFunc = makeCalculateRewardFunc(rp)
+	setCalculateRewardsFunc(t, rp)
 	wemixminer.SignBlockFunc = makeSignBlockFunc(key)
 	wemixminer.VerifyBlockSigFunc = verifyBlockSigForTest
 
@@ -370,7 +379,7 @@ func TestBriocheHardFork(t *testing.T) {
 		distributionMethod: []*big.Int{big.NewInt(5000), big.NewInt(0), big.NewInt(2500), big.NewInt(2500)}, // miner, staker, eco, maintenance
 	}
 
-	wemixminer.CalculateRewardsFunc = makeCalculateRewardFunc(rp)
+	setCalculateRewardsFunc(t, rp)
 	wemixminer.SignBlockFunc = makeSignBlockFunc(key)
 	wemixminer.VerifyBlockSigFunc = verifyBlockSigForTest
 
