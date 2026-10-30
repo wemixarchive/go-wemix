@@ -11,13 +11,6 @@ import (
 
 const pkg string = "gov"
 
-// The GovImp implementation deployed on mainnet is the pre-W1G source,
-// preserved as mock/GovImpLegacy.sol, compiled with solc 0.8.2. This binding
-// records that deployed bytecode; a follow-up PR updates GovImp to the current
-// GovImp.sol (W1G-fixed).
-const govImpSolcVersion = "0.8.2"
-const govImpSource = "GovImpLegacy"
-
 var (
 	rootFlag = flag.String("root", "../contracts", "")
 )
@@ -26,9 +19,7 @@ func main() {
 	flag.Parse()
 	root := *rootFlag
 	outDir := filepath.Join(root, "../../bind")
-	if govImp, err := compile.CompileWithVersion(govImpSolcVersion, root, filepath.Join(root, "mock", "GovImpLegacy.sol")); err != nil {
-		panic(err)
-	} else if contracts, err := compile.Compile(root,
+	if contracts, err := compile.Compile(root,
 		filepath.Join(root, "Registry.sol"),
 		filepath.Join(root, "Gov.sol"),
 		filepath.Join(root, "GovImp.sol"),
@@ -41,8 +32,6 @@ func main() {
 		filepath.Join(root, "storage", "EnvStorage.sol"),
 		filepath.Join(root, "storage", "EnvStorageImp.sol"),
 	); err != nil {
-		panic(err)
-	} else if err := contracts.ReplaceCode(govImp, govImpSource, gov.GOV_IMP); err != nil {
 		panic(err)
 	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_registry_abi.go"), gov.REGISTRY); err != nil {
 		panic(err)
