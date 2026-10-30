@@ -295,6 +295,18 @@ func WriteFastTxLookupLimit(db ethdb.KeyValueWriter, number uint64) {
 	}
 }
 
+const (
+	// headerSizeEstimate is the per-header size ReadHeaderRange budgets for when
+	// reading from the freezer. WEMIX mainnet headers are about 4K bytes.
+	headerSizeEstimate = 8000
+
+	// maxHeaderRangeBytes bounds the buffer ReadHeaderRange reads from the freezer.
+	// It fits the eth protocol's 1024-header serve limit at headerSizeEstimate
+	// bytes per header, so a request a peer can legitimately make is still
+	// answered in full.
+	maxHeaderRangeBytes = 8 * 1024 * 1024
+)
+
 // ReadHeaderRange returns the rlp-encoded headers, starting at 'number', and going
 // backwards towards genesis. This method assumes that the caller already has
 // placed a cap on count, to prevent DoS issues.
@@ -334,7 +346,11 @@ func ReadHeaderRange(db ethdb.Reader, number uint64, count uint64) []rlp.RawValu
 		return rlpHeaders
 	}
 	// read remaining from ancients
-	maxBytes := count * 8000 // WEMIX mainnet block header size is 4K bytes in normal
+	maxBytes := count * headerSizeEstimate
+	// The freezer allocates maxBytes up front, so keep it bounded.
+	if maxBytes > maxHeaderRangeBytes {
+		maxBytes = maxHeaderRangeBytes
+	}
 	data, err := db.AncientRange(freezerHeaderTable, i+1-count, count, maxBytes)
 	if err == nil && uint64(len(data)) == count {
 		// the data is on the order [h, h+1, .., n] -- reordering needed
