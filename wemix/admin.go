@@ -1289,6 +1289,21 @@ func getMinerStatus() *wemixapi.WemixMinerStatus {
 	}
 }
 
+// rttFromFeed builds the miner entry for a status delivered on
+// minerStatusFeed, stamping the measured round-trip time in milliseconds.
+// minerStatusFeed.Send hands the same *WemixMinerStatus to every subscriber,
+// so the entry must be a copy: mutating the delivered value races
+// handleMinerStatusUpdate, which clones the same pointer concurrently.
+// It returns nil for a nil status.
+func rttFromFeed(status *wemixapi.WemixMinerStatus, startNano int64) *wemixapi.WemixMinerStatus {
+	if status == nil {
+		return nil
+	}
+	status = status.Clone()
+	status.RttMs = big.NewInt((time.Now().UnixNano() - startNano) / 1000000)
+	return status
+}
+
 // Returns the array of peer status
 // 'id' could be null, a name, node id (public key) or ip address of a miner
 func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
@@ -1396,10 +1411,7 @@ func getMiners(id string, timeout int) []*wemixapi.WemixMinerStatus {
 				continue
 			}
 			if n, exists := peers[status.NodeName]; exists && n != nil {
-				// copy before setting RttMs: the feed shares this pointer with other subscribers reading it concurrently
-				status = status.Clone()
-				status.RttMs = big.NewInt((time.Now().UnixNano() - startTime) / 1000000)
-				miners = append(miners, status)
+				miners = append(miners, rttFromFeed(status, startTime))
 				peers[status.NodeName] = nil
 				count--
 				if count <= 0 {
