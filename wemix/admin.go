@@ -576,7 +576,7 @@ func (ma *wemixAdmin) addPeer(node *wemixNode) error {
 }
 
 func (ma *wemixAdmin) update() {
-	if ma.contracts == nil || ma.contracts.Registry == nil {
+	if ma.contracts == nil || ma.contracts.Registry == nil || ma.nodeInfo == nil {
 		return
 	}
 
@@ -1218,7 +1218,7 @@ func (ma *wemixAdmin) miners() string {
 }
 
 func Info() interface{} {
-	if admin == nil {
+	if admin == nil || admin.contracts == nil {
 		return ""
 	}
 	self := admin.self
