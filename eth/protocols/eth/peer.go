@@ -91,9 +91,16 @@ type Peer struct {
 	reqCancel   chan *cancel   // Dispatch channel to cancel pending requests and untrack them
 	resDispatch chan *response // Dispatch channel to fulfil pending requests and untrack them
 
-	term chan struct{} // Termination channel to stop the broadcasters
-	lock sync.RWMutex  // Mutex protecting the internal fields
+	term       chan struct{} // Termination channel to stop the broadcasters
+	handlerSem chan struct{} // Bounds concurrent async request handlers (PoA)
+	lock       sync.RWMutex  // Mutex protecting the internal fields
 }
+
+// maxHandlerConcurrency bounds how many request handlers run concurrently for a
+// single peer under PoA, where handlers are dispatched asynchronously. Without
+// a bound, one peer sending a stream of requests spawned an unbounded number of
+// handler goroutines.
+const maxHandlerConcurrency = 8
 
 // NewPeer create a wrapper for a network connection and negotiated  protocol
 // version.
@@ -114,6 +121,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		resDispatch:     make(chan *response),
 		txpool:          txpool,
 		term:            make(chan struct{}),
+		handlerSem:      make(chan struct{}, maxHandlerConcurrency),
 	}
 	// Start up all the broadcasters
 	go peer.broadcastBlocks()
@@ -131,6 +139,25 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 // clean it up!
 func (p *Peer) Close() {
 	close(p.term)
+}
+
+// dispatchHandler runs an asynchronous request handler under a per-peer
+// concurrency bound. It blocks the caller (the read loop) until a handler slot
+// is free, which applies backpressure so a single peer can no longer spawn an
+// unbounded number of handler goroutines. If the peer is terminating, the
+// request is dropped. The handler's error is not surfaced here, matching the
+// previous fire-and-forget behaviour; the only change is the bound.
+func (p *Peer) dispatchHandler(f func() error) error {
+	select {
+	case p.handlerSem <- struct{}{}:
+	case <-p.term:
+		return nil
+	}
+	go func() {
+		defer func() { <-p.handlerSem }()
+		_ = f()
+	}()
+	return nil
 }
 
 // ID retrieves the peer's unique identifier.
