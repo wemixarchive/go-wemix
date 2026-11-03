@@ -16,7 +16,6 @@ var (
 	AmPartnerFunc               func() bool
 	IsPartnerFunc               func(string) bool
 	AmHubFunc                   func(string) int
-	CalculateRewardsFunc        func(*params.ChainConfig, *big.Int, *big.Int, func(common.Address, *big.Int)) ([]byte, error)
 	GetCoinbaseFunc             func(height *big.Int) (coinbase common.Address, err error)
 	SignBlockFunc               func(height *big.Int, hash common.Hash) (coinbase common.Address, sig []byte, err error)
 	VerifyBlockSigFunc          func(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool
@@ -87,14 +86,6 @@ func HasMiningToken() bool {
 
 func IsPoW() bool {
 	return params.ConsensusMethod == params.ConsensusPoW
-}
-
-func CalculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
-	if CalculateRewardsFunc == nil {
-		return nil, ErrNotInitialized
-	} else {
-		return CalculateRewardsFunc(config, num, fees, addBalance)
-	}
 }
 
 func GetCoinbase(height *big.Int) (coinbase common.Address, err error) {

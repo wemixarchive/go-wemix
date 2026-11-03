@@ -23,6 +23,9 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
@@ -35,6 +38,7 @@ import (
 	gov "github.com/ethereum/go-ethereum/wemix/bind"
 	"github.com/ethereum/go-ethereum/wemix/metclient"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
+	wemixrewards "github.com/ethereum/go-ethereum/wemix/rewards"
 	"github.com/pkg/errors"
 )
 
@@ -313,13 +317,13 @@ func (ma *wemixAdmin) getWemixNodes(ctx context.Context, block *big.Int) ([]*wem
 	return nodes, err
 }
 
-func (ma *wemixAdmin) getRewardParams(ctx context.Context, height *big.Int) (*rewardParameters, error) {
+func (ma *wemixAdmin) getRewardParams(ctx context.Context, caller bind.ContractCaller, height *big.Int) (*rewardParameters, error) {
 	rp := &rewardParameters{}
-	contracts, err := ma.getRegGovEnvContracts(ctx, height)
+	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
+	contracts, err := gov.GetGovCallersByOwner(opts, caller, ma.bootAccount)
 	if err != nil {
 		return nil, err
 	}
-	opts := &bind.CallOpts{Context: ctx, BlockNumber: height}
 
 	rp.rewardAmount, err = contracts.EnvStorageImp.GetBlockRewardAmount(opts)
 	if err != nil {
@@ -903,17 +907,20 @@ func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters
 	return
 }
 
-func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// calculateRewards reads the reward parameters from the parent state of header.
+func calculateRewards(chain consensus.ChainHeaderReader, header *types.Header, db state.Database, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+	caller, err := newBlockStateCallerAtParent(chain, header, db)
+	if err != nil {
+		return nil, wemixminer.ErrNotInitialized
+	}
 
-	rp, err := admin.getRewardParams(ctx, big.NewInt(num.Int64()-1))
+	rp, err := admin.getRewardParams(context.Background(), caller, caller.header.Number)
 	if err != nil {
 		// all goes to the coinbase
 		return nil, wemixminer.ErrNotInitialized
 	}
 
-	return calculateRewardsWithParams(config, rp, num, fees, addBalance)
+	return calculateRewardsWithParams(chain.Config(), rp, header.Number, header.Fees, addBalance)
 }
 
 func getCoinbase(height *big.Int) (common.Address, error) {
@@ -1510,7 +1517,6 @@ func init() {
 	wemixminer.IsPartnerFunc = IsPartner
 	wemixminer.AmHubFunc = AmHub
 	wemixminer.SuggestGasPriceFunc = suggestGasPrice
-	wemixminer.CalculateRewardsFunc = calculateRewards
 	wemixminer.GetCoinbaseFunc = getCoinbase
 	wemixminer.SignBlockFunc = signBlock
 	wemixminer.VerifyBlockSigFunc = verifyBlockSig
@@ -1522,6 +1528,8 @@ func init() {
 	wemixminer.HasMiningTokenFunc = hasMiningToken
 	wemixminer.AbandonMiningTokenFunc = abandonMiningToken
 	wemixminer.NodeNameForPeerIDFunc = NodeNameForPeerID
+
+	wemixrewards.CalculateRewardsFunc = calculateRewards
 
 	wemixapi.Info = Info
 	wemixapi.GetMiners = getMiners

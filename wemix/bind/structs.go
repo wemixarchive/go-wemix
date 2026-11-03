@@ -250,10 +250,10 @@ func GetGovContractsByOwner(opts *bind.CallOpts, backend bind.ContractBackend, o
 	return NewGovContracts(backend, address)
 }
 
-func GetRegistryByOwner(opts *bind.CallOpts, backend bind.ContractBackend, owner common.Address) (common.Address, *Registry, error) {
+func GetRegistryByOwner(opts *bind.CallOpts, caller bind.ContractCaller, owner common.Address) (common.Address, *RegistryCaller, error) {
 	for i := uint64(0); i < 10; i++ {
 		address := crypto.CreateAddress(owner, i)
-		registry, err := GetRegistryByAddress(opts, backend, address)
+		registry, err := GetRegistryByAddress(opts, caller, address)
 		if err == nil {
 			return address, registry, nil
 		}
@@ -261,8 +261,8 @@ func GetRegistryByOwner(opts *bind.CallOpts, backend bind.ContractBackend, owner
 	return common.Address{}, nil, errors.Wrap(ethereum.NotFound, REGISTRY)
 }
 
-func GetRegistryByAddress(opts *bind.CallOpts, backend bind.ContractBackend, address common.Address) (*Registry, error) {
-	if registry, err := NewRegistry(address, backend); err != nil {
+func GetRegistryByAddress(opts *bind.CallOpts, caller bind.ContractCaller, address common.Address) (*RegistryCaller, error) {
+	if registry, err := NewRegistryCaller(address, caller); err != nil {
 		return nil, err
 	} else if callMagic, err := registry.Magic(opts); err != nil {
 		return nil, err
@@ -271,6 +271,35 @@ func GetRegistryByAddress(opts *bind.CallOpts, backend bind.ContractBackend, add
 	} else {
 		return nil, ethereum.NotFound
 	}
+}
+
+// GovCallers holds read-only bindings of the governance contracts.
+type GovCallers struct {
+	Registry         *RegistryCaller
+	GovImp           *GovImpCaller
+	StakingImp       *StakingImpCaller
+	BallotStorageImp *BallotStorageImpCaller
+	EnvStorageImp    *EnvStorageImpCaller
+}
+
+// GetGovCallersByOwner is the read-only counterpart of GetGovContractsByOwner.
+// Unlike NewGovContracts, contract domains are resolved with the given opts.
+func GetGovCallersByOwner(opts *bind.CallOpts, caller bind.ContractCaller, owner common.Address) (*GovCallers, error) {
+	_, registry, err := GetRegistryByOwner(opts, caller, owner)
+	if err != nil {
+		return nil, err
+	}
+	gov := &GovCallers{Registry: registry}
+	if gov.GovImp, err = newUUPSCaller(opts, gov.Registry, caller, DOMAIN_Gov, NewGovImpCaller); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_Gov)
+	} else if gov.StakingImp, err = newUUPSCaller(opts, gov.Registry, caller, DOMAIN_Staking, NewStakingImpCaller); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_Staking)
+	} else if gov.BallotStorageImp, err = newUUPSCaller(opts, gov.Registry, caller, DOMAIN_BallotStorage, NewBallotStorageImpCaller); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_BallotStorage)
+	} else if gov.EnvStorageImp, err = newUUPSCaller(opts, gov.Registry, caller, DOMAIN_EnvStorage, NewEnvStorageImpCaller); err != nil {
+		return nil, errors.Wrap(err, DOMAIN_EnvStorage)
+	}
+	return gov, nil
 }
 
 // //////////////////////
@@ -422,6 +451,22 @@ func newUUPSContracts[P, L any](
 		return common.Address{}, nil, nil, errors.Wrap(err, "newLogic")
 	} else {
 		return address, proxy, imp, nil
+	}
+}
+
+func newUUPSCaller[C any](
+	opts *bind.CallOpts,
+	registry *RegistryCaller,
+	caller bind.ContractCaller,
+	name string,
+	newCaller func(common.Address, bind.ContractCaller) (*C, error),
+) (*C, error) {
+	if address, err := registry.GetContractAddress(opts, metclient.ToBytes32(name)); err != nil {
+		return nil, errors.Wrap(err, "GetContractAddress")
+	} else if c, err := newCaller(address, caller); err != nil {
+		return nil, errors.Wrap(err, "newCaller")
+	} else {
+		return c, nil
 	}
 }
 

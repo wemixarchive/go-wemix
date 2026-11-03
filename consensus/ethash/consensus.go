@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
+	wemixrewards "github.com/ethereum/go-ethereum/wemix/rewards"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -609,7 +610,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 // setting the final state on the header
 func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) error {
 	// Accumulate any block and uncle rewards and commit the final state root
-	if err := accumulateRewards(chain.Config(), state, header, uncles); err != nil {
+	if err := accumulateRewards(chain, state, header, uncles); err != nil {
 		return err
 	}
 
@@ -676,7 +677,8 @@ var (
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) error {
+func accumulateRewards(chain consensus.ChainHeaderReader, state *state.StateDB, header *types.Header, uncles []*types.Header) error {
+	config := chain.Config()
 	// Select the correct block reward based on chain progression
 	blockReward := FrontierBlockReward
 	if config.IsByzantium(header.Number) {
@@ -702,8 +704,8 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		}
 		state.AddBalance(header.Coinbase, reward)
 	} else {
-		rewards, err := wemixminer.CalculateRewards(
-			config, header.Number, header.Fees,
+		rewards, err := wemixrewards.CalculateRewards(
+			chain, header, state.Database(),
 			func(addr common.Address, amt *big.Int) {
 				state.AddBalance(addr, amt)
 			})
