@@ -1832,7 +1832,10 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	if cfg.RPCGasCap != 0 {
 		log.Info("Set global gas cap", "cap", cfg.RPCGasCap)
 	} else {
-		log.Info("Global gas cap disabled")
+		// The cap can only be zero when the operator disables it explicitly,
+		// either by flag or by config file, so warn regardless of which RPC
+		// transports are enabled.
+		log.Warn("Global gas cap disabled, eth_call and related methods accept any gas amount the caller requests")
 	}
 	if ctx.GlobalIsSet(RPCGlobalEVMTimeoutFlag.Name) {
 		cfg.RPCEVMTimeout = ctx.GlobalDuration(RPCGlobalEVMTimeoutFlag.Name)
