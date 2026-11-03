@@ -1831,10 +1831,11 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	}
 	if cfg.RPCGasCap != 0 {
 		log.Info("Set global gas cap", "cap", cfg.RPCGasCap)
-	} else if rpcServed(stack.Config()) {
-		log.Warn("Global gas cap disabled while HTTP/WS RPC is enabled, set --rpc.gascap to bound eth_call resource usage")
 	} else {
-		log.Info("Global gas cap disabled")
+		// The cap can only be zero when the operator disables it explicitly,
+		// either by flag or by config file, so warn regardless of which RPC
+		// transports are enabled.
+		log.Warn("Global gas cap disabled, eth_call and related methods accept any gas amount the caller requests")
 	}
 	if ctx.GlobalIsSet(RPCGlobalEVMTimeoutFlag.Name) {
 		cfg.RPCEVMTimeout = ctx.GlobalDuration(RPCGlobalEVMTimeoutFlag.Name)
@@ -1964,12 +1965,6 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			SetDNSDiscoveryDefaults(cfg, params.MainnetGenesisHash)
 		}
 	}
-}
-
-// rpcServed reports whether the node serves RPC over HTTP or WebSocket, where
-// remote callers can reach eth_call and related methods.
-func rpcServed(cfg *node.Config) bool {
-	return cfg.HTTPHost != "" || cfg.WSHost != ""
 }
 
 // SetDNSDiscoveryDefaults configures DNS discovery with the given URL if
