@@ -16,11 +16,37 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	solcVersion string = "0.8.6"
-)
+// solcVersion is the solc release every governance contract is compiled with.
+const solcVersion = "0.8.6"
 
+// OpenZeppelin names the directories, relative to the compile root, that the
+// @openzeppelin/contracts and @openzeppelin/contracts-upgradeable import
+// prefixes resolve to. Each directory is an OpenZeppelin repository checkout.
+type OpenZeppelin struct {
+	Contracts   string
+	Upgradeable string
+}
+
+// DefaultOpenZeppelin is the OpenZeppelin checkout pair Compile uses
+// (contracts v4.6.0, contracts-upgradeable v4.7.0).
+func DefaultOpenZeppelin() OpenZeppelin {
+	return OpenZeppelin{
+		Contracts:   "openzeppelin/contracts",
+		Upgradeable: "openzeppelin/contracts-upgradeable",
+	}
+}
+
+// Compile compiles sourceFiles against DefaultOpenZeppelin.
 func Compile(root string, sourceFiles ...string) (compiledTy, error) {
+	return CompileWith(root, DefaultOpenZeppelin(), sourceFiles...)
+}
+
+// CompileWith compiles sourceFiles with the @openzeppelin imports resolved to
+// the checkouts named by oz. An empty root means "../contracts".
+func CompileWith(root string, oz OpenZeppelin, sourceFiles ...string) (compiledTy, error) {
+	if oz.Contracts == "" || oz.Upgradeable == "" {
+		return nil, fmt.Errorf("openzeppelin directories must be set: %+v", oz)
+	}
 	solcPath, err := solcdownloader.GetSolcBin(solcVersion)
 	if err != nil {
 		return nil, err
@@ -32,8 +58,8 @@ func Compile(root string, sourceFiles ...string) (compiledTy, error) {
 		"--combined-json", "bin,bin-runtime,srcmap,srcmap-runtime,abi,userdoc,devdoc,metadata,hashes",
 		"--optimize",                // code optimizer switched on
 		"--allow-paths", ".,./,../", //default to support relative path： ./  ../  .
-		fmt.Sprintf("@openzeppelin/contracts/=%s/openzeppelin/contracts/contracts/", root),
-		fmt.Sprintf("@openzeppelin/contracts-upgradeable/=%s/openzeppelin/contracts-upgradeable/contracts/", root),
+		fmt.Sprintf("@openzeppelin/contracts/=%s/%s/contracts/", root, oz.Contracts),
+		fmt.Sprintf("@openzeppelin/contracts-upgradeable/=%s/%s/contracts/", root, oz.Upgradeable),
 		"--",
 	}
 	// ~/.gsolc-select/artifacts/solc-0.8.14/0.8.14
@@ -69,6 +95,35 @@ func Compile(root string, sourceFiles ...string) (compiledTy, error) {
 }
 
 type compiledTy map[string]*compiler.Contract
+
+// Pick returns a compiledTy holding only the named contracts. It fails if any
+// name is missing, so a typo cannot silently drop a contract from a binding.
+func (compiled compiledTy) Pick(names ...string) (compiledTy, error) {
+	out := make(compiledTy, len(names))
+	for _, name := range names {
+		c, ok := compiled[name]
+		if !ok {
+			return nil, fmt.Errorf("not found contract : %v", name)
+		}
+		out[name] = c
+	}
+	return out, nil
+}
+
+// Merge combines sets into one compiledTy. A contract name present in more
+// than one set is an error, because it would be ambiguous which build to bind.
+func Merge(sets ...compiledTy) (compiledTy, error) {
+	out := make(compiledTy)
+	for _, set := range sets {
+		for name, c := range set {
+			if _, ok := out[name]; ok {
+				return nil, fmt.Errorf("duplicated contract name: %s", name)
+			}
+			out[name] = c
+		}
+	}
+	return out, nil
+}
 
 func (compiled compiledTy) BindContracts(pkg, filename string, contracts ...string) error {
 	var (
