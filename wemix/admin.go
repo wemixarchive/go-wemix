@@ -904,6 +904,9 @@ func calculateRewardsWithParams(config *params.ChainConfig, rp *rewardParameters
 }
 
 func calculateRewards(config *params.ChainConfig, num, fees *big.Int, addBalance func(common.Address, *big.Int)) ([]byte, error) {
+	if admin == nil {
+		return nil, wemixminer.ErrNotInitialized
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -974,6 +977,11 @@ func signBlock(height *big.Int, hash common.Hash) (common.Address, []byte, error
 }
 
 func verifyBlockSig(height *big.Int, coinbase common.Address, nodeId []byte, hash common.Hash, sig []byte, checkMinerLimit bool) bool {
+	// Without an admin there is nothing to verify against; reject rather
+	// than accept an unchecked signature.
+	if admin == nil {
+		return false
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
