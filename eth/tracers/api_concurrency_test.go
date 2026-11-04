@@ -91,3 +91,64 @@ func TestTraceConcurrencyIsBounded(t *testing.T) {
 	close(gb.release) // let everything finish
 	wg.Wait()
 }
+
+// TestAcquireTraceReleaseNoSlotLeak oversubscribes a small traceSem with many
+// goroutines that each acquire then release, and asserts the semaphore drains
+// completely. An acquire not paired with a release would leave a non-zero count
+// here; over time that would exhaust the pool and block every trace RPC.
+func TestAcquireTraceReleaseNoSlotLeak(t *testing.T) {
+	const capacity = 3
+	const workers = 40
+	const iters = 50
+	api := &API{traceSem: make(chan struct{}, capacity)}
+
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				if err := api.acquireTrace(context.Background()); err != nil {
+					t.Errorf("acquireTrace with a live ctx: %v", err)
+					return
+				}
+				api.releaseTrace()
+			}
+		}()
+	}
+	wg.Wait()
+	if n := len(api.traceSem); n != 0 {
+		t.Fatalf("traceSem leaked: %d slots still held", n)
+	}
+}
+
+// TestAcquireTraceRespectsCtxCancel asserts a cancelled ctx makes acquireTrace
+// return without taking a slot (no infinite wait, no leak) and leaves the slot
+// count unchanged, so a failed acquire never needs a release.
+func TestAcquireTraceRespectsCtxCancel(t *testing.T) {
+	api := &API{traceSem: make(chan struct{}, 1)}
+	api.traceSem <- struct{}{} // fill the only slot so the sem send cannot proceed
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled: the only ready select case is ctx.Done()
+
+	done := make(chan error, 1)
+	go func() { done <- api.acquireTrace(ctx) }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("acquireTrace took a slot on a full sem with a cancelled ctx")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("acquireTrace blocked despite a cancelled ctx")
+	}
+	if n := len(api.traceSem); n != 1 {
+		t.Fatalf("failed acquire changed the slot count: have %d, want 1", n)
+	}
+	// The held slot still releases cleanly, and a live-ctx acquire then succeeds.
+	api.releaseTrace()
+	if err := api.acquireTrace(context.Background()); err != nil {
+		t.Fatalf("acquireTrace after release: %v", err)
+	}
+	api.releaseTrace()
+}
