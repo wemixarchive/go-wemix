@@ -17,9 +17,13 @@
 package eth
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"math/rand"
+	"net"
+	"strings"
 	"sync"
 
 	mapset "github.com/deckarep/golang-set"
@@ -102,6 +106,17 @@ type Peer struct {
 // handler goroutines.
 const maxHandlerConcurrency = 8
 
+// maxGlobalHandlerConcurrency bounds how many request handlers run concurrently
+// across all peers. The per-peer bound (maxHandlerConcurrency) still applies
+// first; this caps the aggregate so that many peers cannot multiply the same
+// per-request allocation. Sized for an operational maxPeers around 100: far
+// below the unbounded maxPeers*maxHandlerConcurrency, while leaving ample room
+// for legitimate concurrent serving during sync.
+const maxGlobalHandlerConcurrency = 128
+
+// globalHandlerSem bounds concurrent async request handlers across all peers.
+var globalHandlerSem = make(chan struct{}, maxGlobalHandlerConcurrency)
+
 // NewPeer create a wrapper for a network connection and negotiated  protocol
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
@@ -141,20 +156,64 @@ func (p *Peer) Close() {
 	close(p.term)
 }
 
-// dispatchHandler runs an asynchronous request handler under a per-peer
-// concurrency bound. It blocks the caller (the read loop) until a handler slot
-// is free, which applies backpressure so a single peer can no longer spawn an
-// unbounded number of handler goroutines. The wait does not watch p.term: that
-// channel only closes after the read loop has returned, so it cannot fire here.
-// The handler's error is not surfaced here, matching the previous
-// fire-and-forget behaviour; the only change is the bound.
+// dispatchHandler runs an asynchronous request handler under both a per-peer
+// and a node-global concurrency bound. It blocks the caller (the read loop)
+// until first a per-peer slot and then a global slot are free, which applies
+// read-loop backpressure so a single peer cannot spawn unbounded handler
+// goroutines and many peers cannot multiply the same per-request allocation.
+// The per-peer slot is taken first so one peer can hold at most
+// maxHandlerConcurrency of the global slots and cannot monopolise them.
+//
+// The waits do not watch p.term: that channel only closes after the read loop
+// has returned, so it cannot fire here. The handler's error is logged
+// (classified) rather than silently discarded, but it does not drop the peer:
+// a handler error is almost always the connection going away, which the read
+// loop already tears down, and dropping on it would hand a peer a lever to
+// force disconnects.
 func (p *Peer) dispatchHandler(f func() error) error {
 	p.handlerSem <- struct{}{}
+	globalHandlerSem <- struct{}{}
 	go func() {
+		defer func() { <-globalHandlerSem }()
 		defer func() { <-p.handlerSem }()
-		_ = f()
+		if err := f(); err != nil {
+			p.logHandlerError(err)
+		}
 	}()
 	return nil
+}
+
+// logHandlerError records an async request handler error. Connection and
+// shutdown errors are expected and high-frequency (every peer teardown
+// mid-write produces one), so they are logged quietly to keep a peer from
+// flooding the logs by inducing write errors; a genuine serving fault is
+// surfaced at a higher level.
+func (p *Peer) logHandlerError(err error) {
+	if isConnClosedErr(err) {
+		p.Log().Trace("eth request handler stopped", "err", err)
+		return
+	}
+	p.Log().Warn("eth request handler failed", "err", err)
+}
+
+// isConnClosedErr reports whether err means the connection is going away rather
+// than a genuine serving fault.
+func isConnClosedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, p2p.ErrShuttingDown) || errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrClosedPipe) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	// Some teardown conditions surface as plain string errors from p2p/rlpx.
+	msg := err.Error()
+	for _, s := range []string{"shutting down", "use of closed", "connection reset", "broken pipe", "i/o timeout", "EOF"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // ID retrieves the peer's unique identifier.
