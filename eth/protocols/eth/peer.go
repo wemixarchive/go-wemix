@@ -144,15 +144,12 @@ func (p *Peer) Close() {
 // dispatchHandler runs an asynchronous request handler under a per-peer
 // concurrency bound. It blocks the caller (the read loop) until a handler slot
 // is free, which applies backpressure so a single peer can no longer spawn an
-// unbounded number of handler goroutines. If the peer is terminating, the
-// request is dropped. The handler's error is not surfaced here, matching the
-// previous fire-and-forget behaviour; the only change is the bound.
+// unbounded number of handler goroutines. The wait does not watch p.term: that
+// channel only closes after the read loop has returned, so it cannot fire here.
+// The handler's error is not surfaced here, matching the previous
+// fire-and-forget behaviour; the only change is the bound.
 func (p *Peer) dispatchHandler(f func() error) error {
-	select {
-	case p.handlerSem <- struct{}{}:
-	case <-p.term:
-		return nil
-	}
+	p.handlerSem <- struct{}{}
 	go func() {
 		defer func() { <-p.handlerSem }()
 		_ = f()
