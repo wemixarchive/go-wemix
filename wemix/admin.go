@@ -133,6 +133,7 @@ var (
 	ErrInvalidToken   = errors.New("invalid token")
 	ErrInvalidWork    = errors.New("invalid work")
 	ErrNotFound       = errors.New("not found")
+	ErrNotRemoved     = errors.New("not removed from etcd cluster")
 	ErrNotRunning     = errors.New("not running")
 
 	// cached block build parameters
@@ -245,7 +246,8 @@ func (ma *wemixAdmin) getMinerNodes(height int64, locked bool) (*wemixNode, *wem
 	})
 
 	for _, n := range nodes {
-		if (ma.self != nil && n.Id == ma.self.Id) || ma.isPeerUp(n.Id) {
+		isSelf := ma.self != nil && n.Id == ma.self.Id
+		if (isSelf && ma.etcdIsReady()) || (!isSelf && ma.isPeerUp(n.Id)) {
 			n.Status = "up"
 		} else {
 			n.Status = "down"
@@ -1272,6 +1274,14 @@ func getMinerStatus() *wemixapi.WemixMinerStatus {
 	_, _, nodes := admin.getMinerNodes(height+1, false)
 	miningPeers := admin.toMiningPeers(nodes)
 
+	// Report down when this node is not a ready etcd member. It cannot win the
+	// mining token in that state, so advertising "up" hides that it dropped out
+	// of the cluster (e.g. after member removal).
+	status := "up"
+	if !admin.etcdIsReady() {
+		status = "down"
+	}
+
 	admin.lock.Lock()
 	defer admin.lock.Unlock()
 
@@ -1280,7 +1290,7 @@ func getMinerStatus() *wemixapi.WemixMinerStatus {
 		Enode:             admin.self.Enode,
 		Id:                admin.self.Id,
 		Addr:              fmt.Sprintf("%s:%d", admin.self.Ip, admin.self.Port),
-		Status:            "up",
+		Status:            status,
 		Miner:             admin.self.Miner,
 		MiningPeers:       miningPeers,
 		LatestBlockHeight: header.Number,

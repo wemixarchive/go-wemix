@@ -5,20 +5,26 @@ package wemix
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"math/rand"
+	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
+	"go.etcd.io/etcd/server/v3/etcdserver"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/membership"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 
@@ -29,9 +35,21 @@ import (
 	wemixminer "github.com/ethereum/go-ethereum/wemix/miner"
 )
 
+// etcdRejoinMarker is the file in the etcd data directory that records this
+// member was rejected by its cluster.
+const etcdRejoinMarker = ".rejoin"
+
 var (
-	etcdLock         = &SpinLock{0}
-	etcdReady        = false
+	etcdLock = &SpinLock{0}
+	// etcdReady is read by etcdIsReady and written by etcdEventHandler on a
+	// separate goroutine, so it is atomic to avoid a data race.
+	etcdReady uint32
+	// etcdRunning tracks whether the embedded etcd is live. It is set when a
+	// server is started and cleared by etcdEventHandler once a stopped server
+	// has been released. Without it etcdIsRunning stayed true on a stopped
+	// server, so the run loop never restarted etcd. Atomic because the handler
+	// goroutine writes it while other goroutines read it.
+	etcdRunning      uint32
 	etcdAutoJoinLock = make(chan interface{}, 1)
 )
 
@@ -115,6 +133,140 @@ func (ma *wemixAdmin) etcdFixCluster(cluster string) (string, error) {
 	return bb.String(), nil
 }
 
+// resetEtcdDir clears stale etcd state so a removed node can join as a fresh
+// member. etcd refuses to let a removed member rejoin with its old data
+// directory: the cluster no longer knows that member ID.
+func (ma *wemixAdmin) resetEtcdDir() error {
+	if ma.etcdDir == "" {
+		return nil
+	}
+	return clearDirMarkerLast(ma.etcdDir, etcdRejoinMarker, os.RemoveAll)
+}
+
+// clearDirMarkerLast empties dir through remove, leaving marker for last. If
+// that is interrupted the marker survives, so a restart clears the rest instead
+// of opening a partial WAL, which etcd treats as fatal.
+func clearDirMarkerLast(dir, marker string, remove func(string) error) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.Name() == marker {
+			continue
+		}
+		if err := remove(filepath.Join(dir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return remove(filepath.Join(dir, marker))
+}
+
+// The rejoin marker records that etcd stopped this member with its data
+// directory unusable, which is how a removed member ends. The join path then
+// knows the on-disk data is stale and must be cleared before rejoining. A node
+// bootstrapping for the first time carries no marker and keeps its freshly
+// initialized directory, and so does a member that stopped for another reason.
+// The marker lives in the data directory so it survives a process restart,
+// letting a removed node recover after a bounce as well as in place.
+func (ma *wemixAdmin) rejoinMarkerPath() string {
+	if ma.etcdDir == "" {
+		return ""
+	}
+	return filepath.Join(ma.etcdDir, etcdRejoinMarker)
+}
+
+// markRejoinNeeded records the rejected member's ID, which the join path checks
+// against the cluster before it clears anything.
+func (ma *wemixAdmin) markRejoinNeeded(id uint64) {
+	p := ma.rejoinMarkerPath()
+	if p == "" {
+		return
+	}
+	if err := os.WriteFile(p, []byte(strconv.FormatUint(id, 16)), 0600); err != nil {
+		log.Warn("could not write etcd rejoin marker", "error", err)
+	}
+}
+
+func (ma *wemixAdmin) clearRejoinNeeded() {
+	p := ma.rejoinMarkerPath()
+	if p == "" {
+		return
+	}
+	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+		log.Warn("could not clear etcd rejoin marker", "error", err)
+	}
+}
+
+func (ma *wemixAdmin) rejoinNeeded() bool {
+	p := ma.rejoinMarkerPath()
+	if p == "" {
+		return false
+	}
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// rejoinMemberID returns the member ID in the rejoin marker. ok is false if the
+// marker is missing or unreadable, as a crash during the write can leave it.
+func (ma *wemixAdmin) rejoinMemberID() (id uint64, ok bool) {
+	data, err := os.ReadFile(ma.rejoinMarkerPath())
+	if err != nil {
+		return 0, false
+	}
+	id, err = strconv.ParseUint(string(data), 16, 64)
+	return id, err == nil
+}
+
+// etcdRemovalConfirmed asks the peers in cluster whether the marker's member has
+// really left. A rejection alone is not enough to clear the directory: a member
+// that comes back without its raft log panics on the leader's commit index, and
+// that takes the whole process down.
+func (ma *wemixAdmin) etcdRemovalConfirmed(cluster string) (bool, error) {
+	id, ok := ma.rejoinMemberID()
+	if !ok {
+		return false, nil
+	}
+
+	self := fmt.Sprintf("%s:%d", ma.self.Ip, ma.self.Port+1)
+	var peers []string
+	for _, entry := range strings.Split(cluster, ",") {
+		if j := strings.SplitN(entry, "=", 2); len(j) == 2 && !strings.HasSuffix(j[1], "//"+self) {
+			peers = append(peers, j[1])
+		}
+	}
+
+	// Peers use self-signed certificates, so there is no chain to verify.
+	rt := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	defer rt.CloseIdleConnections()
+
+	// A removal never comes undone, so one peer without the member settles it.
+	// Peers that are behind or unreachable only leave the question open.
+	var (
+		answered bool
+		lastErr  error = ErrNotFound
+	)
+	for _, peer := range peers {
+		remote, err := etcdserver.GetClusterFromRemotePeers(nil, []string{peer}, rt)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		answered = true
+		listed := false
+		for _, m := range remote.Members() {
+			listed = listed || uint64(m.ID) == id
+		}
+		if !listed {
+			return true, nil
+		}
+	}
+	if !answered {
+		return false, lastErr
+	}
+	return false, nil
+}
+
 func (ma *wemixAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	// LPUrls: listening peer urls
 	// APUrls: advertised peer urls
@@ -148,12 +300,25 @@ func (ma *wemixAdmin) etcdNewConfig(newCluster bool) *embed.Config {
 	return cfg
 }
 
+// inGovernance reports whether this node is still in the governance node list.
+// ma.self alone cannot tell: it keeps its value after the node is dropped.
+func (ma *wemixAdmin) inGovernance() bool {
+	ma.lock.Lock()
+	defer ma.lock.Unlock()
+
+	if ma.self == nil {
+		return false
+	}
+	_, ok := ma.nodes[ma.self.Id]
+	return ok
+}
+
 func (ma *wemixAdmin) etcdIsRunning() bool {
-	return ma.etcd != nil && ma.etcdCli != nil
+	return ma.etcd != nil && ma.etcdCli != nil && atomic.LoadUint32(&etcdRunning) == 1
 }
 
 func (ma *wemixAdmin) etcdIsReady() bool {
-	return ma.etcd != nil && ma.etcdCli != nil && etcdReady
+	return ma.etcdIsRunning() && atomic.LoadUint32(&etcdReady) == 1
 }
 
 func (ma *wemixAdmin) etcdGetCluster() string {
@@ -283,27 +448,82 @@ func (ma *wemixAdmin) etcdTransferLeadership() error {
 	return ma.etcd.Server.TransferLeadership()
 }
 
+// etcdReleaseStopped frees a stopped server through closeServer. stale says the
+// cluster rejected this member, so its data directory is no longer usable.
+// etcdRunning drops last because it is what lets the run loop restart etcd: by
+// then the marker is on disk, the ports are free and this server can no longer
+// touch the directory the restart may clear.
+func (ma *wemixAdmin) etcdReleaseStopped(etcd *embed.Etcd, closeServer func(), stale bool) {
+	atomic.StoreUint32(&etcdReady, 0)
+	if stale {
+		ma.markRejoinNeeded(uint64(etcd.Server.ID()))
+	}
+	closeServer()
+	atomic.StoreUint32(&etcdRunning, 0)
+}
+
+// etcdCloseUnready frees a server that never became ready. embed.Etcd.Close
+// would block forever on it: Close waits for the client servers, and those only
+// start once the server is ready. The goroutines waiting on readiness stay
+// parked, which costs one set per rejected start.
+func etcdCloseUnready(etcd *embed.Etcd) {
+	etcd.Server.Stop()
+	for _, l := range etcd.Clients {
+		if err := l.Close(); err != nil {
+			log.Warn("etcd failed to close client listener", "error", err)
+		}
+	}
+	for _, l := range etcd.Peers {
+		if err := l.Close(); err != nil {
+			log.Warn("etcd failed to close peer listener", "error", err)
+		}
+	}
+}
+
 func etcdEventHandler() {
 	if !admin.etcdIsRunning() {
 		return
 	}
+	etcd := admin.etcd
 	select {
-	case <-admin.etcd.Server.ReadyNotify():
-		etcdReady = true
+	case <-etcd.Server.ReadyNotify():
+		atomic.StoreUint32(&etcdReady, 1)
+		// Healthy member: any stale rejoin marker no longer applies.
+		admin.clearRejoinNeeded()
 		log.Info("etcd server ready")
-	case err := <-admin.etcd.Err():
-		etcdReady = false
+	case <-etcd.Server.StopNotify():
+		// A node removed while it was down restarts on its old directory. Its
+		// peers reject it, so the server stops without ever becoming ready.
+		admin.etcdReleaseStopped(etcd, func() { etcdCloseUnready(etcd) }, true)
+		log.Warn("etcd server stopped before becoming ready")
+		return
+	case err := <-etcd.Err():
+		admin.etcdReleaseStopped(etcd, func() { etcdCloseUnready(etcd) }, false)
 		log.Info("etcd server failed to start", "error", err)
 		return
 	}
 	// watch
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	workCh := admin.etcdCli.Watch(ctx, wemixWorkKey)
 	lockCh := admin.etcdCli.Watch(ctx, wemixTokenKey)
 	for {
 		select {
-		case <-admin.etcd.Server.LeaderChangedNotify():
-			latestEtcdLeader.Store(admin.etcd.Server.Leader())
+		case <-etcd.Server.StopNotify():
+			// Nothing here stops the server, so it stopped on its own. That is
+			// how a removed member ends: etcd stops it with the data directory
+			// unusable, and Err() stays silent.
+			admin.etcdReleaseStopped(etcd, etcd.Close, true)
+			log.Warn("etcd server stopped")
+			return
+		case err := <-etcd.Err():
+			// A listener failed, but the server is still running. Block
+			// production uses the in-process client and outbound peer traffic
+			// needs no listener, so stopping would only cost a healthy member
+			// its place in the cluster.
+			log.Warn("etcd listener failed", "error", err)
+		case <-etcd.Server.LeaderChangedNotify():
+			latestEtcdLeader.Store(etcd.Server.Leader())
 		case watchResp := <-workCh:
 			latestUpdateTime.Store(time.Now())
 			for _, event := range watchResp.Events {
@@ -347,6 +567,7 @@ func (ma *wemixAdmin) etcdInit() error {
 
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)
+	atomic.StoreUint32(&etcdRunning, 1)
 	go etcdEventHandler()
 	return nil
 }
@@ -365,11 +586,18 @@ func (ma *wemixAdmin) etcdStart() error {
 	log.Info("etcd started")
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)
+	atomic.StoreUint32(&etcdRunning, 1)
 	go etcdEventHandler()
 	return nil
 }
 
 func (ma *wemixAdmin) etcdJoin(name string) error {
+	// Every start holds etcdLock, as callers here do, so this cannot go stale
+	// before the rejoin path clears the data directory.
+	if ma.etcdIsRunning() {
+		return ErrAlreadyRunning
+	}
+
 	var node *wemixNode
 	ma.lock.Lock()
 	for _, i := range ma.nodes {
@@ -412,6 +640,27 @@ func (ma *wemixAdmin) etcdJoin(name string) error {
 
 			cfg := ma.etcdNewConfig(false)
 			cfg.InitialCluster = cluster
+			// Only a node that was removed from the cluster needs a clean data
+			// directory; a first-time joiner keeps its initialized one.
+			if ma.rejoinNeeded() {
+				removed, err := ma.etcdRemovalConfirmed(cluster)
+				if err != nil {
+					log.Error("etcd failed to join", "error", err)
+					return err
+				}
+				if !removed {
+					// Still a member, or the marker cannot say. Either way the
+					// next restart runs on this directory, and a real rejection
+					// writes a fresh marker.
+					ma.clearRejoinNeeded()
+					log.Warn("etcd rejoin skipped", "error", ErrNotRemoved)
+					return ErrNotRemoved
+				}
+				if err := ma.resetEtcdDir(); err != nil {
+					log.Error("etcd failed to join", "error", err)
+					return err
+				}
+			}
 			etcd, err := embed.StartEtcd(cfg)
 			if err != nil {
 				log.Error("etcd failed to join", "error", err)
@@ -421,6 +670,7 @@ func (ma *wemixAdmin) etcdJoin(name string) error {
 			}
 			ma.etcd = etcd
 			ma.etcdCli = v3client.New(etcd.Server)
+			atomic.StoreUint32(&etcdRunning, 1)
 			go etcdEventHandler()
 			return nil
 
@@ -1065,7 +1315,15 @@ func EtcdStart() {
 		return
 	}
 	defer etcdLock.Unlock()
-	if admin == nil {
+	if admin == nil || !admin.inGovernance() {
+		return
+	}
+
+	// A node that was removed from the cluster must rejoin fresh. Its peers
+	// would only reject an existing-member restart (etcdStart), so skip straight
+	// to the join path, which clears the stale data directory.
+	if admin.rejoinNeeded() {
+		go admin.etcdAutoJoin()
 		return
 	}
 

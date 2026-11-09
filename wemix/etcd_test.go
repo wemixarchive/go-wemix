@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -92,12 +93,15 @@ func newTestEtcdAdmin(t *testing.T) *wemixAdmin {
 	ma.etcd = etcd
 	ma.etcdCli = v3client.New(etcd.Server)
 
-	// etcdIsReady() also checks the package-level etcdReady flag.
-	prevReady := etcdReady
-	etcdReady = true
+	// etcdIsReady()/etcdIsRunning() also check package-level flags.
+	prevReady := atomic.LoadUint32(&etcdReady)
+	prevRunning := atomic.LoadUint32(&etcdRunning)
+	atomic.StoreUint32(&etcdReady, 1)
+	atomic.StoreUint32(&etcdRunning, 1)
 
 	t.Cleanup(func() {
-		etcdReady = prevReady
+		atomic.StoreUint32(&etcdReady, prevReady)
+		atomic.StoreUint32(&etcdRunning, prevRunning)
 		if ma.etcdCli != nil {
 			ma.etcdCli.Close()
 		}
