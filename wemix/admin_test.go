@@ -122,3 +122,12 @@ func TestInfo_BeforeContractsLoaded(t *testing.T) {
 		t.Fatalf("Info() = %v, want empty string", got)
 	}
 }
+
+// addPeer must not dereference nodeInfo before run() loads it.
+func TestAddPeer_BeforeNodeInfoLoaded(t *testing.T) {
+	ma := &wemixAdmin{}
+
+	if err := ma.addPeer(&wemixNode{Id: "node"}); err != nil {
+		t.Fatalf("addPeer() = %v, want nil", err)
+	}
+}

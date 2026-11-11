@@ -555,7 +555,7 @@ func StartAdmin(stack *node.Node, datadir string) {
 }
 
 func (ma *wemixAdmin) addPeer(node *wemixNode) error {
-	if node.Id == ma.nodeInfo.ID || ma.self == nil {
+	if ma.nodeInfo == nil || node.Id == ma.nodeInfo.ID || ma.self == nil {
 		return nil
 	}
 
