@@ -111,3 +111,23 @@ func TestGetMiners_DuplicateResponses(t *testing.T) {
 		t.Fatalf("consensus = (%v, %x), want honest (%d, %x)", height, hash, honestHeight, honestHash)
 	}
 }
+
+// Info must not dereference contracts before run() loads them.
+func TestInfo_BeforeContractsLoaded(t *testing.T) {
+	prev := admin
+	admin = &wemixAdmin{lock: &sync.Mutex{}}
+	t.Cleanup(func() { admin = prev })
+
+	if got := Info(); got != "" {
+		t.Fatalf("Info() = %v, want empty string", got)
+	}
+}
+
+// addPeer must not dereference nodeInfo before run() loads it.
+func TestAddPeer_BeforeNodeInfoLoaded(t *testing.T) {
+	ma := &wemixAdmin{}
+
+	if err := ma.addPeer(&wemixNode{Id: "node"}); err != nil {
+		t.Fatalf("addPeer() = %v, want nil", err)
+	}
+}
