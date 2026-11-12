@@ -1618,9 +1618,9 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	}
 	parent := w.chain.CurrentBlock()
 	height := new(big.Int).Add(parent.Number(), common.Big1)
-	// Wemix: Skip blocks after Croissant hard fork
-	if w.chain.Config().IsCroissant(height) {
-		log.Warn("go-wemix skips mining due to Croissant hard fork", "height", height, "parent-hash", parent.Hash())
+	// Wemix: Skip blocks after Dalgona hard fork
+	if w.chain.Config().IsDalgona(height) {
+		log.Warn("go-wemix skips mining due to Dalgona hard fork", "height", height, "parent-hash", parent.Hash())
 		return
 	}
 	if !wemixminer.IsPoW() {

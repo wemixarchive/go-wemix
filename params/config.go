@@ -414,7 +414,7 @@ type ChainConfig struct {
 	PangyoBlock         *big.Int `json:"pangyoBlock,omitempty"`         // Pangyo switch block (nil = no fork, 0 = already on pangyo)
 	ApplepieBlock       *big.Int `json:"applepieBlock,omitempty"`       // Applepie switch block (nil = no fork, 0 = already on applepie)
 	BriocheBlock        *big.Int `json:"briocheBlock,omitempty"`        // Brioche switch block (nil = no fork, 0 = already on brioche)
-	CroissantBlock      *big.Int `json:"croissantBlock,omitempty"`      // Croissant switch block (nil = no fork, 0 = already on croissant)
+	DalgonaBlock        *big.Int `json:"dalgonaBlock,omitempty"`        // Dalgona switch block: go-wemix stops here and go-wbft takes over (nil = no fork, 0 = already on dalgona)
 
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
@@ -510,7 +510,7 @@ func (c *ChainConfig) String() string {
 	default:
 		engine = "unknown"
 	}
-	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, CroissantFork: %v, Terminal TD: %v, BriocheConfig: %v, Engine: %v}",
+	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, DalgonaFork: %v, Terminal TD: %v, BriocheConfig: %v, Engine: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -530,7 +530,7 @@ func (c *ChainConfig) String() string {
 		c.PangyoBlock,
 		c.ApplepieBlock,
 		c.BriocheBlock,
-		c.CroissantBlock,
+		c.DalgonaBlock,
 		c.TerminalTotalDifficulty,
 		c.Brioche,
 		engine,
@@ -619,8 +619,11 @@ func (c *ChainConfig) IsBrioche(num *big.Int) bool {
 	return isForked(c.BriocheBlock, num)
 }
 
-func (c *ChainConfig) IsCroissant(num *big.Int) bool {
-	return isForked(c.CroissantBlock, num)
+// IsDalgona returns whether num is either equal to the Dalgona fork block or greater.
+// Dalgona switches the chain to WBFT consensus, which go-wbft runs; go-wemix
+// neither produces nor accepts blocks from this block on.
+func (c *ChainConfig) IsDalgona(num *big.Int) bool {
+	return isForked(c.DalgonaBlock, num)
 }
 
 // IsTerminalPoWBlock returns whether the given block is the last block of PoW stage.
@@ -681,7 +684,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "pangyoBlock", block: c.PangyoBlock, optional: true},
 		{name: "applepieBlock", block: c.ApplepieBlock, optional: true},
 		{name: "briocheBlock", block: c.BriocheBlock, optional: true},
-		{name: "croissantBlock", block: c.CroissantBlock, optional: true},
+		{name: "dalgonaBlock", block: c.DalgonaBlock, optional: true},
 	} {
 		if lastFork.name != "" {
 			// Next one must be higher number
@@ -766,8 +769,8 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 	if isForkIncompatible(c.BriocheBlock, newcfg.BriocheBlock, head) {
 		return newCompatError("Brioche fork block", c.BriocheBlock, newcfg.BriocheBlock)
 	}
-	if isForkIncompatible(c.CroissantBlock, newcfg.CroissantBlock, head) {
-		return newCompatError("Mont Blanc fork block", c.CroissantBlock, newcfg.CroissantBlock)
+	if isForkIncompatible(c.DalgonaBlock, newcfg.DalgonaBlock, head) {
+		return newCompatError("Dalgona fork block", c.DalgonaBlock, newcfg.DalgonaBlock)
 	}
 	return nil
 }
@@ -838,7 +841,7 @@ type Rules struct {
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsLondon                                      bool
 	IsMerge                                                 bool
-	IsPangyo, IsApplepie, IsBrioche, IsCroissant            bool
+	IsPangyo, IsApplepie, IsBrioche, IsDalgona              bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -863,6 +866,6 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool) Rules {
 		IsPangyo:         c.IsPangyo(num),
 		IsApplepie:       c.IsApplepie(num),
 		IsBrioche:        c.IsBrioche(num),
-		IsCroissant:      c.IsCroissant(num),
+		IsDalgona:        c.IsDalgona(num),
 	}
 }
