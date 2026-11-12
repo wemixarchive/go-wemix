@@ -50,6 +50,20 @@ One can use the following command lines to join the Wemix networks. Note that th
 
     gwemix --wemix-testnet --syncmode full --datadir {data_folder} --http --http.addr 0.0.0.0
 
+## Hard Forks
+
+Wemix hard forks are activated by block number. A private network enables a
+fork by setting its block in the genesis `config`, e.g. `"croissantBlock": 1000000`.
+Fork names are desserts in alphabetical order of activation.
+
+| Fork | Genesis key | Mainnet | Testnet | Changes |
+|------|-------------|---------|---------|---------|
+| Pangyo | `pangyoBlock` | 0 | 10,000,000 | Initial PoA |
+| Applepie | `applepieBlock` | 20,476,911 | 26,240,268 | Fee delegation transactions ([docs](docs/FEEDELEGATION.md)) |
+| Brioche | `briocheBlock` | 53,525,500 | 59,414,700 | Block reward halving |
+| Croissant | `croissantBlock` | not scheduled | not scheduled | EIP-3855, EIP-3860, EIP-3651 from Ethereum's Shanghai ([docs](docs/CROISSANT.md)) |
+| Dalgona | `dalgonaBlock` | not scheduled | not scheduled | Switch to WBFT consensus: go-wemix stops, go-wbft takes over |
+
 ## Setting Up a New Network
 
 One can use `gwemix.sh` script to make setup process a little easier. `gwemix.sh` assumes wemix data directory to be `/opt/<node-name>`
