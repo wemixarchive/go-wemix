@@ -69,7 +69,7 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	// If jump table was not initialised we set the default one.
 	if cfg.JumpTable == nil {
 		switch {
-		// Croissant (EIP-3855 PUSH0).
+		// Croissant (EIP-3855 PUSH0, EIP-3860 CREATE/CREATE2 initcode metering).
 		// Checked before IsMerge: the Croissant set is built on london, see
 		// newCroissantInstructionSet.
 		case evm.chainRules.IsCroissant:

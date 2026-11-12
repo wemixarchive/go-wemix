@@ -1,8 +1,12 @@
 package vm
 
 import (
+	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/params"
+	"github.com/holiman/uint256"
 )
 
 // executorOf returns an identity for the execute function of op, so two jump
@@ -43,5 +47,65 @@ func TestCroissantKeepsLondonOpcodes(t *testing.T) {
 		if executorOf(london, op) != executorOf(croissant, op) {
 			t.Errorf("%v changed its executor in the Croissant set", op)
 		}
+	}
+}
+
+// TestCroissantCreateGasMetering checks that CREATE and CREATE2 switch to
+// their EIP-3860 dynamic gas functions in the Croissant set only.
+func TestCroissantCreateGasMetering(t *testing.T) {
+	london := newLondonInstructionSet()
+	croissant := newCroissantInstructionSet()
+	for op, want := range map[OpCode]gasFunc{CREATE: gasCreateEip3860, CREATE2: gasCreate2Eip3860} {
+		wantPtr := reflect.ValueOf(want).Pointer()
+		if reflect.ValueOf(london[op].dynamicGas).Pointer() == wantPtr {
+			t.Errorf("%v must not meter initcode before Croissant", op)
+		}
+		if reflect.ValueOf(croissant[op].dynamicGas).Pointer() != wantPtr {
+			t.Errorf("%v must meter initcode in the Croissant set", op)
+		}
+	}
+}
+
+// createStack builds the stack CREATE and CREATE2 read, where the initcode
+// size is always Back(2). CREATE2 additionally reads a salt at Back(3).
+func createStack(size uint64) *Stack {
+	st := newstack()
+	st.push(new(uint256.Int))                 // salt, only read by CREATE2
+	st.push(new(uint256.Int).SetUint64(size)) // size
+	st.push(new(uint256.Int))                 // offset
+	st.push(new(uint256.Int))                 // value
+	return st
+}
+
+// TestEIP3860CreateGas checks the per-word initcode charge and the size cap of
+// the EIP-3860 gas functions against the pre-Croissant ones.
+func TestEIP3860CreateGas(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		pre, eip gasFunc
+	}{
+		{"CREATE", gasCreate, gasCreateEip3860},
+		{"CREATE2", gasCreate2, gasCreate2Eip3860},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, size := range []uint64{0, 1, 32, 33, params.MaxInitCodeSize} {
+				pre, err := tt.pre(nil, nil, createStack(size), NewMemory(), size)
+				if err != nil {
+					t.Fatalf("size %d: pre-Croissant gas: %v", size, err)
+				}
+				got, err := tt.eip(nil, nil, createStack(size), NewMemory(), size)
+				if err != nil {
+					t.Fatalf("size %d: EIP-3860 gas: %v", size, err)
+				}
+				if want := pre + params.InitCodeWordGas*toWordSize(size); got != want {
+					t.Errorf("size %d: gas = %d, want %d", size, got, want)
+				}
+			}
+
+			over := uint64(params.MaxInitCodeSize + 1)
+			if _, err := tt.eip(nil, nil, createStack(over), NewMemory(), over); !errors.Is(err, ErrGasUintOverflow) {
+				t.Errorf("initcode over the limit: got %v, want ErrGasUintOverflow", err)
+			}
+		})
 	}
 }

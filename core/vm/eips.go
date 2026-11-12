@@ -25,6 +25,7 @@ import (
 )
 
 var activators = map[int]func(*JumpTable){
+	3860: enable3860,
 	3855: enable3855,
 	3529: enable3529,
 	3198: enable3198,
@@ -191,4 +192,11 @@ func enable3855(jt *JumpTable) {
 func opPush0(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	scope.Stack.push(new(uint256.Int))
 	return nil, nil
+}
+
+// enable3860 enables "EIP-3860: Limit and meter initcode"
+// https://eips.ethereum.org/EIPS/eip-3860
+func enable3860(jt *JumpTable) {
+	jt[CREATE].dynamicGas = gasCreateEip3860
+	jt[CREATE2].dynamicGas = gasCreate2Eip3860
 }

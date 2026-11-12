@@ -41,7 +41,7 @@ func wemixCroissantConfig() *params.ChainConfig {
 		MuirGlacierBlock:    zero,
 		BerlinBlock:         zero,
 		LondonBlock:         zero,
-		CroissantBlock:       big.NewInt(croissantForkBlock),
+		CroissantBlock:      big.NewInt(croissantForkBlock),
 	}
 }
 
@@ -82,6 +82,63 @@ func TestCroissantDifficultyOpcode(t *testing.T) {
 		}
 		if got := new(big.Int).SetBytes(ret); got.Cmp(big.NewInt(1)) != 0 {
 			t.Fatalf("block %d: DIFFICULTY returned %v, want 1", block, got)
+		}
+	}
+}
+
+// createOpcodeReturningAddress returns code that runs op (CREATE or CREATE2)
+// on size zero bytes of memory and returns the created address as a word.
+// Zero initcode is all STOPs, so the inner creation succeeds whenever the
+// size is allowed.
+func createOpcodeReturningAddress(op vm.OpCode, size uint32) []byte {
+	code := []byte{}
+	if op == vm.CREATE2 {
+		code = append(code, byte(vm.PUSH1), 0) // salt
+	}
+	code = append(code, byte(vm.PUSH3), byte(size>>16), byte(size>>8), byte(size)) // size
+	code = append(code,
+		byte(vm.PUSH1), 0, // offset
+		byte(vm.PUSH1), 0, // value
+		byte(op),
+		byte(vm.PUSH1), 0, byte(vm.MSTORE),
+		byte(vm.PUSH1), 32, byte(vm.PUSH1), 0, byte(vm.RETURN),
+	)
+	return code
+}
+
+// TestEIP3860CreateOpcodeLimit checks that CREATE and CREATE2 refuse initcode
+// over params.MaxInitCodeSize from the fork block on, accept it at the limit,
+// and keep accepting oversized initcode before the fork. The interpreter
+// reports a failing dynamic gas function as out of gas.
+func TestEIP3860CreateOpcodeLimit(t *testing.T) {
+	const (
+		atLimit = uint32(params.MaxInitCodeSize)
+		over    = atLimit + 1
+	)
+	for _, op := range []vm.OpCode{vm.CREATE, vm.CREATE2} {
+		for _, tt := range []struct {
+			block   int64
+			size    uint32
+			allowed bool
+		}{
+			{croissantForkBlock - 1, over, true},
+			{croissantForkBlock, atLimit, true},
+			{croissantForkBlock, over, false},
+		} {
+			ret, _, err := Execute(createOpcodeReturningAddress(op, tt.size), nil, configAt(tt.block))
+			if !tt.allowed {
+				if !errors.Is(err, vm.ErrOutOfGas) {
+					t.Errorf("%v size %d at block %d: got (%x, %v), want ErrOutOfGas", op, tt.size, tt.block, ret, err)
+				}
+				continue
+			}
+			if err != nil {
+				t.Errorf("%v size %d at block %d: %v", op, tt.size, tt.block, err)
+				continue
+			}
+			if common.BytesToAddress(ret) == (common.Address{}) {
+				t.Errorf("%v size %d at block %d: creation failed", op, tt.size, tt.block)
+			}
 		}
 	}
 }

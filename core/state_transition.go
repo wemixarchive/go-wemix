@@ -121,7 +121,7 @@ func (result *ExecutionResult) Revert() []byte {
 }
 
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
-func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation bool, isHomestead, isEIP2028 bool) (uint64, error) {
+func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation bool, isHomestead, isEIP2028, isEIP3860 bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
 	var gas uint64
 	if isContractCreation && isHomestead {
@@ -153,12 +153,32 @@ func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation b
 			return 0, ErrGasUintOverflow
 		}
 		gas += z * params.TxDataZeroGas
+
+		// EIP-3860: from Croissant on, a contract creation transaction also pays
+		// InitCodeWordGas per 32-byte word of initcode. Before Croissant
+		// isEIP3860 is false and the charge is skipped.
+		if isContractCreation && isEIP3860 {
+			lenWords := toWordSize(uint64(len(data)))
+			if (math.MaxUint64-gas)/params.InitCodeWordGas < lenWords {
+				return 0, ErrGasUintOverflow
+			}
+			gas += lenWords * params.InitCodeWordGas
+		}
 	}
 	if accessList != nil {
 		gas += uint64(len(accessList)) * params.TxAccessListAddressGas
 		gas += uint64(accessList.StorageKeys()) * params.TxAccessListStorageKeyGas
 	}
 	return gas, nil
+}
+
+// toWordSize returns the ceiled word size required for init code payment
+// calculation (EIP-3860).
+func toWordSize(size uint64) uint64 {
+	if size > math.MaxUint64-31 {
+		return math.MaxUint64/32 + 1
+	}
+	return (size + 31) / 32
 }
 
 // NewStateTransition initialises and returns a new state transition object.
@@ -342,7 +362,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	)
 
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, rules.IsHomestead, rules.IsIstanbul)
+	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, rules.IsHomestead, rules.IsIstanbul, rules.IsCroissant) // rules.IsCroissant enables EIP-3860
 	if err != nil {
 		return nil, err
 	}
@@ -354,6 +374,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// Check clause 6
 	if msg.Value().Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From(), msg.Value()) {
 		return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
+	}
+
+	// EIP-3860: from Croissant on, a creation transaction whose initcode exceeds
+	// MaxInitCodeSize is invalid. It is rejected before execution and is not
+	// included in a block. Before Croissant the size is not limited here.
+	if rules.IsCroissant && contractCreation && len(st.data) > params.MaxInitCodeSize {
+		return nil, fmt.Errorf("%w: code size %v limit %v", ErrMaxInitCodeSizeExceeded, len(st.data), params.MaxInitCodeSize)
 	}
 
 	// Set up the initial access list.

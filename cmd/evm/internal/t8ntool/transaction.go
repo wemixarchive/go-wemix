@@ -138,9 +138,9 @@ func Transaction(ctx *cli.Context) error {
 		} else {
 			r.Address = sender
 		}
-		// Check intrinsic gas
+		// Check intrinsic gas (EIP-3860 adds the initcode word charge from Croissant on)
 		if gas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil,
-			chainConfig.IsHomestead(new(big.Int)), chainConfig.IsIstanbul(new(big.Int))); err != nil {
+			chainConfig.IsHomestead(new(big.Int)), chainConfig.IsIstanbul(new(big.Int)), chainConfig.IsCroissant(new(big.Int))); err != nil {
 			r.Error = err
 			results = append(results, r)
 			continue
@@ -170,6 +170,11 @@ func Transaction(ctx *cli.Context) error {
 			r.Error = errors.New("gas * gasPrice exceeds 256 bits")
 		case new(big.Int).Mul(tx.GasFeeCap(), new(big.Int).SetUint64(tx.Gas())).BitLen() > 256:
 			r.Error = errors.New("gas * maxFeePerGas exceeds 256 bits")
+		}
+		// EIP-3860: from Croissant on, a creation transaction whose initcode exceeds
+		// MaxInitCodeSize is invalid.
+		if chainConfig.IsCroissant(new(big.Int)) && tx.To() == nil && len(tx.Data()) > params.MaxInitCodeSize {
+			r.Error = errors.New("max initcode size exceeded")
 		}
 		results = append(results, r)
 	}

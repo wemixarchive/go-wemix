@@ -30,6 +30,7 @@ var (
 	ErrContractAddressCollision = errors.New("contract address collision")
 	ErrExecutionReverted        = errors.New("execution reverted")
 	ErrMaxCodeSizeExceeded      = errors.New("max code size exceeded")
+	ErrMaxInitCodeSizeExceeded  = errors.New("max initcode size exceeded") // EIP-3860
 	ErrInvalidJump              = errors.New("invalid jump destination")
 	ErrWriteProtection          = errors.New("write protection")
 	ErrReturnDataOutOfBounds    = errors.New("return data out of bounds")

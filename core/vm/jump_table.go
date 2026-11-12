@@ -55,7 +55,7 @@ var (
 	berlinInstructionSet           = newBerlinInstructionSet()
 	londonInstructionSet           = newLondonInstructionSet()
 	mergeInstructionSet            = newMergeInstructionSet()
-	croissantInstructionSet         = newCroissantInstructionSet() // EIP-3855
+	croissantInstructionSet        = newCroissantInstructionSet() // EIP-3855, EIP-3860
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -100,6 +100,7 @@ func newMergeInstructionSet() JumpTable {
 func newCroissantInstructionSet() JumpTable {
 	instructionSet := newLondonInstructionSet()
 	enable3855(&instructionSet) // EIP-3855: PUSH0 instruction https://eips.ethereum.org/EIPS/eip-3855
+	enable3860(&instructionSet) // EIP-3860: Limit and meter initcode https://eips.ethereum.org/EIPS/eip-3860
 	return validate(instructionSet)
 }
 
