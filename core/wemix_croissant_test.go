@@ -46,9 +46,15 @@ func TestIntrinsicGasEIP3860(t *testing.T) {
 	}
 }
 
-// applyCreation runs a contract creation message with the given initcode at
-// block number and returns what ApplyMessage reports.
-func applyCreation(t *testing.T, block int64, initcode []byte) (*ExecutionResult, error) {
+var (
+	testSender   = common.HexToAddress("0x1000000000000000000000000000000000000001")
+	testCoinbase = common.HexToAddress("0x2000000000000000000000000000000000000002")
+)
+
+// applyAt runs a message from testSender at block number on a london-era chain
+// that activates Croissant at croissantForkBlock. A nil to means contract
+// creation. code, when given, is installed at to before the message runs.
+func applyAt(t *testing.T, block int64, to *common.Address, code, data []byte) (*ExecutionResult, error) {
 	t.Helper()
 	cfg := *params.AllEthashProtocolChanges
 	cfg.CroissantBlock = big.NewInt(croissantForkBlock)
@@ -57,22 +63,31 @@ func applyCreation(t *testing.T, block int64, initcode []byte) (*ExecutionResult
 	if err != nil {
 		t.Fatal(err)
 	}
+	if to != nil && code != nil {
+		statedb.SetCode(*to, code)
+	}
 	const gasLimit = 30_000_000
 	blockCtx := vm.BlockContext{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
+		Coinbase:    testCoinbase,
 		BlockNumber: big.NewInt(block),
 		Time:        big.NewInt(0),
-		Difficulty:  big.NewInt(1),
+		Difficulty:  big.NewInt(1), // go-wemix PoA headers carry difficulty 1
 		GasLimit:    gasLimit,
 		BaseFee:     big.NewInt(0),
 	}
 	evm := vm.NewEVM(blockCtx, vm.TxContext{GasPrice: big.NewInt(0)}, statedb, &cfg, vm.Config{NoBaseFee: true})
 
-	from := common.HexToAddress("0x1000000000000000000000000000000000000001")
 	zero := big.NewInt(0)
-	msg := types.NewMessage(from, nil, 0, zero, gasLimit, zero, zero, zero, initcode, nil, true)
+	msg := types.NewMessage(testSender, to, 0, zero, gasLimit, zero, zero, zero, data, nil, true)
 	return ApplyMessage(evm, msg, new(GasPool).AddGas(math.MaxUint64))
+}
+
+// applyCreation runs a contract creation message with the given initcode.
+func applyCreation(t *testing.T, block int64, initcode []byte) (*ExecutionResult, error) {
+	t.Helper()
+	return applyAt(t, block, nil, nil, initcode)
 }
 
 // TestEIP3860CreationTxRejected checks that a creation transaction with
@@ -99,5 +114,31 @@ func TestEIP3860CreationTxRejected(t *testing.T) {
 		if res.Failed() {
 			t.Fatalf("%s: execution failed: %v", tt.name, res.Err)
 		}
+	}
+}
+
+// TestEIP3651WarmCoinbase checks the gas effect of EIP-3651 through the state
+// transition: reading the coinbase balance costs a cold account access before
+// Croissant and a warm one from the fork on.
+func TestEIP3651WarmCoinbase(t *testing.T) {
+	// COINBASE, BALANCE, POP, STOP
+	balanceOfCoinbase := common.FromHex("41315000")
+	contract := common.HexToAddress("0x3000000000000000000000000000000000000003")
+
+	usedGas := func(block int64) uint64 {
+		res, err := applyAt(t, block, &contract, balanceOfCoinbase, nil)
+		if err != nil {
+			t.Fatalf("block %d: %v", block, err)
+		}
+		if res.Failed() {
+			t.Fatalf("block %d: execution failed: %v", block, res.Err)
+		}
+		return res.UsedGas
+	}
+
+	pre, post := usedGas(croissantForkBlock-1), usedGas(croissantForkBlock)
+	want := params.ColdAccountAccessCostEIP2929 - params.WarmStorageReadCostEIP2929
+	if pre-post != want {
+		t.Fatalf("Croissant saves %d gas on a coinbase BALANCE, want %d (pre=%d post=%d)", pre-post, want, pre, post)
 	}
 }

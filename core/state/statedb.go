@@ -31,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -990,9 +991,10 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 // - Add destination to access list (2929)
 // - Add precompiles to access list (2929)
 // - Add the contents of the optional tx access list (2930)
+// - Add coinbase to access list (EIP-3651, from Croissant on)
 //
 // This method should only be called if Berlin/2929+2930 is applicable at the current number.
-func (s *StateDB) PrepareAccessList(sender common.Address, dst *common.Address, precompiles []common.Address, list types.AccessList) {
+func (s *StateDB) PrepareAccessList(rules params.Rules, sender, coinbase common.Address, dst *common.Address, precompiles []common.Address, list types.AccessList) {
 	// Clear out any leftover from previous executions
 	s.accessList = newAccessList()
 
@@ -1009,6 +1011,12 @@ func (s *StateDB) PrepareAccessList(sender common.Address, dst *common.Address, 
 		for _, key := range el.StorageKeys {
 			s.AddSlotToAccessList(el.Address, key)
 		}
+	}
+	// EIP-3651: from Croissant on the coinbase starts warm, so its first access
+	// costs WarmStorageReadCostEIP2929 instead of ColdAccountCostEIP2929.
+	// Before Croissant the coinbase is not added and stays cold.
+	if rules.IsCroissant {
+		s.AddAddressToAccessList(coinbase)
 	}
 }
 
