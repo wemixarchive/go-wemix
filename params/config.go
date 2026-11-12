@@ -159,7 +159,9 @@ var (
 		LondonBlock:         big.NewInt(0),
 		PangyoBlock:         big.NewInt(0),
 		ApplepieBlock:       big.NewInt(20_476_911),
-		BriocheBlock:        big.NewInt(53_525_500), // target date: 24-07-01 00:00:00 (GMT+09)
+		BriocheBlock:        big.NewInt(53_525_500),    // target date: 24-07-01 00:00:00 (GMT+09)
+		CroissantBlock:      big.NewInt(999_999_999),   // Croissant (EIP-3651, EIP-3855, EIP-3860): activation block not scheduled yet
+		DalgonaBlock:        big.NewInt(1_000_000_000), // Dalgona (WBFT switch): activation block not scheduled yet
 		Ethash:              new(EthashConfig),
 		Brioche: &BriocheConfig{
 			BlockReward:       big.NewInt(1e18),
@@ -189,7 +191,9 @@ var (
 		LondonBlock:         big.NewInt(0),
 		PangyoBlock:         big.NewInt(10_000_000),
 		ApplepieBlock:       big.NewInt(26_240_268),
-		BriocheBlock:        big.NewInt(59_414_700), // target date: 24-06-04 11:00:41 (GMT+09)
+		BriocheBlock:        big.NewInt(59_414_700),    // target date: 24-06-04 11:00:41 (GMT+09)
+		CroissantBlock:      big.NewInt(999_999_999),   // Croissant (EIP-3651, EIP-3855, EIP-3860): activation block not scheduled yet
+		DalgonaBlock:        big.NewInt(1_000_000_000), // Dalgona (WBFT switch): activation block not scheduled yet
 		Ethash:              new(EthashConfig),
 		Brioche: &BriocheConfig{
 			BlockReward:       big.NewInt(1e18),
@@ -321,16 +325,16 @@ var (
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, new(EthashConfig), nil, nil}
+	AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, nil, new(EthashConfig), nil, nil}
 
 	// AllCliqueProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Clique consensus.
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil}
+	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, nil, nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, nil}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, new(EthashConfig), nil, nil}
+	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, nil, new(EthashConfig), nil, nil}
 	TestRules       = TestChainConfig.Rules(new(big.Int), false)
 )
 
@@ -414,6 +418,7 @@ type ChainConfig struct {
 	PangyoBlock         *big.Int `json:"pangyoBlock,omitempty"`         // Pangyo switch block (nil = no fork, 0 = already on pangyo)
 	ApplepieBlock       *big.Int `json:"applepieBlock,omitempty"`       // Applepie switch block (nil = no fork, 0 = already on applepie)
 	BriocheBlock        *big.Int `json:"briocheBlock,omitempty"`        // Brioche switch block (nil = no fork, 0 = already on brioche)
+	CroissantBlock      *big.Int `json:"croissantBlock,omitempty"`      // Croissant switch block: EIP-3651, EIP-3855, EIP-3860 (nil = no fork, 0 = already on croissant)
 	DalgonaBlock        *big.Int `json:"dalgonaBlock,omitempty"`        // Dalgona switch block: go-wemix stops here and go-wbft takes over (nil = no fork, 0 = already on dalgona)
 
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
@@ -510,7 +515,7 @@ func (c *ChainConfig) String() string {
 	default:
 		engine = "unknown"
 	}
-	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, DalgonaFork: %v, Terminal TD: %v, BriocheConfig: %v, Engine: %v}",
+	return fmt.Sprintf("{ChainID: %v Homestead: %v DAO: %v DAOSupport: %v EIP150: %v EIP155: %v EIP158: %v Byzantium: %v Constantinople: %v Petersburg: %v Istanbul: %v, Muir Glacier: %v, Berlin: %v, London: %v, Arrow Glacier: %v, MergeFork: %v, PangyoFork: %v, ApplepieFork: %v, BriocheFork: %v, CroissantFork: %v, DalgonaFork: %v, Terminal TD: %v, BriocheConfig: %v, Engine: %v}",
 		c.ChainID,
 		c.HomesteadBlock,
 		c.DAOForkBlock,
@@ -530,6 +535,7 @@ func (c *ChainConfig) String() string {
 		c.PangyoBlock,
 		c.ApplepieBlock,
 		c.BriocheBlock,
+		c.CroissantBlock,
 		c.DalgonaBlock,
 		c.TerminalTotalDifficulty,
 		c.Brioche,
@@ -619,6 +625,14 @@ func (c *ChainConfig) IsBrioche(num *big.Int) bool {
 	return isForked(c.BriocheBlock, num)
 }
 
+// IsCroissant returns whether num is either equal to the Croissant fork block or greater.
+// Croissant brings three EIPs from Ethereum's Shanghai upgrade: EIP-3651 (warm
+// coinbase), EIP-3855 (PUSH0) and EIP-3860 (initcode limit and metering). Like
+// the other go-wemix forks it is gated by block number, not by timestamp.
+func (c *ChainConfig) IsCroissant(num *big.Int) bool {
+	return isForked(c.CroissantBlock, num)
+}
+
 // IsDalgona returns whether num is either equal to the Dalgona fork block or greater.
 // Dalgona switches the chain to WBFT consensus, which go-wbft runs; go-wemix
 // neither produces nor accepts blocks from this block on.
@@ -655,7 +669,12 @@ func (c *ChainConfig) CheckCompatible(newcfg *ChainConfig, height uint64) *Confi
 // CheckConfigForkOrder checks that we don't "skip" any forks, geth isn't pluggable enough
 // to guarantee that forks can be implemented in a different order than on official networks
 func (c *ChainConfig) CheckConfigForkOrder() error {
-	// In wemix, this is not enforced.
+	// Croissant must not come after Dalgona: go-wbft takes over at Dalgona and
+	// expects the Croissant rules to be active by then.
+	if err := c.checkCroissantBeforeDalgona(); err != nil {
+		return err
+	}
+	// In wemix, the remaining fork order is not enforced.
 	if true {
 		return nil
 	}
@@ -684,6 +703,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "pangyoBlock", block: c.PangyoBlock, optional: true},
 		{name: "applepieBlock", block: c.ApplepieBlock, optional: true},
 		{name: "briocheBlock", block: c.BriocheBlock, optional: true},
+		{name: "croissantBlock", block: c.CroissantBlock, optional: true},
 		{name: "dalgonaBlock", block: c.DalgonaBlock, optional: true},
 	} {
 		if lastFork.name != "" {
@@ -703,6 +723,21 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		if !cur.optional || cur.block != nil {
 			lastFork = cur
 		}
+	}
+	return nil
+}
+
+// checkCroissantBeforeDalgona requires Croissant to be scheduled, at or before
+// the Dalgona block, whenever Dalgona is scheduled.
+func (c *ChainConfig) checkCroissantBeforeDalgona() error {
+	if c.DalgonaBlock == nil {
+		return nil
+	}
+	if c.CroissantBlock == nil {
+		return fmt.Errorf("unsupported fork ordering: croissantBlock not enabled, but dalgonaBlock enabled at %v", c.DalgonaBlock)
+	}
+	if c.CroissantBlock.Cmp(c.DalgonaBlock) > 0 {
+		return fmt.Errorf("unsupported fork ordering: croissantBlock enabled at %v, but dalgonaBlock enabled at %v", c.CroissantBlock, c.DalgonaBlock)
 	}
 	return nil
 }
@@ -768,6 +803,9 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 	}
 	if isForkIncompatible(c.BriocheBlock, newcfg.BriocheBlock, head) {
 		return newCompatError("Brioche fork block", c.BriocheBlock, newcfg.BriocheBlock)
+	}
+	if isForkIncompatible(c.CroissantBlock, newcfg.CroissantBlock, head) {
+		return newCompatError("Croissant fork block", c.CroissantBlock, newcfg.CroissantBlock)
 	}
 	if isForkIncompatible(c.DalgonaBlock, newcfg.DalgonaBlock, head) {
 		return newCompatError("Dalgona fork block", c.DalgonaBlock, newcfg.DalgonaBlock)
@@ -841,7 +879,7 @@ type Rules struct {
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsLondon                                      bool
 	IsMerge                                                 bool
-	IsPangyo, IsApplepie, IsBrioche, IsDalgona              bool
+	IsPangyo, IsApplepie, IsBrioche, IsCroissant, IsDalgona bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -866,6 +904,7 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool) Rules {
 		IsPangyo:         c.IsPangyo(num),
 		IsApplepie:       c.IsApplepie(num),
 		IsBrioche:        c.IsBrioche(num),
+		IsCroissant:      c.IsCroissant(num),
 		IsDalgona:        c.IsDalgona(num),
 	}
 }

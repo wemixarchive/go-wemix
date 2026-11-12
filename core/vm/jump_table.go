@@ -55,6 +55,7 @@ var (
 	berlinInstructionSet           = newBerlinInstructionSet()
 	londonInstructionSet           = newLondonInstructionSet()
 	mergeInstructionSet            = newMergeInstructionSet()
+	croissantInstructionSet         = newCroissantInstructionSet() // EIP-3855
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -86,6 +87,19 @@ func newMergeInstructionSet() JumpTable {
 		minStack:    minStack(0, 1),
 		maxStack:    maxStack(0, 1),
 	}
+	return validate(instructionSet)
+}
+
+// newCroissantInstructionSet returns the london instructions plus the EVM
+// changes Croissant takes from Ethereum's Shanghai upgrade.
+//
+// go-ethereum builds Shanghai on top of the merge set. go-wemix never went through
+// the merge: its PoA headers carry difficulty 1, so the block context has no
+// Random value and the merge set's PREVRANDAO (0x44) would dereference nil.
+// Building on london keeps 0x44 as DIFFICULTY.
+func newCroissantInstructionSet() JumpTable {
+	instructionSet := newLondonInstructionSet()
+	enable3855(&instructionSet) // EIP-3855: PUSH0 instruction https://eips.ethereum.org/EIPS/eip-3855
 	return validate(instructionSet)
 }
 
