@@ -16,9 +16,9 @@ func executorOf(jt JumpTable, op OpCode) uintptr {
 	return reflect.ValueOf(jt[op].execute).Pointer()
 }
 
-// TestCroissantPush0 checks that PUSH0 (EIP-3855) is wired only in the
+// TestEIP3855InCroissantSet checks that PUSH0 (EIP-3855) is wired only in the
 // Croissant instruction set.
-func TestCroissantPush0(t *testing.T) {
+func TestEIP3855InCroissantSet(t *testing.T) {
 	push0 := reflect.ValueOf(opPush0).Pointer()
 
 	if executorOf(newLondonInstructionSet(), PUSH0) == push0 {
@@ -50,9 +50,9 @@ func TestCroissantKeepsLondonOpcodes(t *testing.T) {
 	}
 }
 
-// TestCroissantCreateGasMetering checks that CREATE and CREATE2 switch to
+// TestEIP3860CreateGasInCroissantSet checks that CREATE and CREATE2 switch to
 // their EIP-3860 dynamic gas functions in the Croissant set only.
-func TestCroissantCreateGasMetering(t *testing.T) {
+func TestEIP3860CreateGasInCroissantSet(t *testing.T) {
 	london := newLondonInstructionSet()
 	croissant := newCroissantInstructionSet()
 	for op, want := range map[OpCode]gasFunc{CREATE: gasCreateEip3860, CREATE2: gasCreate2Eip3860} {
