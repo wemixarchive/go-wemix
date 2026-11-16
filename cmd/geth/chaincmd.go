@@ -227,6 +227,17 @@ func importChain(ctx *cli.Context) error {
 	if len(ctx.Args()) < 1 {
 		utils.Fatalf("This command requires an argument.")
 	}
+	// Import is supported under PoA only: blocks are verified against
+	// governance state through the wemix admin, which a genesis made for
+	// another consensus method cannot set up. Refuse those before the node
+	// is created, so a refused import leaves the data directory untouched
+	// and has nothing to release. makeConfigNode applies the same flags
+	// again below.
+	utils.SetWemixConfig(ctx)
+	if params.ConsensusMethod != params.ConsensusPoA {
+		utils.Fatalf("import requires PoA (--%[1]s %[2]d), got --%[1]s %[3]d",
+			utils.ConsensusMethodFlag.Name, params.ConsensusPoA, params.ConsensusMethod)
+	}
 	// Start metrics export if enabled
 	utils.SetupMetrics(ctx)
 	// Start system runtime metrics collection
@@ -234,15 +245,6 @@ func importChain(ctx *cli.Context) error {
 
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
-
-	// Import is supported under PoA only: blocks are verified against
-	// governance state through the wemix admin, which a genesis made for
-	// another consensus method cannot set up. Refuse those up front, before
-	// the database is opened.
-	if params.ConsensusMethod != params.ConsensusPoA {
-		utils.Fatalf("import requires PoA (--%[1]s %[2]d), got --%[1]s %[3]d",
-			utils.ConsensusMethodFlag.Name, params.ConsensusPoA, params.ConsensusMethod)
-	}
 
 	chain, db := utils.MakeChain(ctx, stack)
 	defer db.Close()

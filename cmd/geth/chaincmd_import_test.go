@@ -117,3 +117,32 @@ func TestImportRequiresPoA(t *testing.T) {
 		})
 	}
 }
+
+// Tests that a refused import creates nothing in the data directory. The
+// consensus method is checked before the node is set up, so no lock file,
+// node key or keystore is left behind for a command that did not run.
+func TestImportRefusedLeavesDatadirUntouched(t *testing.T) {
+	datadir := t.TempDir()
+	blocks := filepath.Join(t.TempDir(), "blocks.rlp")
+	if err := os.WriteFile(blocks, nil, 0600); err != nil {
+		t.Fatalf("failed to write block file: %v", err)
+	}
+
+	imp := runGeth(t, "--datadir", datadir, "--consensusmethod", strconv.Itoa(params.ConsensusPoW), "import", blocks)
+	imp.WaitExit()
+	if status := imp.ExitStatus(); status == 0 {
+		t.Fatalf("import succeeded, want it refused\n%s", imp.StderrText())
+	}
+
+	entries, err := os.ReadDir(datadir)
+	if err != nil {
+		t.Fatalf("failed to read datadir: %v", err)
+	}
+	if len(entries) != 0 {
+		names := make([]string, len(entries))
+		for i, entry := range entries {
+			names[i] = entry.Name()
+		}
+		t.Fatalf("refused import left %v in the datadir, want it empty", names)
+	}
+}
