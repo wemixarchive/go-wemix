@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/wemix"
 	"gopkg.in/urfave/cli.v1"
 )
@@ -101,7 +102,9 @@ The import command imports blocks from an RLP-encoded form. The form can be one 
 with several RLP-encoded blocks, or several files can be used.
 
 If only one file is used, import error will result in failure. If several files are used,
-processing will proceed even if an individual RLP-file import failure occurs.`,
+processing will proceed even if an individual RLP-file import failure occurs.
+
+Import requires PoA consensus (--consensusmethod 2), which is the default.`,
 	}
 	exportCommand = cli.Command{
 		Action:    utils.MigrateFlags(exportChain),
@@ -231,6 +234,15 @@ func importChain(ctx *cli.Context) error {
 
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
+
+	// Import is supported under PoA only: blocks are verified against
+	// governance state through the wemix admin, which a genesis made for
+	// another consensus method cannot set up. Refuse those up front, before
+	// the database is opened.
+	if params.ConsensusMethod != params.ConsensusPoA {
+		utils.Fatalf("import requires PoA (--%[1]s %[2]d), got --%[1]s %[3]d",
+			utils.ConsensusMethodFlag.Name, params.ConsensusPoA, params.ConsensusMethod)
+	}
 
 	chain, db := utils.MakeChain(ctx, stack)
 	defer db.Close()
