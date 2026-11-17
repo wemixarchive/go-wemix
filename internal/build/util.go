@@ -182,6 +182,11 @@ func FindMainPackages(dir string) []string {
 	}
 	for _, cmd := range cmds {
 		pkgdir := filepath.Join(dir, cmd.Name())
+		// os.Stat follows symlinks: cmd/gwemix is a link to cmd/geth and must
+		// still be built, while plain files such as .DS_Store are skipped.
+		if info, err := os.Stat(pkgdir); err != nil || !info.IsDir() {
+			continue
+		}
 		pkgs, err := parser.ParseDir(token.NewFileSet(), pkgdir, nil, parser.PackageClauseOnly)
 		if err != nil {
 			log.Fatal(err)
