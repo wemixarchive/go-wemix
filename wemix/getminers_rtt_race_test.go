@@ -54,6 +54,20 @@ func TestGetMinersRttDoesNotRaceFeed(t *testing.T) {
 	wg.Wait()
 }
 
+// TestRttFromFeedReturnsCopy checks the same property without the race
+// detector, so it still fails when the tests run without -race: rttFromFeed
+// must return a copy and leave the feed-shared status untouched.
+func TestRttFromFeedReturnsCopy(t *testing.T) {
+	s := &wemixapi.WemixMinerStatus{NodeName: "node1", RttMs: big.NewInt(0)}
+	got := rttFromFeed(s, time.Now().Add(-5*time.Millisecond).UnixNano())
+	if got == s {
+		t.Fatal("rttFromFeed returned the shared pointer")
+	}
+	if s.RttMs.Sign() != 0 {
+		t.Fatalf("shared status RttMs mutated: %v", s.RttMs)
+	}
+}
+
 func TestRttFromFeedNilStatus(t *testing.T) {
 	if got := rttFromFeed(nil, time.Now().UnixNano()); got != nil {
 		t.Fatalf("rttFromFeed(nil) = %+v, want nil", got)
