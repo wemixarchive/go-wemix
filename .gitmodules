@@ -18,3 +18,9 @@
 [submodule "wemix/governance-contract/contracts/openzeppelin/contracts"]
 	path = wemix/governance-contract/contracts/openzeppelin/contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "wemix/governance-contract/contracts/openzeppelin/v4.9.6/contracts"]
+	path = wemix/governance-contract/contracts/openzeppelin/v4.9.6/contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "wemix/governance-contract/contracts/openzeppelin/v4.9.6/contracts-upgradeable"]
+	path = wemix/governance-contract/contracts/openzeppelin/v4.9.6/contracts-upgradeable
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable

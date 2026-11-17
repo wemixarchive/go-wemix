@@ -11,40 +11,82 @@ import (
 
 const pkg string = "gov"
 
-// The GovImp implementation deployed on mainnet is the pre-W1G source,
-// preserved as mock/GovImpLegacy.sol, compiled with solc 0.8.2. This binding
-// records that deployed bytecode; a follow-up PR updates GovImp to the current
-// GovImp.sol (W1G-fixed).
-const govImpSolcVersion = "0.8.2"
-const govImpSource = "GovImpLegacy"
-
 var (
 	rootFlag = flag.String("root", "../contracts", "")
 )
+
+// buildGroup is a set of contracts compiled against one OpenZeppelin release.
+type buildGroup struct {
+	oz        compile.OpenZeppelin
+	sources   []string // relative to root
+	contracts []string
+}
+
+// buildGroups records which OpenZeppelin release each contract is built with.
+// Deployed contracts use the release their on-chain runtime code was built
+// with, so the bindings match the deployed code apart from the metadata hash.
+// GovImp is the next, not yet deployed, implementation and stays on the
+// default release.
+func buildGroups() []buildGroup {
+	return []buildGroup{
+		{
+			// contracts v4.6.0, contracts-upgradeable v4.7.0
+			oz: compile.DefaultOpenZeppelin(),
+			sources: []string{
+				"Gov.sol",
+				"GovImp.sol",
+				"Staking.sol",
+				filepath.Join("storage", "EnvStorage.sol"),
+				filepath.Join("storage", "EnvStorageImp.sol"),
+			},
+			contracts: []string{gov.GOV, gov.GOV_IMP, gov.STAKING, gov.ENVSTORAGE, gov.ENVSTORAGE_IMP},
+		},
+		{
+			oz: compile.OpenZeppelin{
+				Contracts:   "openzeppelin/v4.9.6/contracts",
+				Upgradeable: "openzeppelin/v4.9.6/contracts-upgradeable",
+			},
+			sources: []string{
+				"Registry.sol",
+				"NCPExit.sol",
+				"NCPExitImp.sol",
+				"StakingImp.sol",
+				filepath.Join("storage", "BallotStorage.sol"),
+				filepath.Join("storage", "BallotStorageImp.sol"),
+			},
+			contracts: []string{gov.REGISTRY, gov.NCPEXIT, gov.NCPEXIT_IMP, gov.STAKING_IMP, gov.BALLOTSTORAGE, gov.BALLOTSTORAGE_IMP},
+		},
+	}
+}
 
 func main() {
 	flag.Parse()
 	root := *rootFlag
 	outDir := filepath.Join(root, "../../bind")
-	if govImp, err := compile.CompileWithVersion(govImpSolcVersion, root, filepath.Join(root, "mock", "GovImpLegacy.sol")); err != nil {
+
+	contracts, err := compile.Merge()
+	if err != nil {
 		panic(err)
-	} else if contracts, err := compile.Compile(root,
-		filepath.Join(root, "Registry.sol"),
-		filepath.Join(root, "Gov.sol"),
-		filepath.Join(root, "GovImp.sol"),
-		filepath.Join(root, "NCPExit.sol"),
-		filepath.Join(root, "NCPExitImp.sol"),
-		filepath.Join(root, "Staking.sol"),
-		filepath.Join(root, "StakingImp.sol"),
-		filepath.Join(root, "storage", "BallotStorage.sol"),
-		filepath.Join(root, "storage", "BallotStorageImp.sol"),
-		filepath.Join(root, "storage", "EnvStorage.sol"),
-		filepath.Join(root, "storage", "EnvStorageImp.sol"),
-	); err != nil {
-		panic(err)
-	} else if err := contracts.ReplaceCode(govImp, govImpSource, gov.GOV_IMP); err != nil {
-		panic(err)
-	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_registry_abi.go"), gov.REGISTRY); err != nil {
+	}
+	for _, g := range buildGroups() {
+		sources := make([]string, len(g.sources))
+		for i, s := range g.sources {
+			sources[i] = filepath.Join(root, s)
+		}
+		compiled, err := compile.CompileWith(root, g.oz, sources...)
+		if err != nil {
+			panic(err)
+		}
+		picked, err := compiled.Pick(g.contracts...)
+		if err != nil {
+			panic(err)
+		}
+		if contracts, err = compile.Merge(contracts, picked); err != nil {
+			panic(err)
+		}
+	}
+
+	if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_registry_abi.go"), gov.REGISTRY); err != nil {
 		panic(err)
 	} else if err := contracts.BindContracts(pkg, filepath.Join(outDir, "gen_gov_abi.go"), gov.GOV, gov.GOV_IMP); err != nil {
 		panic(err)
