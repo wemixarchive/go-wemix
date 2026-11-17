@@ -113,6 +113,7 @@ type Peer struct {
 	protoErr chan error
 	closed   chan struct{}
 	disc     chan DiscReason
+	pingRecv chan struct{} // inbound pings awaiting a pong, bounded
 
 	// events receives message send / receive events if set
 	events   *event.Feed
@@ -233,6 +234,7 @@ func newPeer(log log.Logger, conn *conn, protocols []Protocol) *Peer {
 		disc:     make(chan DiscReason),
 		protoErr: make(chan error, len(protomap)+1), // protocols + pingLoop
 		closed:   make(chan struct{}),
+		pingRecv: make(chan struct{}, 16),
 		log:      log.New("id", conn.node.ID(), "conn", conn.flags),
 	}
 	return p
@@ -304,6 +306,8 @@ func (p *Peer) pingLoop() {
 				return
 			}
 			ping.Reset(pingInterval)
+		case <-p.pingRecv:
+			SendItems(p.rw, pongMsg)
 		case <-p.closed:
 			return
 		}
@@ -330,7 +334,12 @@ func (p *Peer) handle(msg Msg) error {
 	switch {
 	case msg.Code == pingMsg:
 		msg.Discard()
-		go SendItems(p.rw, pongMsg)
+		// Hand the pong to the single pingLoop through a bounded channel so
+		// serving inbound pings does not spawn a goroutine per message.
+		select {
+		case p.pingRecv <- struct{}{}:
+		case <-p.closed:
+		}
 	case msg.Code == discMsg:
 		// This is the last message. We don't need to discard or
 		// check errors because, the connection will be closed after it.
