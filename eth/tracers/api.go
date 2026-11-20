@@ -84,11 +84,47 @@ type Backend interface {
 // API is the collection of tracing APIs exposed over the private debugging endpoint.
 type API struct {
 	backend Backend
+	// traceSem bounds how many trace requests run at once. Every trace rebuilds
+	// historical state, and block and chain traces also fan out to as many as
+	// runtime.NumCPU workers, so an unbounded number of concurrent requests can
+	// saturate CPU and disk and stall the node. Each externally reachable trace
+	// operation holds one slot for its whole duration. A slot limits traces,
+	// not the workers inside them.
+	traceSem chan struct{}
+}
+
+// maxConcurrentTraces is the slot count for traceSem: GOMAXPROCS with a floor
+// of 1. The client sets GOMAXPROCS to runtime.NumCPU at startup, so neither a
+// cgroup CPU quota nor the GOMAXPROCS environment variable lowers this limit.
+func maxConcurrentTraces() int {
+	if n := runtime.GOMAXPROCS(0); n > 1 {
+		return n
+	}
+	return 1
 }
 
 // NewAPI creates a new API definition for the tracing methods of the Ethereum service.
 func NewAPI(backend Backend) *API {
-	return &API{backend: backend}
+	return &API{
+		backend:  backend,
+		traceSem: make(chan struct{}, maxConcurrentTraces()),
+	}
+}
+
+// acquireTrace blocks until a trace slot is free or ctx is done. A nil error
+// means a slot was taken and releaseTrace must be called exactly once.
+func (api *API) acquireTrace(ctx context.Context) error {
+	select {
+	case api.traceSem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// releaseTrace returns a slot taken by acquireTrace.
+func (api *API) releaseTrace() {
+	<-api.traceSem
 }
 
 type chainContext struct {
@@ -246,6 +282,18 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 	}
 	sub := notifier.CreateSubscription()
 
+	// Bound concurrent trace load before spawning any workers. A chain trace is
+	// the longest-running trace, so hold one slot for its whole duration; it is
+	// released in the feeder goroutine's cleanup below. If the subscription is
+	// closed before a slot frees, abandon the trace.
+	select {
+	case api.traceSem <- struct{}{}:
+	case <-notifier.Closed():
+		return sub, nil
+	case <-ctx.Done():
+		return sub, nil
+	}
+
 	// Prepare all the states for tracing. Note this procedure can take very
 	// long time. Timeout mechanism is necessary.
 	reexec := defaultTraceReexec
@@ -319,6 +367,7 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 		defer func() {
 			close(tasks)
 			pend.Wait()
+			api.releaseTrace()
 
 			switch {
 			case failed != nil:
@@ -494,6 +543,10 @@ func (api *API) StandardTraceBlockToFile(ctx context.Context, hash common.Hash, 
 // IntermediateRoots executes a block (bad- or canon- or side-), and returns a list
 // of intermediate roots: the stateroot after each transaction.
 func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config *TraceConfig) ([]common.Hash, error) {
+	if err := api.acquireTrace(ctx); err != nil {
+		return nil, err
+	}
+	defer api.releaseTrace()
 	block, _ := api.blockByHash(ctx, hash)
 	if block == nil {
 		// Check in the bad blocks
@@ -563,6 +616,10 @@ func (api *API) StandardTraceBadBlockToFile(ctx context.Context, hash common.Has
 // executes all the transactions contained within. The return value will be one item
 // per transaction, dependent on the requestd tracer.
 func (api *API) traceBlock(ctx context.Context, block *types.Block, config *TraceConfig) ([]*txTraceResult, error) {
+	if err := api.acquireTrace(ctx); err != nil {
+		return nil, err
+	}
+	defer api.releaseTrace()
 	if block.NumberU64() == 0 {
 		return nil, errors.New("genesis is not traceable")
 	}
@@ -647,6 +704,10 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 // and traces either a full block or an individual transaction. The return value will
 // be one filename per transaction traced.
 func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block, config *StdTraceConfig) ([]string, error) {
+	if err := api.acquireTrace(ctx); err != nil {
+		return nil, err
+	}
+	defer api.releaseTrace()
 	// If we're tracing a single transaction, make sure it's present
 	if config != nil && config.TxHash != (common.Hash{}) {
 		if !containsTx(block, config.TxHash) {
@@ -775,6 +836,10 @@ func containsTx(block *types.Block, hash common.Hash) bool {
 // TraceTransaction returns the structured logs created during the execution of EVM
 // and returns them as a JSON object.
 func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *TraceConfig) (interface{}, error) {
+	if err := api.acquireTrace(ctx); err != nil {
+		return nil, err
+	}
+	defer api.releaseTrace()
 	_, blockHash, blockNumber, index, err := api.backend.GetTransaction(ctx, hash)
 	if err != nil {
 		return nil, err
@@ -808,6 +873,10 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 // top of the provided block and returns them as a JSON object.
 // You can provide -2 as a block number to trace on top of the pending block.
 func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, config *TraceCallConfig) (interface{}, error) {
+	if err := api.acquireTrace(ctx); err != nil {
+		return nil, err
+	}
+	defer api.releaseTrace()
 	// Try to retrieve the specified block
 	var (
 		err   error
