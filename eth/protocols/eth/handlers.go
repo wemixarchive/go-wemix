@@ -43,8 +43,7 @@ func handleGetBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, peer *Peer) []*types.Header {
@@ -147,8 +146,7 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 // ServiceGetBlockHeadersQuery assembles the response to a header query. It is
@@ -331,8 +329,7 @@ func handleGetBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleGetBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
@@ -348,8 +345,7 @@ func handleGetBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 // ServiceGetBlockBodiesQuery assembles the response to a body query. It is
@@ -386,8 +382,7 @@ func handleGetNodeData(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleGetNodeData66(backend Backend, msg Decoder, peer *Peer) error {
@@ -403,8 +398,7 @@ func handleGetNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 // ServiceGetNodeDataQuery assembles the response to a node data query. It is
@@ -447,8 +441,7 @@ func handleGetReceipts(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleGetReceipts66(backend Backend, msg Decoder, peer *Peer) error {
@@ -464,8 +457,7 @@ func handleGetReceipts66(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 // ServiceGetReceiptsQuery assembles the response to a receipt query. It is
@@ -516,8 +508,7 @@ func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
@@ -549,8 +540,7 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
@@ -576,8 +566,7 @@ func handleBlockHeaders(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
@@ -603,8 +592,7 @@ func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
@@ -635,8 +623,7 @@ func handleBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
@@ -667,8 +654,7 @@ func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleNodeData(backend Backend, msg Decoder, peer *Peer) error {
@@ -687,8 +673,7 @@ func handleNodeData(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
@@ -707,8 +692,7 @@ func handleNodeData66(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
@@ -735,8 +719,7 @@ func handleReceipts(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleReceipts66(backend Backend, msg Decoder, peer *Peer) error {
@@ -763,8 +746,7 @@ func handleReceipts66(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) error {
@@ -787,8 +769,7 @@ func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) 
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleNewPooledTransactionHashes68(backend Backend, msg Decoder, peer *Peer) error {
@@ -814,8 +795,7 @@ func handleNewPooledTransactionHashes68(backend Backend, msg Decoder, peer *Peer
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
@@ -831,8 +811,7 @@ func handleGetPooledTransactions(backend Backend, msg Decoder, peer *Peer) error
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleGetPooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
@@ -848,8 +827,7 @@ func handleGetPooledTransactions66(backend Backend, msg Decoder, peer *Peer) err
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func answerGetPooledTransactions(backend Backend, query GetPooledTransactionsPacket, peer *Peer) ([]common.Hash, []rlp.RawValue) {
@@ -903,8 +881,7 @@ func handleTransactions(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
@@ -932,8 +909,7 @@ func handleTransactionsEx(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
@@ -959,8 +935,7 @@ func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
 
 func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error {
@@ -988,6 +963,5 @@ func handlePooledTransactions66(backend Backend, msg Decoder, peer *Peer) error 
 	if params.ConsensusMethod == params.ConsensusPoW {
 		return f()
 	}
-	go f()
-	return nil
+	return peer.dispatchHandler(f)
 }
