@@ -45,7 +45,7 @@ type ttFork struct {
 }
 
 func (tt *TransactionTest) Run(config *params.ChainConfig) error {
-	validateTx := func(rlpData hexutil.Bytes, signer types.Signer, isHomestead bool, isIstanbul bool, isShanghai bool) (*common.Address, *common.Hash, error) {
+	validateTx := func(rlpData hexutil.Bytes, signer types.Signer, isHomestead bool, isIstanbul bool, isEIP3860 bool) (*common.Address, *common.Hash, error) {
 		tx := new(types.Transaction)
 		if err := rlp.DecodeBytes(rlpData, tx); err != nil {
 			return nil, nil, err
@@ -55,7 +55,7 @@ func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 			return nil, nil, err
 		}
 		// Intrinsic gas
-		requiredGas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, isHomestead, isIstanbul, isShanghai)
+		requiredGas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, isHomestead, isIstanbul, isEIP3860)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -81,7 +81,7 @@ func (tt *TransactionTest) Run(config *params.ChainConfig) error {
 		{"Constantinople", types.NewEIP155Signer(config.ChainID), tt.Constantinople, true, false},
 		{"Istanbul", types.NewEIP155Signer(config.ChainID), tt.Istanbul, true, true},
 	} {
-		sender, txhash, err := validateTx(tt.RLP, testcase.signer, testcase.isHomestead, testcase.isIstanbul, false) // no Shanghai (EIP-3860) fork in these fixtures
+		sender, txhash, err := validateTx(tt.RLP, testcase.signer, testcase.isHomestead, testcase.isIstanbul, false) // these fixtures predate EIP-3860
 
 		if testcase.fork.Sender == (common.UnprefixedAddress{}) {
 			if err == nil {
