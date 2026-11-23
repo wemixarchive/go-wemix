@@ -60,14 +60,10 @@ incompatible config change.
 
 ### Order with Dalgona
 
-Dalgona switches the chain to WBFT, which go-wbft runs. go-wbft keeps the
-Croissant rules from Dalgona on, so Croissant has to be active by then. When
-`dalgonaBlock` is set, `croissantBlock` must also be set, at or before it.
-`gwemix init` rejects a genesis that breaks this, and so does a node started
-with such a genesis or on mainnet or testnet. A private network restarted
-without a genesis file loads the chain config stored in its database, and that
-path does not run the check. go-wemix checks only this pair; the rest of its
-fork order is not enforced.
+go-wemix does not enforce an order between Croissant and Dalgona, as with its
+other forks. go-wemix stops at the Dalgona block, so a Croissant block at or
+after Dalgona never runs in go-wemix. go-wbft, which takes over at Dalgona,
+applies the three EIPs from Dalgona on whether or not Croissant is scheduled.
 
 ### Renamed genesis key
 
@@ -168,7 +164,6 @@ Unit tests cover each EIP on both sides of the fork:
 | Package | What is checked |
 |---------|-----------------|
 | `params` | block-number gating, `Rules` propagation, compatibility check, `MaxInitCodeSize` derivation |
-| `params` (order) | Croissant required at or before Dalgona |
 | `core/vm` | PUSH0 and the initcode gas functions in the Croissant jump table, `0x44` staying `DIFFICULTY` |
 | `core/vm/runtime` | PUSH0 execution, `CREATE`/`CREATE2` size limit, `DIFFICULTY` execution without a random value |
 | `core/state` | coinbase warmed only under Croissant |

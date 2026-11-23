@@ -669,12 +669,7 @@ func (c *ChainConfig) CheckCompatible(newcfg *ChainConfig, height uint64) *Confi
 // CheckConfigForkOrder checks that we don't "skip" any forks, geth isn't pluggable enough
 // to guarantee that forks can be implemented in a different order than on official networks
 func (c *ChainConfig) CheckConfigForkOrder() error {
-	// Croissant must not come after Dalgona: go-wbft takes over at Dalgona and
-	// expects the Croissant rules to be active by then.
-	if err := c.checkCroissantBeforeDalgona(); err != nil {
-		return err
-	}
-	// In wemix, the remaining fork order is not enforced.
+	// In wemix, this is not enforced.
 	if true {
 		return nil
 	}
@@ -723,21 +718,6 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		if !cur.optional || cur.block != nil {
 			lastFork = cur
 		}
-	}
-	return nil
-}
-
-// checkCroissantBeforeDalgona requires Croissant to be scheduled, at or before
-// the Dalgona block, whenever Dalgona is scheduled.
-func (c *ChainConfig) checkCroissantBeforeDalgona() error {
-	if c.DalgonaBlock == nil {
-		return nil
-	}
-	if c.CroissantBlock == nil {
-		return fmt.Errorf("unsupported fork ordering: croissantBlock not enabled, but dalgonaBlock enabled at %v", c.DalgonaBlock)
-	}
-	if c.CroissantBlock.Cmp(c.DalgonaBlock) > 0 {
-		return fmt.Errorf("unsupported fork ordering: croissantBlock enabled at %v, but dalgonaBlock enabled at %v", c.CroissantBlock, c.DalgonaBlock)
 	}
 	return nil
 }

@@ -73,33 +73,6 @@ func TestWemixNetworksScheduleCroissant(t *testing.T) {
 	}
 }
 
-// TestCroissantBeforeDalgona checks that a config scheduling Dalgona must also
-// schedule Croissant at or before it. The rest of the go-wemix fork order is
-// not enforced, so only this pair is checked.
-func TestCroissantBeforeDalgona(t *testing.T) {
-	for _, tt := range []struct {
-		name      string
-		croissant *big.Int
-		dalgona   *big.Int
-		wantErr   bool
-	}{
-		{"neither", nil, nil, false},
-		{"croissant only", big.NewInt(10), nil, false},
-		{"croissant before dalgona", big.NewInt(10), big.NewInt(20), false},
-		{"same block", big.NewInt(10), big.NewInt(10), false},
-		{"dalgona without croissant", nil, big.NewInt(20), true},
-		{"croissant after dalgona", big.NewInt(30), big.NewInt(20), true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &ChainConfig{CroissantBlock: tt.croissant, DalgonaBlock: tt.dalgona}
-			err := cfg.CheckConfigForkOrder()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CheckConfigForkOrder() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
 // TestMaxInitCodeSizeDerivation pins EIP-3860's MAX_INITCODE_SIZE to twice
 // go-wemix's MaxCodeSize, which is larger than Ethereum's.
 func TestMaxInitCodeSizeDerivation(t *testing.T) {
