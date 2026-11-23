@@ -120,6 +120,16 @@ func (result *ExecutionResult) Revert() []byte {
 	return common.CopyBytes(result.ReturnData)
 }
 
+// CheckInitCodeSize returns ErrMaxInitCodeSizeExceeded when EIP-3860 is active
+// and a contract creation carries more than MaxInitCodeSize bytes of initcode.
+// It returns nil for calls and before EIP-3860.
+func CheckInitCodeSize(data []byte, isContractCreation, isEIP3860 bool) error {
+	if isEIP3860 && isContractCreation && len(data) > params.MaxInitCodeSize {
+		return fmt.Errorf("%w: code size %v limit %v", ErrMaxInitCodeSizeExceeded, len(data), params.MaxInitCodeSize)
+	}
+	return nil
+}
+
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
 func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation bool, isHomestead, isEIP2028, isEIP3860 bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
@@ -379,8 +389,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// EIP-3860: from Croissant on, a creation transaction whose initcode exceeds
 	// MaxInitCodeSize is invalid. It is rejected before execution and is not
 	// included in a block. Before Croissant the size is not limited here.
-	if rules.IsCroissant && contractCreation && len(st.data) > params.MaxInitCodeSize {
-		return nil, fmt.Errorf("%w: code size %v limit %v", ErrMaxInitCodeSizeExceeded, len(st.data), params.MaxInitCodeSize)
+	if err := CheckInitCodeSize(st.data, contractCreation, rules.IsCroissant); err != nil {
+		return nil, err
 	}
 
 	// Set up the initial access list. The coinbase is passed for EIP-3651 and

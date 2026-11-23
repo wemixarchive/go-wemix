@@ -665,6 +665,12 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if uint64(tx.Size()) > txMaxSize {
 		return ErrOversizedData
 	}
+	// EIP-3860: from Croissant on, reject a creation with oversized initcode.
+	// txMaxSize is below MaxInitCodeSize today, so the size check above catches
+	// it first; this keeps the rule if txMaxSize is ever raised.
+	if err := CheckInitCodeSize(tx.Data(), tx.To() == nil, pool.croissant); err != nil {
+		return err
+	}
 	// Transactions can't be negative. This may never happen using RLP decoded
 	// transactions but may occur if you create a transaction using the RPC.
 	if tx.Value().Sign() < 0 {

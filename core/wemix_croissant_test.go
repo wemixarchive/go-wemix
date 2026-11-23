@@ -46,6 +46,31 @@ func TestIntrinsicGasEIP3860(t *testing.T) {
 	}
 }
 
+// TestCheckInitCodeSize checks the EIP-3860 initcode limit shared by the state
+// transition and both transaction pools.
+func TestCheckInitCodeSize(t *testing.T) {
+	atLimit := make([]byte, params.MaxInitCodeSize)
+	oversized := make([]byte, params.MaxInitCodeSize+1)
+
+	for _, tt := range []struct {
+		name     string
+		data     []byte
+		creation bool
+		eip3860  bool
+		wantErr  bool
+	}{
+		{"oversized creation after the fork", oversized, true, true, true},
+		{"creation at the limit after the fork", atLimit, true, true, false},
+		{"oversized creation before the fork", oversized, true, false, false},
+		{"oversized call after the fork", oversized, false, true, false},
+	} {
+		err := CheckInitCodeSize(tt.data, tt.creation, tt.eip3860)
+		if got := errors.Is(err, ErrMaxInitCodeSizeExceeded); got != tt.wantErr {
+			t.Errorf("%s: got %v, want ErrMaxInitCodeSizeExceeded=%v", tt.name, err, tt.wantErr)
+		}
+	}
+}
+
 var (
 	testSender   = common.HexToAddress("0x1000000000000000000000000000000000000001")
 	testCoinbase = common.HexToAddress("0x2000000000000000000000000000000000000002")

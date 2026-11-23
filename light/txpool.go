@@ -409,6 +409,12 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 		}
 	}
 
+	// EIP-3860: from Croissant on, reject a creation with oversized initcode.
+	// The light pool has no transaction size limit, so this is the only check.
+	if err := core.CheckInitCodeSize(tx.Data(), tx.To() == nil, pool.croissant); err != nil {
+		return err
+	}
+
 	// Should supply enough intrinsic gas
 	gas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul, pool.croissant)
 	if err != nil {
