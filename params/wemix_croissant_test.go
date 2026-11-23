@@ -57,18 +57,19 @@ func TestCroissantCompatibility(t *testing.T) {
 	}
 }
 
-// TestWemixNetworksScheduleCroissant checks that mainnet and testnet both
-// declare a Croissant block, so neither network silently stays without one.
-func TestWemixNetworksScheduleCroissant(t *testing.T) {
+// TestWemixNetworksLeaveForksUnscheduled checks that mainnet and testnet leave
+// Croissant and Dalgona unset until their blocks are scheduled, so no
+// placeholder block can activate either fork.
+func TestWemixNetworksLeaveForksUnscheduled(t *testing.T) {
 	for name, cfg := range map[string]*ChainConfig{
 		"mainnet": WemixMainnetChainConfig,
 		"testnet": WemixTestnetChainConfig,
 	} {
-		if cfg.CroissantBlock == nil {
-			t.Errorf("%s: CroissantBlock is nil", name)
+		if cfg.CroissantBlock != nil {
+			t.Errorf("%s: CroissantBlock = %v, want nil until scheduled", name, cfg.CroissantBlock)
 		}
-		if err := cfg.CheckConfigForkOrder(); err != nil {
-			t.Errorf("%s: %v", name, err)
+		if cfg.DalgonaBlock != nil {
+			t.Errorf("%s: DalgonaBlock = %v, want nil until scheduled", name, cfg.DalgonaBlock)
 		}
 	}
 }

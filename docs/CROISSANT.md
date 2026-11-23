@@ -52,11 +52,11 @@ The fork block is `ChainConfig.CroissantBlock`, `croissantBlock` in a genesis
 - `0`: the chain starts on Croissant.
 - `N`: blocks `N` and later run the Croissant rules.
 
-Mainnet and testnet currently carry placeholder blocks that keep both forks
-inactive: `999,999,999` for Croissant and `1,000,000,000` for Dalgona. They
-must be replaced with the scheduled blocks before a release that activates
-them. Once a node has passed a fork block, moving it is rejected as an
-incompatible config change.
+Mainnet and testnet leave `croissantBlock` and `dalgonaBlock` unset until the
+activation blocks are scheduled, so neither fork can activate. A release that
+activates Croissant sets the same block in go-wemix and go-wbft, because
+go-wbft re-executes the blocks go-wemix produced. Once a node has passed a
+fork block, moving it is rejected as an incompatible config change.
 
 ### Order with Dalgona
 
