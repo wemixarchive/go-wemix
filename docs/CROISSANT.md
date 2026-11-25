@@ -122,18 +122,13 @@ pre-Croissant code path unchanged.
 | EIP-3860 | `core/vm/jump_table.go` | `gasCreate`, `gasCreate2` | `gasCreateEip3860`, `gasCreate2Eip3860` |
 | EIP-3860 | `core.IntrinsicGas` | `isEIP3860` is false, no initcode word charge | initcode word charge for creation transactions |
 | EIP-3860 | `StateTransition.TransitionDb` | no initcode size check | `ErrMaxInitCodeSizeExceeded` over `MaxInitCodeSize` |
+| EIP-3860 | `TxPool.validateTx`, light `TxPool.validateTx` | no initcode size check | `ErrMaxInitCodeSizeExceeded` over `MaxInitCodeSize` |
 | EIP-3651 | `StateDB.PrepareAccessList` | coinbase not in the access list | coinbase added to the access list |
 
 The transaction pools compute the same flag for the next block, so a
 transaction is priced with the rules of the block it can be included in.
 
 ## Differences from go-ethereum
-
-**Transaction pool initcode check.** go-ethereum also rejects oversized
-initcode in the transaction pool. In go-wemix `MaxTransactionSize` (256 KiB) is
-smaller than `MaxInitCodeSize`, so the existing size check always rejects such
-a transaction first and a second check could never trigger. go-wemix does not
-add it.
 
 **Instruction set base.** go-ethereum builds the Shanghai instruction set on
 top of the merge set, where `0x44` is `PREVRANDAO` and reads the block's random
