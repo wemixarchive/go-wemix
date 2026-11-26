@@ -103,8 +103,8 @@ func TestEIP3860CreateGas(t *testing.T) {
 			}
 
 			over := uint64(params.MaxInitCodeSize + 1)
-			if _, err := tt.eip(nil, nil, createStack(over), NewMemory(), over); !errors.Is(err, ErrGasUintOverflow) {
-				t.Errorf("initcode over the limit: got %v, want ErrGasUintOverflow", err)
+			if _, err := tt.eip(nil, nil, createStack(over), NewMemory(), over); !errors.Is(err, ErrMaxInitCodeSizeExceeded) {
+				t.Errorf("initcode over the limit: got %v, want ErrMaxInitCodeSizeExceeded", err)
 			}
 		})
 	}

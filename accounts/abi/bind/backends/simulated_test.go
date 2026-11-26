@@ -489,6 +489,17 @@ func TestEstimateGas(t *testing.T) {
 			Data:     common.Hex2Bytes("50f6fe34"),
 		}, 0, errors.New("gas required exceeds allowance (100000)"), nil},
 
+		// MSTORE at offset 0x2000000000 makes the memory gas function fail.
+		// The interpreter wraps that failure in ErrOutOfGas, and it must
+		// still read as a gas shortfall.
+		{"OOG in dynamic gas", ethereum.CallMsg{
+			From:     addr,
+			Gas:      100000,
+			GasPrice: big.NewInt(0),
+			Value:    nil,
+			Data:     common.Hex2Bytes("6000642000000000" + "52"),
+		}, 0, errors.New("gas required exceeds allowance (100000)"), nil},
+
 		{"Assert", ethereum.CallMsg{
 			From:     addr,
 			To:       &contractAddr,

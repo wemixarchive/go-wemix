@@ -3,6 +3,7 @@ package runtime
 import (
 	"errors"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -109,7 +110,7 @@ func createOpcodeReturningAddress(op vm.OpCode, size uint32) []byte {
 // TestEIP3860CreateOpcodeLimit checks that CREATE and CREATE2 refuse initcode
 // over params.MaxInitCodeSize from the fork block on, accept it at the limit,
 // and keep accepting oversized initcode before the fork. The interpreter
-// reports a failing dynamic gas function as out of gas.
+// reports a failing dynamic gas function as out of gas and keeps its cause.
 func TestEIP3860CreateOpcodeLimit(t *testing.T) {
 	const (
 		atLimit = uint32(params.MaxInitCodeSize)
@@ -127,8 +128,8 @@ func TestEIP3860CreateOpcodeLimit(t *testing.T) {
 		} {
 			ret, _, err := Execute(createOpcodeReturningAddress(op, tt.size), nil, configAt(tt.block))
 			if !tt.allowed {
-				if !errors.Is(err, vm.ErrOutOfGas) {
-					t.Errorf("%v size %d at block %d: got (%x, %v), want ErrOutOfGas", op, tt.size, tt.block, ret, err)
+				if !errors.Is(err, vm.ErrOutOfGas) || !strings.Contains(err.Error(), vm.ErrMaxInitCodeSizeExceeded.Error()) {
+					t.Errorf("%v size %d at block %d: got (%x, %v), want ErrOutOfGas caused by %v", op, tt.size, tt.block, ret, err, vm.ErrMaxInitCodeSizeExceeded)
 				}
 				continue
 			}
