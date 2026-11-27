@@ -1806,7 +1806,11 @@ func (w *worker) commitEx(env *environment, interval func(), update bool, start 
 					w.updateSnapshot(env)
 					update = false
 				}
-				time.Sleep(time.Until(*env.till))
+				// till is set only for PoA work. A PoW worker reaches here from
+				// the uncle path in mainLoop with till still nil.
+				if env.till != nil {
+					time.Sleep(time.Until(*env.till))
+				}
 
 				if !wemixminer.IsPoW() {
 					if err = wemixminer.ReleaseMiningToken(sealedBlock.Number(), sealedBlock.Hash(), sealedBlock.ParentHash()); err != nil {
