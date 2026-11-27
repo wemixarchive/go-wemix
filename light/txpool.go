@@ -67,8 +67,9 @@ type TxPool struct {
 	mined        map[common.Hash][]*types.Transaction // mined transactions by block hash
 	clearIdx     uint64                               // earliest block nr that can contain mined tx info
 
-	istanbul bool // Fork indicator whether we are in the istanbul stage.
-	eip2718  bool // Fork indicator whether we are in the eip2718 stage.
+	istanbul  bool // Fork indicator whether we are in the istanbul stage.
+	croissant bool // Fork indicator whether we are in the croissant stage (EIP-3860 initcode gas).
+	eip2718   bool // Fork indicator whether we are in the eip2718 stage.
 	// fee delegation
 	feedelegation bool // Fork indicator whether we are in the fee delegation stage.
 }
@@ -319,6 +320,7 @@ func (pool *TxPool) setNewHead(head *types.Header) {
 	// Update fork indicator by next pending block number
 	next := new(big.Int).Add(head.Number, big.NewInt(1))
 	pool.istanbul = pool.config.IsIstanbul(next)
+	pool.croissant = pool.config.IsCroissant(next)
 	pool.eip2718 = pool.config.IsBerlin(next)
 	// fee delegation
 	pool.feedelegation = pool.config.IsApplepie(next)
@@ -407,8 +409,14 @@ func (pool *TxPool) validateTx(ctx context.Context, tx *types.Transaction) error
 		}
 	}
 
+	// EIP-3860: from Croissant on, reject a creation with oversized initcode.
+	// The light pool has no transaction size limit, so this is the only check.
+	if err := core.CheckInitCodeSize(tx.Data(), tx.To() == nil, pool.croissant); err != nil {
+		return err
+	}
+
 	// Should supply enough intrinsic gas
-	gas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
+	gas, err := core.IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul, pool.croissant)
 	if err != nil {
 		return err
 	}

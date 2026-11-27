@@ -74,6 +74,10 @@ var (
 	// ErrGasUintOverflow is returned when calculating gas usage.
 	ErrGasUintOverflow = errors.New("gas uint64 overflow")
 
+	// ErrMaxInitCodeSizeExceeded is returned if a contract creation transaction
+	// carries initcode larger than params.MaxInitCodeSize (EIP-3860).
+	ErrMaxInitCodeSizeExceeded = errors.New("max initcode size exceeded")
+
 	// ErrIntrinsicGas is returned if the transaction is specified to use less gas
 	// than required to start the invocation.
 	ErrIntrinsicGas = errors.New("intrinsic gas too low")

@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"fmt"
 	"hash"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -69,6 +70,11 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	// If jump table was not initialised we set the default one.
 	if cfg.JumpTable == nil {
 		switch {
+		// Croissant (EIP-3855 PUSH0, EIP-3860 CREATE/CREATE2 initcode metering).
+		// Checked before IsMerge: the Croissant set is built on london, see
+		// newCroissantInstructionSet.
+		case evm.chainRules.IsCroissant:
+			cfg.JumpTable = &croissantInstructionSet
 		case evm.chainRules.IsMerge:
 			cfg.JumpTable = &mergeInstructionSet
 		case evm.chainRules.IsLondon:
@@ -220,7 +226,10 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 			var dynamicCost uint64
 			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
 			cost += dynamicCost // for tracing
-			if err != nil || !contract.UseGas(dynamicCost) {
+			if err != nil {
+				return nil, fmt.Errorf("%w: %v", ErrOutOfGas, err)
+			}
+			if !contract.UseGas(dynamicCost) {
 				return nil, ErrOutOfGas
 			}
 			// Do tracing before memory expansion

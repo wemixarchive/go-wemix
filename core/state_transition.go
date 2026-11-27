@@ -120,8 +120,18 @@ func (result *ExecutionResult) Revert() []byte {
 	return common.CopyBytes(result.ReturnData)
 }
 
+// CheckInitCodeSize returns ErrMaxInitCodeSizeExceeded when EIP-3860 is active
+// and a contract creation carries more than MaxInitCodeSize bytes of initcode.
+// It returns nil for calls and before EIP-3860.
+func CheckInitCodeSize(data []byte, isContractCreation, isEIP3860 bool) error {
+	if isEIP3860 && isContractCreation && len(data) > params.MaxInitCodeSize {
+		return fmt.Errorf("%w: code size %v limit %v", ErrMaxInitCodeSizeExceeded, len(data), params.MaxInitCodeSize)
+	}
+	return nil
+}
+
 // IntrinsicGas computes the 'intrinsic gas' for a message with the given data.
-func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation bool, isHomestead, isEIP2028 bool) (uint64, error) {
+func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation bool, isHomestead, isEIP2028, isEIP3860 bool) (uint64, error) {
 	// Set the starting gas for the raw transaction
 	var gas uint64
 	if isContractCreation && isHomestead {
@@ -129,8 +139,9 @@ func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation b
 	} else {
 		gas = params.TxGas
 	}
+	dataLen := uint64(len(data))
 	// Bump the required gas by the amount of transactional data
-	if len(data) > 0 {
+	if dataLen > 0 {
 		// Zero and non-zero bytes are priced differently
 		var nz uint64
 		for _, byt := range data {
@@ -148,17 +159,37 @@ func IntrinsicGas(data []byte, accessList types.AccessList, isContractCreation b
 		}
 		gas += nz * nonZeroGas
 
-		z := uint64(len(data)) - nz
+		z := dataLen - nz
 		if (math.MaxUint64-gas)/params.TxDataZeroGas < z {
 			return 0, ErrGasUintOverflow
 		}
 		gas += z * params.TxDataZeroGas
+
+		// EIP-3860: from Croissant on, a contract creation transaction also pays
+		// InitCodeWordGas per 32-byte word of initcode. Before Croissant
+		// isEIP3860 is false and the charge is skipped.
+		if isContractCreation && isEIP3860 {
+			lenWords := toWordSize(dataLen)
+			if (math.MaxUint64-gas)/params.InitCodeWordGas < lenWords {
+				return 0, ErrGasUintOverflow
+			}
+			gas += lenWords * params.InitCodeWordGas
+		}
 	}
 	if accessList != nil {
 		gas += uint64(len(accessList)) * params.TxAccessListAddressGas
 		gas += uint64(accessList.StorageKeys()) * params.TxAccessListStorageKeyGas
 	}
 	return gas, nil
+}
+
+// toWordSize returns the ceiled word size required for init code payment
+// calculation (EIP-3860).
+func toWordSize(size uint64) uint64 {
+	if size > math.MaxUint64-31 {
+		return math.MaxUint64/32 + 1
+	}
+	return (size + 31) / 32
 }
 
 // NewStateTransition initialises and returns a new state transition object.
@@ -342,7 +373,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	)
 
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, rules.IsHomestead, rules.IsIstanbul)
+	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, rules.IsHomestead, rules.IsIstanbul, rules.IsCroissant) // rules.IsCroissant enables EIP-3860
 	if err != nil {
 		return nil, err
 	}
@@ -356,9 +387,17 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
 	}
 
-	// Set up the initial access list.
+	// EIP-3860: from Croissant on, a creation transaction whose initcode exceeds
+	// MaxInitCodeSize is invalid. It is rejected before execution and is not
+	// included in a block. Before Croissant the size is not limited here.
+	if err := CheckInitCodeSize(st.data, contractCreation, rules.IsCroissant); err != nil {
+		return nil, err
+	}
+
+	// Set up the initial access list. The coinbase is passed for EIP-3651 and
+	// is warmed only when rules.IsCroissant is set.
 	if rules.IsBerlin {
-		st.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
+		st.state.PrepareAccessList(rules, msg.From(), st.evm.Context.Coinbase, msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
 	}
 	var (
 		ret   []byte
