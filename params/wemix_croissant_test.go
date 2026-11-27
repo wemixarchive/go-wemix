@@ -57,19 +57,26 @@ func TestCroissantCompatibility(t *testing.T) {
 	}
 }
 
-// TestWemixNetworksLeaveForksUnscheduled checks that mainnet and testnet leave
-// Croissant and Dalgona unset until their blocks are scheduled, so no
-// placeholder block can activate either fork.
-func TestWemixNetworksLeaveForksUnscheduled(t *testing.T) {
-	for name, cfg := range map[string]*ChainConfig{
-		"mainnet": WemixMainnetChainConfig,
-		"testnet": WemixTestnetChainConfig,
+// TestWemixNetworksScheduleCroissant pins the Croissant block of mainnet and
+// testnet, keeps Dalgona unset, and checks the fork order. go-wbft must use the
+// same Croissant blocks.
+func TestWemixNetworksScheduleCroissant(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		cfg       *ChainConfig
+		croissant int64
+	}{
+		{"mainnet", WemixMainnetChainConfig, 134_004_000},
+		{"testnet", WemixTestnetChainConfig, 138_903_600},
 	} {
-		if cfg.CroissantBlock != nil {
-			t.Errorf("%s: CroissantBlock = %v, want nil until scheduled", name, cfg.CroissantBlock)
+		if tt.cfg.CroissantBlock == nil || tt.cfg.CroissantBlock.Int64() != tt.croissant {
+			t.Errorf("%s: CroissantBlock = %v, want %d", tt.name, tt.cfg.CroissantBlock, tt.croissant)
 		}
-		if cfg.DalgonaBlock != nil {
-			t.Errorf("%s: DalgonaBlock = %v, want nil until scheduled", name, cfg.DalgonaBlock)
+		if tt.cfg.DalgonaBlock != nil {
+			t.Errorf("%s: DalgonaBlock = %v, want nil until scheduled", tt.name, tt.cfg.DalgonaBlock)
+		}
+		if err := tt.cfg.CheckConfigForkOrder(); err != nil {
+			t.Errorf("%s: %v", tt.name, err)
 		}
 	}
 }

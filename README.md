@@ -61,7 +61,7 @@ Fork names are desserts in alphabetical order of activation.
 | Pangyo | `pangyoBlock` | 0 | 10,000,000 | Initial PoA |
 | Applepie | `applepieBlock` | 20,476,911 | 26,240,268 | Fee delegation transactions ([docs](docs/FEEDELEGATION.md)) |
 | Brioche | `briocheBlock` | 53,525,500 | 59,414,700 | Block reward halving |
-| Croissant | `croissantBlock` | not scheduled | not scheduled | EIP-3855, EIP-3860, EIP-3651 from Ethereum's Shanghai ([docs](docs/CROISSANT.md)) |
+| Croissant | `croissantBlock` | 134,004,000 | 138,903,600 | EIP-3855, EIP-3860, EIP-3651 from Ethereum's Shanghai ([docs](docs/CROISSANT.md)) |
 | Dalgona | `dalgonaBlock` | not scheduled | not scheduled | Switch to WBFT consensus: go-wemix stops, go-wbft takes over |
 
 ## Setting Up a New Network
